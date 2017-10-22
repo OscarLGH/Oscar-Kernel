@@ -45,7 +45,7 @@ global BSPEntry64
 
 bits 64
 
-BSPEntry64
+BSPEntry64:
 	mov rsp, KERNEL_INIT_STACK
 	mov rax, VIRT2PHYS(SetupKernelPage)
 	call rax
@@ -151,16 +151,22 @@ ClearPageArea:
 	; PML4T[0x100]			; 0xFFFF800000000000 - 0xFFFF807FFFFFFFFF
 	mov rax, PDPT_BASE
 	or rax, PG_RWW | PG_USS | PG_P
-	mov [rdi + 8 * 0x100], rax			   ; PML4T[0x100] = PDPT_BASE
+	mov [rdi + 8 * 0x100], rax	; PML4T[0x100] = PDPT_BASE
 
-	; PML4T[0]				; 0x0000000000000000 - 0x0000007FFFFFFFFF
+	; PMT4T[0x170]			; Map for 64bit PCI BAR.
+					; 0xFFFFB83F00000000 - 0xFFFFB83FFFFFFFFF
+	mov rax, PDPT_BASE + 0x1000 * 2
+	or rax, PG_RWW | PG_USS | PG_P
+	mov [rdi + 8 * 0x170], rax	; PMT4T[0x170] = PDPT_BASE + 0x1000 * 2
+
+	; PML4T[0]			; 0x0000000000000000 - 0x0000007FFFFFFFFF
 	mov rax, PDPT_BASE + 0x1000 * 1
 	or rax, PG_RWW | PG_USS | PG_P
-    mov [rdi], rax						   ; PMT4T[  0x0] = PDPT_BASE + 0x1000 * 1
+    	mov [rdi], rax			; PMT4T[  0x0] = PDPT_BASE + 0x1000 * 1
 
 	; PDPT[0] -> PDPT[127]
 	
-	mov rcx,0
+	mov rcx, 0
 	mov rdi, PDPT_BASE
 	mov rax, PDT_BASE
 PStart0:
@@ -169,16 +175,30 @@ PStart0:
 	
 	mov [rdi + 8 * rcx], rax
 	
-	add	rax, 0x1000
+	add rax, 0x1000
 	inc rcx
 	cmp rcx, 128
 	
 	jne	PStart0
+
+	; PDPT15[0x7e] -> PDPT15[0x81] 4GB 1GB Page mapping
+	mov rdi, PDPT_BASE + 0x1000 * 2
+	mov rax, 0x383F00000000
+	or rax, PG_RWW | PG_USS | PG_P | PG_PCD | PG_S | PG_PWT
+	mov [rdi + 8 * 0xfc], rax
+	add rax, 0x40000000
+	mov [rdi + 8 * 0xfd], rax
+	add rax, 0x40000000
+	mov [rdi + 8 * 0xfe], rax
+	add rax, 0x40000000
+	mov [rdi + 8 * 0xff], rax
+
+	; PDPT
 	
 	; PDT
 	; 映射64GB物理内存空间
 	mov rax, 0x0000000000000000				; 要映射的物理地址
-	mov r15, 0x4000						    ; 映射大小32GB/2MB
+	mov r15, 0x4000						; 映射大小32GB/2MB
 	mov rdx, PDT_BASE
 	mov rcx, 0
 
@@ -227,8 +247,8 @@ SetupEqualPage:
 	mov QWORD[rdx + 3*8], 0x600000 | PG_RWW | PG_USS | PG_P | PG_S
 	
 	;mov cr3, r14
-	mov	rax,PML4T_BASE
-	mov cr3,rax
+	mov rax, PML4T_BASE
+	mov cr3, rax
 
 	mov rax, KERNEL_SPACE
 	add rsp, rax

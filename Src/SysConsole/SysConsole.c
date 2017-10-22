@@ -42,19 +42,19 @@ void PutChar(CONSOLE* SysConPtr, char Char, UINT32 X, UINT32 Y, UINT32 FontColor
 {
 	UINT64 i, j;
 	char font;
-	for(i=0; i<SysConPtr->FontHeight; i++)
+	for(i = 0; i < SysConPtr->FontHeight; i++)
 	{
 		font = fontdata_8x16[Char * SysConPtr->FontHeight + i];
-		for(j=0; j<SysConPtr->FontWidth; j++)
+		for(j = 0; j < SysConPtr->FontWidth; j++)
 		{
-			if(font&(0x80>>j))
+			if(font & (0x80 >> j))
 			{
-				SysConPtr->FbDevice->DrawPoint(SysConPtr->FbDevice, X+j, Y+i, FontColor);
+				SysConPtr->FbDevice->DrawPoint(SysConPtr->FbDevice, X + j + SysConPtr->CorX, Y + i + SysConPtr->CorY, FontColor);
 				//*(SysConPtr->FrameBufferAddr + (Y+i)*SysParam->BytesPerScanLine + X+j) = FontColor;
 			}
 			else
 			{
-				SysConPtr->FbDevice->DrawPoint(SysConPtr->FbDevice, X+j, Y+i, BackColor);
+				SysConPtr->FbDevice->DrawPoint(SysConPtr->FbDevice, X + j + SysConPtr->CorX, Y + i + SysConPtr->CorY, BackColor);
 				//*(SysConPtr->FrameBufferAddr + (Y+i)*SysParam->BytesPerScanLine + X+j) = BackColor;
 			}
 		}
@@ -158,12 +158,12 @@ void ScrollScreen(CONSOLE * SysConPtr, UINT64 LineCnt)
 void WriteConsole(CONSOLE* SysConPtr, char Char)
 {
 	int CharLimit = 16384;//SysConPtr->Width/8*SysConPtr->Height/16 - 1;
-	SysConPtr->ColorBuffer[(SysConPtr->BufferIndex)%CharLimit] = SysConPtr->FontColor;
+	SysConPtr->ColorBuffer[(SysConPtr->BufferIndex) % CharLimit] = SysConPtr->FontColor;
 	switch(Char)
 	{
 		case '\n':
 			SysConPtr->CursorX = 0;
-			SysConPtr->CharBuffer[(SysConPtr->BufferIndex++)%CharLimit] = '\n';
+			SysConPtr->CharBuffer[(SysConPtr->BufferIndex++) % CharLimit] = '\n';
 			
 			if(SysConPtr->CursorY + SysConPtr->FontHeight * 2 > SysConPtr->Height)
 			{

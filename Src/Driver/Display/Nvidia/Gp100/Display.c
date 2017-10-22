@@ -1,6 +1,6 @@
-#include "Gp104.h"
+#include "Gp100.h"
 
-static RETURN_STATUS Gp104DisplayDmaChanInit(DISPLAY_ENGINE * Engine)
+static RETURN_STATUS Gp100DisplayDmaChanInit(DISPLAY_ENGINE * Engine)
 {
 	NVIDIA_GPU * Gpu = Engine->Parent;
 	UINT64 WaitDelay = 20;
@@ -33,12 +33,12 @@ static RETURN_STATUS Gp104DisplayDmaChanInit(DISPLAY_ENGINE * Engine)
 	return RETURN_SUCCESS;
 }
 static
-RETURN_STATUS Gp104DisplayCoreInit(DISPLAY_ENGINE * Engine)
+RETURN_STATUS Gp100DisplayCoreInit(DISPLAY_ENGINE * Engine)
 {
 	
 }
 
-RETURN_STATUS Gp104DisplayInit(DISPLAY_ENGINE * Engine)
+RETURN_STATUS Gp100DisplayInit(DISPLAY_ENGINE * Engine)
 {
 	NVIDIA_GPU * Gpu = Engine->Parent;
 
@@ -54,7 +54,7 @@ RETURN_STATUS Gp104DisplayInit(DISPLAY_ENGINE * Engine)
 	NvMmioWr32(Gpu, 0x645080, 0);
 	NvMmioWr32(Gpu, 0x645084, 0);
 
-	Gp104DisplayCoreInit(Engine);
+	Gp100DisplayCoreInit(Engine);
 
 	int i = 0;
 

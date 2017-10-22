@@ -13,10 +13,16 @@ RETURN_STATUS NvidiaGpuSupported(DEVICE_NODE * Dev)
 	if(NVIDIA_VENDOR_ID != PciCfgRead16(PciDev, PCI_CONF_VENDORID_OFF_16))
 		return RETURN_UNSUPPORTED;
 
-	KDEBUG("NVIDIA GPU driver supported on device:%02x:%02x.%02x\n", 
+	printk("NVIDIA GPU driver supported on device:%02x:%02x.%02x\n", 
 		PCI_GET_BUS(Dev->Position),
 		PCI_GET_DEVICE(Dev->Position),
 		PCI_GET_FUNCTION(Dev->Position));
+
+	printk("NVIDIA:PCI:%04x:%02x,%02x.\n", 
+		PciDev->PciAddress.Bus,
+		PciDev->PciAddress.Device,
+		PciDev->PciAddress.Function
+		);
 	
 	return RETURN_SUCCESS;
 }
@@ -49,7 +55,7 @@ void NvidiaGpuIrq(void * Dev)
 
 extern void Gk104Constructor();
 extern void Gk208Constructor();
-extern void Gp104Constructor();
+extern void Gp100Constructor();
 
 struct
 {
@@ -62,8 +68,8 @@ struct
 	{0x106, Gk208Constructor, "GK208"},
 	{0x117, Gk104Constructor, "GM107"},
 	//{0x118, Gk104Constructor, "GM107"},
-	{0x132, Gp104Constructor, "GP102"},
-	{0x134, Gp104Constructor, "GP104"}
+	{0x132, Gp100Constructor, "GP102"},
+	{0x134, Gp100Constructor, "GP104"}
 };
 
 RETURN_STATUS NvidiaFbInit(NVIDIA_GPU * Gpu);

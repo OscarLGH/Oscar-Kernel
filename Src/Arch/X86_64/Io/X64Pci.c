@@ -147,7 +147,7 @@ void X64PciBusInit()
 	if (McfgPtr == NULL) 
 	{
 		KDEBUG("PCI:No 'MCFG' Structure found in ACPI.\n");
-		KDEBUG("PCI:Using Port CF8,CFC.\n");
+		KDEBUG("PCI:Using IO Port CF8,CFC.\n");
 		PciHostBridge.SegmentNumber = 0;
 		PciHostBridge.StartBusNum = 0;
 		PciHostBridge.EndBusNum = 255;

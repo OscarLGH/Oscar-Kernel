@@ -105,11 +105,16 @@ VOID EptIdenticalMapping4G(VIRTUAL_MACHINE *Vm)
 {
 	UINT64 *PML4T = Vm->VmcsVirt.ept_pointer;
 	UINT64 *PDPT = (UINT64 *)((UINT8 *)Vm->VmcsVirt.ept_pointer + 0x1000);
-	PML4T[0] = (VIRT2PHYS(Vm->VmcsVirt.ept_pointer) + 0x1000) | 0x7;
-	PDPT[0] = 0x00000000 | 0x87;
-	PDPT[1] = 0x40000000 | 0x87;
-	PDPT[2] = 0x80000000 | 0x87;
-	PDPT[3] = 0xc0000000 | 0x87;
+	PML4T[0] = (VIRT2PHYS(Vm->VmcsVirt.ept_pointer) + 0x1000) | \
+			(EPT_PML4E_READ | EPT_PML4E_WRITE | EPT_PML4E_EXECUTE | EPT_PML4E_ACCESS_FLAG);
+	PDPT[0] = 0x00000000 | \
+		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_CACHE_WB | EPT_PDPTE_1GB_PAGE);
+	PDPT[1] = 0x40000000 | \
+		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_CACHE_WB | EPT_PDPTE_1GB_PAGE);
+	PDPT[2] = 0x80000000 | \
+		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_CACHE_WB | EPT_PDPTE_1GB_PAGE);
+	PDPT[3] = 0xc0000000 |  \
+		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_UNCACHEABLE | EPT_PDPTE_1GB_PAGE);
 }
 
 VIRTUAL_MACHINE *VmxNew()
@@ -130,9 +135,11 @@ VIRTUAL_MACHINE *VmxNew()
 	
 	VmPtr->VmcsVirt.io_bitmap_a = KMalloc(0x1000);
 	VmPtr->Vmcs.io_bitmap_a = VIRT2PHYS(VmPtr->VmcsVirt.io_bitmap_a);
+	memset(VmPtr->VmcsVirt.io_bitmap_a, 0xff, 0x1000);
 	
 	VmPtr->VmcsVirt.io_bitmap_b = KMalloc(0x1000);
 	VmPtr->Vmcs.io_bitmap_b = VIRT2PHYS(VmPtr->VmcsVirt.io_bitmap_b);
+	memset(VmPtr->VmcsVirt.io_bitmap_b, 0xff, 0x1000);
 	
 	VmPtr->VmcsVirt.msr_bitmap = KMalloc(0x1000);
 	VmPtr->Vmcs.msr_bitmap = VIRT2PHYS(VmPtr->VmcsVirt.msr_bitmap);
@@ -201,17 +208,17 @@ VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.host_fs_selector = SELETOR_KERNEL_DATA;
 	Vm->Vmcs.host_gs_selector = SELETOR_KERNEL_DATA;
 	Vm->Vmcs.host_tr_selector = 64 * 16;
-	Vm->Vmcs.io_bitmap_a = 0;
-	Vm->Vmcs.io_bitmap_b = 0;
-	Vm->Vmcs.msr_bitmap = 0;
-	Vm->Vmcs.vm_exit_msr_store_addr = 0;
-	Vm->Vmcs.vm_exit_msr_load_addr = 0;
-	Vm->Vmcs.vm_entry_msr_load_addr = 0;
-	Vm->Vmcs.pml_address = 0;
+	//Vm->Vmcs.io_bitmap_a = 0;
+	//Vm->Vmcs.io_bitmap_b = 0;
+	//Vm->Vmcs.msr_bitmap = 0;
+	//Vm->Vmcs.vm_exit_msr_store_addr = 0;
+	//Vm->Vmcs.vm_exit_msr_load_addr = 0;
+	//Vm->Vmcs.vm_entry_msr_load_addr = 0;
+	//Vm->Vmcs.pml_address = 0;
 	Vm->Vmcs.tsc_offset = 0x80000000;
-	Vm->Vmcs.virtual_apic_page_addr = 0;
-	Vm->Vmcs.apic_access_addr = 0;
-	Vm->Vmcs.posted_intr_desc_addr = 0;
+	//Vm->Vmcs.virtual_apic_page_addr = 0;
+	//Vm->Vmcs.apic_access_addr = 0;
+	//Vm->Vmcs.posted_intr_desc_addr = 0;
 	//Vm->Vmcs.ept_pointer = 0;
 	Vm->Vmcs.eoi_exit_bitmap0 = 0;
 	Vm->Vmcs.eoi_exit_bitmap1 = 0;
@@ -237,7 +244,7 @@ VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.host_ia32_efer = 0;
 	Vm->Vmcs.host_ia32_perf_global_ctrl = 0;
 	Vm->Vmcs.pin_based_vm_exec_control = PIN_BASED_ALWAYSON_WITHOUT_TRUE_MSR;
-	Vm->Vmcs.cpu_based_vm_exec_control = CPU_BASED_ALWAYSON_WITHOUT_TRUE_MSR | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS;
+	Vm->Vmcs.cpu_based_vm_exec_control = CPU_BASED_FIXED_ONES | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS | CPU_BASED_USE_IO_BITMAPS;
 	Vm->Vmcs.exception_bitmap = 0;
 	Vm->Vmcs.page_fault_error_code_mask = 0;
 	Vm->Vmcs.page_fault_error_code_match = 0;
@@ -247,7 +254,7 @@ VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.vm_exit_msr_load_count = 0;
 	Vm->Vmcs.vm_entry_controls = (VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR | VM_ENTRY_IA32E_MODE) ^ 0x4;
 	Vm->Vmcs.vm_entry_msr_load_count = 0;
-	Vm->Vmcs.vm_entry_intr_info_field = 0x800000ff;
+	Vm->Vmcs.vm_entry_intr_info_field = 0;
 	Vm->Vmcs.vm_entry_exception_error_code = 0;
 	Vm->Vmcs.vm_entry_instruction_len = 0;
 	Vm->Vmcs.tpr_threshold = 0;
@@ -309,7 +316,7 @@ VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.guest_dr7 = 0;
 	Vm->Vmcs.guest_rsp = 0xFFFF800010000000;
 	Vm->Vmcs.guest_rip = (u64)GuestTestCode;
-	Vm->Vmcs.guest_rflags = FLAG_IF | BIT1;
+	Vm->Vmcs.guest_rflags = BIT1 | FLAG_IF;
 	Vm->Vmcs.guest_pending_dbg_exceptions = 0;
 	Vm->Vmcs.guest_sysenter_esp = 0;
 	Vm->Vmcs.guest_sysenter_eip = 0;
@@ -628,9 +635,212 @@ VOID GetVmxState(struct vmcs12 *vmcs_ptr)
 
 int printk(const char *fmt, ...);
 
+VOID VcpuRun(VIRTUAL_MACHINE *Vm)
+{
+	if (Vm->VmStatus == VM_STATUS_CLEAR)
+	{
+		Vm->VmStatus = VM_STATUS_LAUNCHED;
+		VmLaunch(&Vm->HostRegs, &Vm->GuestRegs);
+	}
+	else
+	{
+		VmResume(&Vm->HostRegs, &Vm->GuestRegs);
+	}
+}
+VOID VmHandleCpuId(VIRTUAL_MACHINE *Vm)
+{
+	UINT8 Buffer[50];
+	//ArchReadCpuId(Buffer);
+	//printk("Host CPU String:%s\n", Buffer);
+	strcpy(Buffer, "Intel(R) Core(TM) i7-5960X CPU @ 8.00GHz");
+	if (Vm->GuestRegs.RAX == 0x80000002 && Vm->GuestRegs.RCX == 0)
+	{
+		Vm->GuestRegs.RAX = *(UINT32 *)&Buffer[0];
+		Vm->GuestRegs.RBX = *(UINT32 *)&Buffer[4];
+		Vm->GuestRegs.RCX = *(UINT32 *)&Buffer[8];
+		Vm->GuestRegs.RDX = *(UINT32 *)&Buffer[12];
+	}
+
+	if (Vm->GuestRegs.RAX == 0x80000003 && Vm->GuestRegs.RCX == 0)
+	{
+		Vm->GuestRegs.RAX = *(UINT32 *)&Buffer[16];
+		Vm->GuestRegs.RBX = *(UINT32 *)&Buffer[20];
+		Vm->GuestRegs.RCX = *(UINT32 *)&Buffer[24];
+		Vm->GuestRegs.RDX = *(UINT32 *)&Buffer[28];
+	}
+
+	if (Vm->GuestRegs.RAX == 0x80000004 && Vm->GuestRegs.RCX == 0)
+	{
+		Vm->GuestRegs.RAX = *(UINT32 *)&Buffer[32];
+		Vm->GuestRegs.RBX = *(UINT32 *)&Buffer[36];
+		Vm->GuestRegs.RCX = *(UINT32 *)&Buffer[40];
+		Vm->GuestRegs.RDX = *(UINT32 *)&Buffer[44];
+	}
+
+	if (Vm->GuestRegs.RAX == 0x80000001 && Vm->GuestRegs.RCX == 0)
+	{
+		Vm->GuestRegs.RAX = 0;
+		Vm->GuestRegs.RBX = 0;
+		Vm->GuestRegs.RCX = 0;
+		Vm->GuestRegs.RDX = 0;
+	}
+}
+
+RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
+{
+	UINT64 ExitReason = VmRead(VM_EXIT_REASON);
+	UINT64 ExitQualification = VmRead(EXIT_QUALIFICATION);
+	UINT64 ExitInstructionLen = VmRead(VM_EXIT_INSTRUCTION_LEN);
+	UINT64 Rip = VmRead(GUEST_RIP);
+	extern SPIN_LOCK ConsoleSpinLock;
+	ConsoleSpinLock.SpinLock = 0;
+
+	UINT64 Rflags = VmRead(GUEST_RFLAGS);
+
+	switch (ExitReason & 0xff)
+	{
+		case EXIT_REASON_EXCEPTION_NMI:
+			break;
+		case EXIT_REASON_EXTERNAL_INTERRUPT:
+			//printk("EXT INT.\n");
+			//if (Rflags & FLAG_IF)
+			//	VmWrite(GUEST_INTERRUPTIBILITY_INFO, 0x800000ff);
+			break;
+		case EXIT_REASON_TRIPLE_FAULT:
+			break;
+		case EXIT_REASON_PENDING_INTERRUPT:
+			break;
+		case EXIT_REASON_NMI_WINDOW:
+			break;
+		case EXIT_REASON_TASK_SWITCH:
+			break;
+		case EXIT_REASON_CPUID:
+			VmHandleCpuId(Vm);
+			break;
+		case EXIT_REASON_HLT:
+			break;
+		case EXIT_REASON_INVD:
+			break;
+		case EXIT_REASON_INVLPG:
+			break;
+		case EXIT_REASON_RDPMC:
+			break;
+		case EXIT_REASON_RDTSC:
+			break;
+		case EXIT_REASON_VMCALL:
+			break;
+		case EXIT_REASON_VMCLEAR:
+			break;
+		case EXIT_REASON_VMLAUNCH:
+			break;
+		case EXIT_REASON_VMPTRLD:
+			break;
+		case EXIT_REASON_VMPTRST:
+			break;
+		case EXIT_REASON_VMREAD:
+			break;
+		case EXIT_REASON_VMRESUME:
+			break;
+		case EXIT_REASON_VMWRITE:
+			break;
+		case EXIT_REASON_VMOFF:
+			break;
+		case EXIT_REASON_VMON:
+			break;
+		case EXIT_REASON_CR_ACCESS:
+			printk("Exit:Read CR%d\n", ExitQualification & 15);
+			break;
+		case EXIT_REASON_DR_ACCESS:
+			break;
+		case EXIT_REASON_IO_INSTRUCTION:
+			//printk("VM Exit:IO\n");
+			//if (ExitQualification & BIT3)
+			//	printk("IN:Port = %04x\n", ExitQualification >> 16);
+			//else
+			//	printk("OUT:Port = %04x\n", ExitQualification >> 16);
+			break;
+		case EXIT_REASON_MSR_READ:
+			break;
+		case EXIT_REASON_MSR_WRITE:
+			break;
+		case EXIT_REASON_INVALID_STATE:
+			break;
+		case EXIT_REASON_MSR_LOAD_FAIL:
+			break;
+		case EXIT_REASON_MWAIT_INSTRUCTION:
+			break;
+		case EXIT_REASON_MONITOR_TRAP_FLAG:
+			break;
+		case EXIT_REASON_MONITOR_INSTRUCTION:
+			break;
+		case EXIT_REASON_PAUSE_INSTRUCTION:
+			break;
+		case EXIT_REASON_MCE_DURING_VMENTRY:
+			break;
+		case EXIT_REASON_TPR_BELOW_THRESHOLD:
+			break;
+		case EXIT_REASON_APIC_ACCESS:
+			break;
+		case EXIT_REASON_EOI_INDUCED:
+			break;
+		case EXIT_REASON_GDTR_IDTR:
+			break;
+		case EXIT_REASON_LDTR_TR:
+			break;
+		case EXIT_REASON_EPT_VIOLATION:
+			break;
+		case EXIT_REASON_EPT_MISCONFIG:
+			break;
+		case EXIT_REASON_INVEPT:
+			break;
+		case EXIT_REASON_RDTSCP:
+			break;
+		case EXIT_REASON_PREEMPTION_TIMER:
+			break;
+		case EXIT_REASON_INVVPID:
+			break;
+		case EXIT_REASON_WBINVD:
+			break;
+		case EXIT_REASON_XSETBV:
+			break;
+		case EXIT_REASON_APIC_WRITE:
+			break;
+		case EXIT_REASON_RDRAND:
+			break;
+		case EXIT_REASON_INVPCID:
+			break;
+		case EXIT_REASON_VMFUNC:
+			break;
+		case EXIT_REASON_ENCLS:
+			break;
+		case EXIT_REASON_RDSEED:
+			break;
+		case EXIT_REASON_PML_FULL:
+			break;
+		case EXIT_REASON_XSAVES:
+			break;
+		case EXIT_REASON_XRSTORS:
+			break;
+	}
+
+	//if (ExitReason != EXIT_REASON_CPUID)
+	//	printk("VM Exit.Reason:%d\n", ExitReason & 0xff);
+
+	if (ExitReason != EXIT_REASON_EXTERNAL_INTERRUPT)
+		VmWrite(GUEST_RIP, Rip + ExitInstructionLen);
+}
+
+
 VOID ArchReadCpuId(UINT8 * Buffer);
 VOID GuestTestCode()
 {
+	extern CONSOLE SysCon;
+	SysCon.CursorX = SysCon.Width / 2;
+	SysCon.CursorY = 0;
+
+	SetColor(&SysCon,0xFF0f00ff);
+
+	
 	//asm("hlt");
 	//asm("movl %eax, %cr0");
 	
@@ -638,17 +848,34 @@ VOID GuestTestCode()
 	
 	//asm("movq %rax, %cr3");
 
-	printk("================GUEST RUNNING!!!===============\n");
-
-	ArchReadCpuId(&Buffer[0]);
-	
-	printk("Injected CPUID: %s\n", Buffer);
-
 	//UINT32 Counter = 0;
 	//while(Counter++ < 20)
 	//	printk("=================%d=================\n", Counter);
 
-	printk("================GUEST EXITING...===============\n");
-	asm("movq %rax, %cr3");
+	//printk("================GUEST EXITING...===============\n");
+
+	void VmPerTest();
+	asm("cli");
+	printk("Guest:\n");
+	asm("cli");
+	//VmPerTest();
+
+	
+	printk("================GUEST RUNNING!!!===============\n");
+	
+	ArchReadCpuId(&Buffer[0]);
+		
+	printk("Injected CPUID: %s\n", Buffer);
+
+	asm("movq %cr0, %rax");
+	
+	asm("movq %cr2, %rax");
+
+	asm("movq %cr3, %rax");
+	
+	asm("movq %cr4, %rax");	
+
+	asm("movq %cr8, %rax");	
+	
 	while(1);
 }

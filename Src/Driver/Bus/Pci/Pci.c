@@ -144,13 +144,13 @@ UINT64 PciGetBarBase(PCI_DEVICE *PciDev, UINT64 BarIndex)
 	UINT32 BarValueH = 0;
 
 	BarValueL = PciCfgRead32(PciDev, PCI_CONF_BAR0_OFF_32 + BarIndex * 4);
-	BarValueL &= (~0xF);
+	
 	if (BarValueL & BIT2)
 	{
 		BarValueH = PciCfgRead32(PciDev, PCI_CONF_BAR0_OFF_32 + (BarIndex + 1) * 4);
 	}
 
-	return BarValueL | ((UINT64)BarValueH << 32);
+	return (BarValueL & (~0xF)) | ((UINT64)BarValueH << 32);
 }
 
 UINT8 PciCapabilityFind(PCI_DEVICE *PciDev, UINT8 CapId)
@@ -351,7 +351,7 @@ void PciScan()
 					Dev->DeviceType = PCIClass2DeviceClass[PciCfgRead8(PciDev, PCI_CONF_BASECLASSCODE_OFF_8)];
 					Dev->DeviceID = PciCfgRead32(PciDev, PCI_CONF_VIDDID_OFF_32);
 					Dev->BusType = BUS_TYPE_PCI;
-					Dev->Position = (b << 8) + (d << 5) + f;
+					Dev->Position = (b << 8) + (d << 3) + f;
 					Dev->Driver = 0;
 					Dev->ParentDevice = &DeviceRoot;
 					Dev->ChildDevice = 0;

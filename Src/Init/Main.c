@@ -384,6 +384,7 @@ void * MainThreadTest(void * arg)
 
 	void VmTest();
 	VmTest();
+	while(1);
 
 	printk("Timer test 5s...\n");
 	int cnt = 5;
@@ -639,6 +640,23 @@ UINT64 ApStartSig = 0;
 #include "Vfs.h"
 #include "../Arch/X86_64/Cpu/Vmx.h"
 
+void VmPerTest()
+{
+	printk("Test begins...\n");
+	UINT64 Counter = 0x40000000;
+	UINT64 Result = 0;
+	while(Counter--)
+	{
+		Result++;
+	}
+	printk("Test ends.Result = %x\n", Result);
+	Counter = 16;
+	while(Counter--)
+	{
+		printk("=================================================\n");
+	}
+}
+
 void VmTest()
 {
 	RETURN_STATUS Status;
@@ -675,73 +693,22 @@ void VmTest()
 	
 	printk("Host RIP:%016x\n", VmRead(HOST_RIP));
 
-	UINT8 Buffer[50];
-	ArchReadCpuId(Buffer);
-	printk("Host CPU String:%s\n", Buffer);
-	strcpy(Buffer, "Intel(R) Core(TM) i7-5960X CPU @ 8.00GHz");
+	
+
+	//printk("Host Test:\n");
+	//VmPerTest();
 
 	printk("VM Launch...\n");
-	VmLaunch(&Vm->HostRegs, &Vm->GuestRegs);
-	UINT32 VmExitReason = VmRead(VM_EXIT_REASON);
-	extern SPIN_LOCK ConsoleSpinLock;
+	//VmLaunch(&Vm->HostRegs, &Vm->GuestRegs);
+	//UINT32 VmExitReason = VmRead(VM_EXIT_REASON);
+	//extern SPIN_LOCK ConsoleSpinLock;
 	//ConsoleSpinLock.SpinLock = 0;
 	//printk("VM Exit.Exit reason:%02d\n", VmExitReason);
-
-	if (VmExitReason == 0xa)
+	while (1) 
 	{
-VM_RESUME:
-	
-		VmResume(&Vm->HostRegs, &Vm->GuestRegs);
-		
-		ConsoleSpinLock.SpinLock = 0;
-		VmExitReason = VmRead(VM_EXIT_REASON);
-		//printk("VM exit after resume.Exit reason:%02d\n", VmExitReason);
-
-		if (Vm->GuestRegs.RAX == 0x80000002 && Vm->GuestRegs.RCX == 0)
-		{
-			Vm->GuestRegs.RAX = *(UINT32 *)&Buffer[0];
-			Vm->GuestRegs.RBX = *(UINT32 *)&Buffer[4];
-			Vm->GuestRegs.RCX = *(UINT32 *)&Buffer[8];
-			Vm->GuestRegs.RDX = *(UINT32 *)&Buffer[12];
-		}
-
-		if (Vm->GuestRegs.RAX == 0x80000003 && Vm->GuestRegs.RCX == 0)
-		{
-			Vm->GuestRegs.RAX = *(UINT32 *)&Buffer[16];
-			Vm->GuestRegs.RBX = *(UINT32 *)&Buffer[20];
-			Vm->GuestRegs.RCX = *(UINT32 *)&Buffer[24];
-			Vm->GuestRegs.RDX = *(UINT32 *)&Buffer[28];
-		}
-
-		if (Vm->GuestRegs.RAX == 0x80000004 && Vm->GuestRegs.RCX == 0)
-		{
-			Vm->GuestRegs.RAX = *(UINT32 *)&Buffer[32];
-			Vm->GuestRegs.RBX = *(UINT32 *)&Buffer[36];
-			Vm->GuestRegs.RCX = *(UINT32 *)&Buffer[40];
-			Vm->GuestRegs.RDX = *(UINT32 *)&Buffer[44];
-		}
-
-		if (Vm->GuestRegs.RAX == 0x80000001 && Vm->GuestRegs.RCX == 0)
-		{
-			Vm->GuestRegs.RAX = 0;
-			Vm->GuestRegs.RBX = 0;
-			Vm->GuestRegs.RCX = 0;
-			Vm->GuestRegs.RDX = 0;
-		}
-		
-		UINT64 Rip = VmRead(GUEST_RIP);
-		Rip += VmRead(VM_EXIT_INSTRUCTION_LEN);
-		VmWrite(GUEST_RIP, Rip);
-		if (VmExitReason == 0xa)
-			goto VM_RESUME;
-//VM_EXIT:
+		VcpuRun(Vm);
+		VmExitHandler(Vm);
 	}
-
-	//VmExitReason = VmRead(VM_EXIT_REASON);
-	printk("VM Exit.Exit reason:%x\n", VmExitReason);
-	printk("Guest RIP:%016x\n", VmRead(GUEST_RIP));
-	printk("VM Exit qualification:%x\n", VmRead(EXIT_QUALIFICATION));
-	printk("VM Exit Info:%x\n", VmRead(VM_EXIT_INTR_ERROR_CODE));
 }
 
 
@@ -767,6 +734,7 @@ void InitMain()
 	TaskManagerInit();
 
 	ApStartSig = 1;
+
 
 	//while(Counter++ < 20)
 	//	printk("=================%d=================\n", Counter);

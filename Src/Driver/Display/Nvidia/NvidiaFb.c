@@ -74,16 +74,13 @@ RETURN_STATUS NvidiaFbInit(NVIDIA_GPU * Gpu)
 {
 	extern CONSOLE SysCon;
 	extern SYSTEM_PARAMETERS * SysParam;
-
-	/* Only use 1st card.*/
-	if(SysCon.FbDevice->Device != 0)
-		return 0;
 	
 	FB_DEVICE * NvidiaFb = KMalloc(sizeof(*NvidiaFb));
 	printk("Switching to NVIDIA FB.\n");
 	
 	NvidiaFb->Device = Gpu;
 	NvidiaFb->ScreenInfo.FrameBufferBase = (UINT32 *)PHYS2VIRT(PciGetBarBase(Gpu->PciDev, 1));
+	printk("NvidiaFb->ScreenInfo.FrameBufferBase = %016x\n", NvidiaFb->ScreenInfo.FrameBufferBase);
 	NvidiaFb->ScreenInfo.ScreenWidth = SysParam->ScreenWidth;
 	NvidiaFb->ScreenInfo.ScreenHeight = SysParam->ScreenHeight;
 	NvidiaFb->ScreenInfo.PixelsPerScanLine = SysParam->PixelsPerScanLine;
@@ -92,8 +89,18 @@ RETURN_STATUS NvidiaFbInit(NVIDIA_GPU * Gpu)
 	NvidiaFb->FillArea = NvidiaFbFillArea;
 	NvidiaFb->ImageBlit = NvidiaFbImageBlit;
 	NvidiaFb->CopyArea = NvidiaFbCopyArea;
-	SysCon.FbDevice = NvidiaFb;
-	
+
+	/* Only use 1st card.*/
+	if(SysCon.FbDevice->Device == 0)
+	{
+		SysCon.FbDevice = NvidiaFb;
+	}
+	else
+	{
+		RECTANGLE Rect = {0, 0, 3840,  2160};
+		UINT32 Color = 0xFF301024;
+		NvidiaFbFillArea(NvidiaFb, &Rect, Color);
+	}
 	//return 0;
 
 	printk("NVIDIA:Initializing Graphics Framebuffer...\n");

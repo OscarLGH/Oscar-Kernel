@@ -221,7 +221,7 @@ gk104_gr = {
 	}*/
 };
 
-#define min(a,b) ((a)<(b)?(a):(b))
+
 /*******************************************************************************
 * PGRAPH context implementation
 ******************************************************************************/
@@ -230,7 +230,7 @@ void
 gk104_grctx_generate_bundle(struct gf100_grctx *info)
 {
 	const struct gf100_grctx_func *grctx = info->gr->func->grctx;
-	const u32 state_limit = min(grctx->bundle_min_gpm_fifo_depth,
+	const u32 state_limit = Min(grctx->bundle_min_gpm_fifo_depth,
 		grctx->bundle_size / 0x20);
 	const u32 token_limit = grctx->bundle_token_limit;
 	const u32 access = NV_MEM_ACCESS_RW | NV_MEM_ACCESS_SYS;

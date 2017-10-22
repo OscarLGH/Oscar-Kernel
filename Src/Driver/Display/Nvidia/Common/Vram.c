@@ -362,6 +362,12 @@ RETURN_STATUS BarVmInit(NVIDIA_GPU * Gpu, BAR_VM * BarVm, UINT64 Bar)
 	GpuObjWr32(BarVm->Mem, 0x20c, (BarLength - 1) >> 32);
 
 	KDEBUG("NVIDIA:VM: Mapping BAR%d, Size = %x\n", Bar, BarLength);
+	printk("NVIDIA:PCI:%04x:%02x,%02x.\n", 
+		Gpu->PciDev->PciAddress.Bus,
+		Gpu->PciDev->PciAddress.Device,
+		Gpu->PciDev->PciAddress.Function
+		);
+	printk("NVIDIA Bar%d Base = %016x\n", Bar, PciGetBarBase(Gpu->PciDev, Bar));
 
 	Length = BarLength;
 

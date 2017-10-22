@@ -1,8 +1,8 @@
-#include "Gp104.h"
+#include "Gp100.h"
 
-VOID Gp104Constructor(NVIDIA_GPU * Gpu)
+VOID Gp100Constructor(NVIDIA_GPU * Gpu)
 {
-	KDEBUG("NVIDIA:Chipset:GP104.\n");
+	KDEBUG("NVIDIA:Chipset:GP100.\n");
 
 	Gpu->VBios = KMalloc(sizeof(SUBDEV_BIOS));
 	memset(Gpu->VBios, 0, sizeof(SUBDEV_BIOS));
@@ -12,7 +12,7 @@ VOID Gp104Constructor(NVIDIA_GPU * Gpu)
 	Gpu->VramManager = KMalloc(sizeof(SUBDEV_MEM));
 	memset(Gpu->VramManager, 0, sizeof(SUBDEV_MEM));
 	Gpu->VramManager->Parent = Gpu;
-	Gpu->VramManager->Init = Gp104RamOneInit;
+	Gpu->VramManager->Init = Gp100RamOneInit;
 
 	Gpu->Therm = KMalloc(sizeof(SUBDEV_THERM));
 	memset(Gpu->Therm, 0, sizeof(SUBDEV_THERM));
@@ -21,12 +21,12 @@ VOID Gp104Constructor(NVIDIA_GPU * Gpu)
 	Gpu->MemoryCopyEngine = KMalloc(sizeof(MEMORY_COPY_ENGINE));
 	memset(Gpu->MemoryCopyEngine, 0, sizeof(MEMORY_COPY_ENGINE));
 	Gpu->MemoryCopyEngine->Parent = Gpu;
-	Gpu->MemoryCopyEngine->Init = Gp104CopyEngineInit;
+	Gpu->MemoryCopyEngine->Init = Gp100CopyEngineInit;
 
 	Gpu->DisplayEngine = KMalloc(sizeof(DISPLAY_ENGINE));
 	memset(Gpu->DisplayEngine, 0, sizeof(DISPLAY_ENGINE));
 	Gpu->DisplayEngine->Parent = Gpu;
-	Gpu->DisplayEngine->Init = Gp104DisplayInit;
+	Gpu->DisplayEngine->Init = Gp100DisplayInit;
 
 	Gpu->GraphicEngine = KMalloc(sizeof(GRAPHIC_ENGINE));
 	memset(Gpu->GraphicEngine, 0, sizeof(GRAPHIC_ENGINE));
@@ -34,9 +34,9 @@ VOID Gp104Constructor(NVIDIA_GPU * Gpu)
 
 }
 
-VOID Gp104Destructor(NVIDIA_GPU * Gpu)
+VOID Gp100Destructor(NVIDIA_GPU * Gpu)
 {
-	KDEBUG("GP104 Destructor\n");
+	KDEBUG("GP100 Destructor\n");
 
 	if (Gpu->VBios)
 		KFree(Gpu->VBios);

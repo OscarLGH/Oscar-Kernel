@@ -1,6 +1,6 @@
-#include "Gp104.h"
+#include "Gp100.h"
 
-RETURN_STATUS Gp104RamOneInit(SUBDEV_MEM * Mem)
+RETURN_STATUS Gp100RamOneInit(SUBDEV_MEM * Mem)
 {
 	NVIDIA_GPU *Gpu = Mem->Parent;
 	UINT64 Parts = NvMmioRd32(Gpu, 0x022438);

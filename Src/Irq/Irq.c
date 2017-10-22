@@ -100,9 +100,11 @@ void IrqHandler(UINT64 Vector)
 
 	//printk("IRQ %x on cpu %02d.\n", Vector, ArchGetCpuIdentifier());
 	if (Vector == 0xff)
+	{
 		printk("VMM Injected Interrupt.\n");
+		//TraceHandler(Vector);
+	}
 
-	
 	if (IrqVector.IrqTable[Vector].NestedIrq > (0x10000 / 160 - 1))
 	{
 		//printk("IRQ %d ReEntered %d times.Kernel stack corrupted.\n", Vector, IrqVector.IrqTable[Vector].NestedIrq);

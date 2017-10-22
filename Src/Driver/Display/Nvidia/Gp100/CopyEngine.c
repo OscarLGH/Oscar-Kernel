@@ -1,6 +1,6 @@
-#include "Gp104.h"
+#include "Gp100.h"
 
-RETURN_STATUS Gp104CopyEngineInit(MEMORY_COPY_ENGINE * Engine)
+RETURN_STATUS Gp100CopyEngineInit(MEMORY_COPY_ENGINE * Engine)
 {
 	NVIDIA_GPU * Gpu = Engine->Parent;
 
