@@ -688,7 +688,8 @@ void VmTest()
 	else
 		printk("VMX:Failed to enter VMX operation.\n");
 
-	VmxCopyHostState(Vm);
+	//VmxCopyHostState(Vm);
+	VmxCpuBistState(Vm);
 	VmxSetVmcs(&Vm->Vmcs);
 	
 	printk("Host RIP:%016x\n", VmRead(HOST_RIP));
@@ -707,8 +708,12 @@ void VmTest()
 	while (1) 
 	{
 		VcpuRun(Vm);
-		VmExitHandler(Vm);
+		Status = VmExitHandler(Vm);
+		if (Status)
+			break;
 	}
+	printk("VM Unhandled error.\n");
+	while(1);
 }
 
 
@@ -735,6 +740,7 @@ void InitMain()
 
 	ApStartSig = 1;
 
+	VmTest();
 
 	//while(Counter++ < 20)
 	//	printk("=================%d=================\n", Counter);

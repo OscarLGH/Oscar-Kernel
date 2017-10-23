@@ -117,6 +117,30 @@ VOID EptIdenticalMapping4G(VIRTUAL_MACHINE *Vm)
 		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_UNCACHEABLE | EPT_PDPTE_1GB_PAGE);
 }
 
+VOID EptRealModeMapping(VIRTUAL_MACHINE *Vm)
+{
+	VOID * GuestMemory = KMalloc(0x100000);
+	UINT64 *PML4T = Vm->VmcsVirt.ept_pointer;
+	UINT64 *PDPT = (UINT64 *)((UINT8 *)Vm->VmcsVirt.ept_pointer + 0x1000);
+	PML4T[0] = (VIRT2PHYS(Vm->VmcsVirt.ept_pointer) + 0x1000) | \
+			(EPT_PML4E_READ | EPT_PML4E_WRITE | EPT_PML4E_EXECUTE | EPT_PML4E_ACCESS_FLAG);
+
+	PDPT[0] = (VIRT2PHYS(Vm->VmcsVirt.ept_pointer) + 0x2000) | \
+		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_ACCESS_FLAG);
+	
+	PDPT[3] = (VIRT2PHYS(Vm->VmcsVirt.ept_pointer) + 0x3000) |  \
+		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_ACCESS_FLAG);
+
+	UINT64 *PDT0_1G = (UINT64 *)((UINT8 *)Vm->VmcsVirt.ept_pointer + 0x2000);
+	UINT64 *PDT3_4G = (UINT64 *)((UINT8 *)Vm->VmcsVirt.ept_pointer + 0x3000);
+
+	PDT0_1G[0] = VIRT2PHYS(GuestMemory) | \
+		(EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_CACHE_WB | EPT_PDE_2MB_PAGE);
+
+	PDT3_4G[511] = VIRT2PHYS(GuestMemory) | \
+		(EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_CACHE_WB | EPT_PDE_2MB_PAGE);
+}
+
 VIRTUAL_MACHINE *VmxNew()
 {
 	VIRTUAL_MACHINE *VmPtr = KMalloc(sizeof(*VmPtr));
@@ -185,29 +209,185 @@ RETURN_STATUS VmxInit(VIRTUAL_MACHINE *Vm)
 }
 
 
+/* CPU State after BIST.See SDM Vol-3 9.1.2 . */
+VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
+{
+	EptRealModeMapping(Vm);
+
+	memset(&Vm->GuestRegs, 0, sizeof(Vm->GuestRegs));
+	
+	Vm->Vmcs.virtual_processor_id = 0x8086;
+	Vm->Vmcs.posted_intr_nv = 0;
+	Vm->Vmcs.guest_es_selector = 0;
+	Vm->Vmcs.guest_cs_selector = 0xf000;
+	Vm->Vmcs.guest_ss_selector = 0;
+	Vm->Vmcs.guest_ds_selector = 0;
+	Vm->Vmcs.guest_fs_selector = 0;
+	Vm->Vmcs.guest_gs_selector = 0;
+	Vm->Vmcs.guest_ldtr_selector = 0;
+	Vm->Vmcs.guest_tr_selector = 0;
+	Vm->Vmcs.guest_intr_status= 0;
+	Vm->Vmcs.guest_pml_index = 0;
+	Vm->Vmcs.host_es_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_cs_selector = SELECTOR_KERNEL_CODE;
+	Vm->Vmcs.host_ss_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_ds_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_fs_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_gs_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_tr_selector = SELECTOR_TSS;
+	//Vm->Vmcs.io_bitmap_a = 0;
+	//Vm->Vmcs.io_bitmap_b = 0;
+	//Vm->Vmcs.msr_bitmap = 0;
+	//Vm->Vmcs.vm_exit_msr_store_addr = 0;
+	//Vm->Vmcs.vm_exit_msr_load_addr = 0;
+	//Vm->Vmcs.vm_entry_msr_load_addr = 0;
+	//Vm->Vmcs.pml_address = 0;
+	Vm->Vmcs.tsc_offset = 0;
+	//Vm->Vmcs.virtual_apic_page_addr = 0;
+	//Vm->Vmcs.apic_access_addr = 0;
+	//Vm->Vmcs.posted_intr_desc_addr = 0;
+	//Vm->Vmcs.ept_pointer = 0;
+	Vm->Vmcs.eoi_exit_bitmap0 = 0;
+	Vm->Vmcs.eoi_exit_bitmap1 = 0;
+	Vm->Vmcs.eoi_exit_bitmap2 = 0;
+	Vm->Vmcs.eoi_exit_bitmap3 = 0;
+	Vm->Vmcs.eoi_exit_bitmap3 = 0;
+	Vm->Vmcs.eoi_exit_bitmap3 = 0;
+	Vm->Vmcs.xss_exit_bitmap = 0;
+	
+	Vm->Vmcs.guest_physical_address = 0;
+	Vm->Vmcs.vmcs_link_pointer = 0xffffffffffffffff;
+	Vm->Vmcs.guest_ia32_debugctl = 0;
+	Vm->Vmcs.guest_ia32_pat = 0;
+	Vm->Vmcs.guest_ia32_efer = 0;
+	
+	Vm->Vmcs.guest_ia32_perf_global_ctrl = 0;
+	Vm->Vmcs.guest_pdptr0 = 0;
+	Vm->Vmcs.guest_pdptr1 = 0;
+	Vm->Vmcs.guest_pdptr2 = 0;
+	Vm->Vmcs.guest_pdptr3 = 0;
+	Vm->Vmcs.guest_bndcfgs = 0;
+	Vm->Vmcs.host_ia32_pat = 0;
+	Vm->Vmcs.host_ia32_efer = 0;
+	Vm->Vmcs.host_ia32_perf_global_ctrl = 0;
+	Vm->Vmcs.pin_based_vm_exec_control = PIN_BASED_ALWAYSON_WITHOUT_TRUE_MSR;
+	Vm->Vmcs.cpu_based_vm_exec_control = CPU_BASED_FIXED_ONES | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS | CPU_BASED_USE_IO_BITMAPS;
+	Vm->Vmcs.exception_bitmap = 0;
+	Vm->Vmcs.page_fault_error_code_mask = 0;
+	Vm->Vmcs.page_fault_error_code_match = 0;
+	Vm->Vmcs.cr3_target_count = 0;
+	Vm->Vmcs.vm_exit_controls = VM_EXIT_ALWAYSON_WITHOUT_TRUE_MSR;
+	Vm->Vmcs.vm_exit_msr_store_count = 0;
+	Vm->Vmcs.vm_exit_msr_load_count = 0;
+	Vm->Vmcs.vm_entry_controls = (VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR) ^ 0x4;
+	Vm->Vmcs.vm_entry_msr_load_count = 0;
+	Vm->Vmcs.vm_entry_intr_info_field = 0;
+	Vm->Vmcs.vm_entry_exception_error_code = 0;
+	Vm->Vmcs.vm_entry_instruction_len = 0;
+	Vm->Vmcs.tpr_threshold = 0;
+	Vm->Vmcs.secondary_vm_exec_control = SECONDARY_EXEC_UNRESTRICTED_GUEST | SECONDARY_EXEC_ENABLE_EPT;
+	
+	Vm->Vmcs.vm_exit_reason = 0;
+	Vm->Vmcs.vm_exit_intr_info = 0;
+	Vm->Vmcs.vm_exit_intr_error_code = 0;
+	Vm->Vmcs.idt_vectoring_info_field = 0;
+	Vm->Vmcs.idt_vectoring_error_code = 0;
+	Vm->Vmcs.vm_exit_instruction_len = 0;
+	Vm->Vmcs.vmx_instruction_info = 0;
+	
+	Vm->Vmcs.guest_es_limit = 0xffff;
+	Vm->Vmcs.guest_cs_limit = 0xffff;
+	Vm->Vmcs.guest_ss_limit = 0xffff;
+	Vm->Vmcs.guest_ds_limit = 0xffff;
+	Vm->Vmcs.guest_fs_limit = 0xffff;
+	Vm->Vmcs.guest_gs_limit = 0xffff;
+	Vm->Vmcs.guest_ldtr_limit = 0xffff;
+	Vm->Vmcs.guest_tr_limit = 0xffff;
+	Vm->Vmcs.guest_gdtr_limit = 0xffff;
+	Vm->Vmcs.guest_idtr_limit = 0xffff;
+	
+	Vm->Vmcs.guest_es_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_cs_ar_bytes = 
+		VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_WRITEABLE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK | BIT13;
+	Vm->Vmcs.guest_ss_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_ds_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_fs_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_gs_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_ldtr_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_tr_ar_bytes = VMX_AR_P_MASK | VMX_AR_TYPE_BUSY_16_TSS;
+
+	Vm->Vmcs.guest_interruptibility_info = 0;
+	Vm->Vmcs.guest_activity_state = GUEST_ACTIVITY_ACTIVE;
+	Vm->Vmcs.guest_sysenter_cs = 0;
+	Vm->Vmcs.vmx_preemption_timer_value = 0;
+	Vm->Vmcs.host_ia32_sysenter_cs = 0;
+	Vm->Vmcs.cr0_guest_host_mask = 0;
+	Vm->Vmcs.cr4_guest_host_mask = 0;
+	Vm->Vmcs.cr0_read_shadow = 0;
+	Vm->Vmcs.cr4_read_shadow = 0;
+	Vm->Vmcs.cr3_target_value0 = 0;
+	Vm->Vmcs.cr3_target_value1 = 0;
+	Vm->Vmcs.cr3_target_value2 = 0;
+	Vm->Vmcs.cr3_target_value3 = 0;
+	Vm->Vmcs.exit_qualification = 0;
+	Vm->Vmcs.guest_linear_address = 0;
+	Vm->Vmcs.guest_cr0 = 0x60000010 | X64ReadMsr(MSR_IA32_VMX_CR0_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR0_FIXED1) & 0x7ffffffe;
+	Vm->Vmcs.guest_cr3 = 0;
+	Vm->Vmcs.guest_cr4 = X64ReadMsr(MSR_IA32_VMX_CR4_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR4_FIXED1);
+	Vm->Vmcs.guest_es_base = 0;
+	Vm->Vmcs.guest_cs_base = 0xffff0000;
+	Vm->Vmcs.guest_ss_base = 0;
+	Vm->Vmcs.guest_ds_base = 0;
+	Vm->Vmcs.guest_fs_base = 0;
+	Vm->Vmcs.guest_gs_base = 0;
+	Vm->Vmcs.guest_ldtr_base = 0;
+	Vm->Vmcs.guest_gdtr_base = 0;
+	Vm->Vmcs.guest_idtr_base = 0;
+	Vm->Vmcs.guest_dr7 = 0;
+	Vm->Vmcs.guest_rsp = 0;
+	Vm->Vmcs.guest_rip = 0xfff0;
+	Vm->Vmcs.guest_rflags = BIT1;
+	Vm->Vmcs.guest_pending_dbg_exceptions = 0;
+	Vm->Vmcs.guest_sysenter_esp = 0;
+	Vm->Vmcs.guest_sysenter_eip = 0;
+	Vm->Vmcs.host_cr0 = X64ReadCr(0);
+	Vm->Vmcs.host_cr3 = X64ReadCr(3);
+	Vm->Vmcs.host_cr4 = X64ReadCr(4);
+	Vm->Vmcs.host_fs_base = 0;
+	Vm->Vmcs.host_gs_base = 0;
+	Vm->Vmcs.host_tr_base = (u64)&TSS[0];
+	Vm->Vmcs.host_gdtr_base = GDT.Base;
+	Vm->Vmcs.host_idtr_base = IDT.Base;
+	Vm->Vmcs.host_ia32_sysenter_esp = 0;
+	Vm->Vmcs.host_ia32_sysenter_eip = 0;
+	Vm->Vmcs.host_rsp = 0xffff800001000000;	//VmLaunch/VmResume will rewrite this field.
+	Vm->Vmcs.host_rip = (u64)VmExit;
+}
+
+
 VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 {
 	EptIdenticalMapping4G(Vm);
 	
 	Vm->Vmcs.virtual_processor_id = 0x8086;
 	Vm->Vmcs.posted_intr_nv = 0;
-	Vm->Vmcs.guest_es_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.guest_cs_selector = SELETOR_KERNEL_CODE;
-	Vm->Vmcs.guest_ss_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.guest_ds_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.guest_fs_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.guest_gs_selector = SELETOR_KERNEL_DATA;
+	Vm->Vmcs.guest_es_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.guest_cs_selector = SELECTOR_KERNEL_CODE;
+	Vm->Vmcs.guest_ss_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.guest_ds_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.guest_fs_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.guest_gs_selector = SELECTOR_KERNEL_DATA;
 	Vm->Vmcs.guest_ldtr_selector = 0;
-	Vm->Vmcs.guest_tr_selector = 64 * 16;
+	Vm->Vmcs.guest_tr_selector = SELECTOR_TSS;
 	Vm->Vmcs.guest_intr_status= 0;
 	Vm->Vmcs.guest_pml_index = 0;
-	Vm->Vmcs.host_es_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.host_cs_selector = SELETOR_KERNEL_CODE;
-	Vm->Vmcs.host_ss_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.host_ds_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.host_fs_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.host_gs_selector = SELETOR_KERNEL_DATA;
-	Vm->Vmcs.host_tr_selector = 64 * 16;
+	Vm->Vmcs.host_es_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_cs_selector = SELECTOR_KERNEL_CODE;
+	Vm->Vmcs.host_ss_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_ds_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_fs_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_gs_selector = SELECTOR_KERNEL_DATA;
+	Vm->Vmcs.host_tr_selector = SELECTOR_TSS;
 	//Vm->Vmcs.io_bitmap_a = 0;
 	//Vm->Vmcs.io_bitmap_b = 0;
 	//Vm->Vmcs.msr_bitmap = 0;
@@ -268,24 +448,27 @@ VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.vm_exit_instruction_len = 0;
 	Vm->Vmcs.vmx_instruction_info = 0;
 	
-	Vm->Vmcs.guest_es_limit = 0xfff;
-	Vm->Vmcs.guest_cs_limit = 0xfff;
-	Vm->Vmcs.guest_ss_limit = 0xfff;
-	Vm->Vmcs.guest_ds_limit = 0xfff;
-	Vm->Vmcs.guest_fs_limit = 0xfff;
-	Vm->Vmcs.guest_gs_limit = 0xfff;
-	Vm->Vmcs.guest_ldtr_limit = 0xfff;
-	Vm->Vmcs.guest_tr_limit = 0xfff;
+	Vm->Vmcs.guest_es_limit = 0xffff;
+	Vm->Vmcs.guest_cs_limit = 0xffff;
+	Vm->Vmcs.guest_ss_limit = 0xffff;
+	Vm->Vmcs.guest_ds_limit = 0xffff;
+	Vm->Vmcs.guest_fs_limit = 0xffff;
+	Vm->Vmcs.guest_gs_limit = 0xffff;
+	Vm->Vmcs.guest_ldtr_limit = 0xffff;
+	Vm->Vmcs.guest_tr_limit = 0xffff;
 	Vm->Vmcs.guest_gdtr_limit = GDT.Limit;
 	Vm->Vmcs.guest_idtr_limit = IDT.Limit;
-	Vm->Vmcs.guest_es_ar_bytes = ACCESS_RIGHT_UNUSABLE;
-	Vm->Vmcs.guest_cs_ar_bytes = CS_ACCESS_RIGHT;
-	Vm->Vmcs.guest_ss_ar_bytes = SS_ACCESS_RIGHT;
-	Vm->Vmcs.guest_ds_ar_bytes = ACCESS_RIGHT_UNUSABLE;
-	Vm->Vmcs.guest_fs_ar_bytes = ACCESS_RIGHT_UNUSABLE;
-	Vm->Vmcs.guest_gs_ar_bytes = ACCESS_RIGHT_UNUSABLE;
-	Vm->Vmcs.guest_ldtr_ar_bytes = ACCESS_RIGHT_UNUSABLE;
-	Vm->Vmcs.guest_tr_ar_bytes = ACCESS_RIGHT_TR;
+
+	Vm->Vmcs.guest_es_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_cs_ar_bytes = 
+		VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_WRITEABLE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK | BIT13;
+	Vm->Vmcs.guest_ss_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_ds_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_fs_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_gs_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_ldtr_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_tr_ar_bytes = VMX_AR_P_MASK | VMX_AR_TYPE_BUSY_64_TSS;
+	
 	Vm->Vmcs.guest_interruptibility_info = 0;
 	Vm->Vmcs.guest_activity_state = 0;
 	Vm->Vmcs.guest_sysenter_cs = 0;
@@ -688,6 +871,7 @@ VOID VmHandleCpuId(VIRTUAL_MACHINE *Vm)
 
 RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 {
+	RETURN_STATUS Status = 0;
 	UINT64 ExitReason = VmRead(VM_EXIT_REASON);
 	UINT64 ExitQualification = VmRead(EXIT_QUALIFICATION);
 	UINT64 ExitInstructionLen = VmRead(VM_EXIT_INSTRUCTION_LEN);
@@ -707,6 +891,9 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 			//	VmWrite(GUEST_INTERRUPTIBILITY_INFO, 0x800000ff);
 			break;
 		case EXIT_REASON_TRIPLE_FAULT:
+			printk("VM Exit.Triple Fault.\n");
+			printk("Guest RIP:%x\n", Rip);
+			Status = RETURN_ABORTED;
 			break;
 		case EXIT_REASON_PENDING_INTERRUPT:
 			break;
@@ -764,6 +951,8 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 		case EXIT_REASON_MSR_WRITE:
 			break;
 		case EXIT_REASON_INVALID_STATE:
+			printk("VM Exit:Invalid Guest State.\n");
+			Status = RETURN_ABORTED;
 			break;
 		case EXIT_REASON_MSR_LOAD_FAIL:
 			break;
@@ -788,6 +977,9 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 		case EXIT_REASON_LDTR_TR:
 			break;
 		case EXIT_REASON_EPT_VIOLATION:
+			printk("VM Exit:EPT Violation.\n");
+			printk("Guest Physical Address = %x\n", VmRead(GUEST_PHYSICAL_ADDRESS));
+			printk("ExitQualification = %x\n", ExitQualification);
 			break;
 		case EXIT_REASON_EPT_MISCONFIG:
 			break;
@@ -823,11 +1015,13 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 			break;
 	}
 
-	//if (ExitReason != EXIT_REASON_CPUID)
-	//	printk("VM Exit.Reason:%d\n", ExitReason & 0xff);
+	if (ExitReason != EXIT_REASON_CPUID)
+		printk("VM Exit.Reason:%d\n", ExitReason & 0xff);
 
-	if (ExitReason != EXIT_REASON_EXTERNAL_INTERRUPT)
+	if (ExitReason != EXIT_REASON_EXTERNAL_INTERRUPT && ExitReason != EXIT_REASON_EPT_VIOLATION)
 		VmWrite(GUEST_RIP, Rip + ExitInstructionLen);
+
+	return Status;
 }
 
 

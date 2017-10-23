@@ -80,6 +80,24 @@ VmLaunch:
 	mov [rdi + 14 * 8], rbx
 	mov [rdi + 15 * 8], rax
 
+	; restoring guest regs status.
+	mov r15, [rsi + 0 * 8]
+	mov r14, [rsi + 1 * 8]
+	mov r13, [rsi + 2 * 8]
+	mov r12, [rsi + 3 * 8]
+	mov r11, [rsi + 4 * 8]
+	mov r10, [rsi + 5 * 8]
+	mov r9, [rsi + 6 * 8]
+	mov r8, [rsi + 7 * 8]
+	mov rdi, [rsi + 8 * 8]
+	mov rsi, [rsi + 9 * 8]
+	mov rbp, [rsi + 10 * 8]
+	;mov rsp, [rsi + 11 * 8]
+	mov rdx, [rsi + 12 * 8]
+	mov rcx, [rsi + 13 * 8]
+	mov rbx, [rsi + 14 * 8]
+	mov rax, [rsi + 15 * 8]
+
 	mov rdi, HOST_TR_SELECTOR
 	str si
 	call VmWrite

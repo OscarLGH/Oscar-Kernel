@@ -78,7 +78,7 @@ void DescriptorSet()
 	//内核代码段
 	SetSegmentDescriptor(
 		GDTPtr,
-		SELETOR_KERNEL_CODE_INDEX,
+		SELECTOR_KERNEL_CODE_INDEX,
 		0,
 		0,
 		CS_NC | DPL0,
@@ -87,7 +87,7 @@ void DescriptorSet()
 	//内核数据段
 	SetSegmentDescriptor(
 		GDTPtr,
-		SELETOR_KERNEL_DATA_INDEX,
+		SELECTOR_KERNEL_DATA_INDEX,
 		0,
 		0,
 		DS_S_W | DPL0,
@@ -96,7 +96,7 @@ void DescriptorSet()
 	//用户代码段
 	SetSegmentDescriptor(
 		GDTPtr,
-		SELETOR_USER_CODE_INDEX,
+		SELECTOR_USER_CODE_INDEX,
 		0,
 		0,
 		CS_NC | DPL3,
@@ -105,7 +105,7 @@ void DescriptorSet()
 	//用户数据段
 	SetSegmentDescriptor(
 		GDTPtr,
-		SELETOR_USER_DATA_INDEX,
+		SELECTOR_USER_DATA_INDEX,
 		0,
 		0,
 		DS_S_W | DPL3,
@@ -155,7 +155,7 @@ void DescriptorSet()
 		SetGateDescriptor(
 			IDTPtr,
 			Index,
-			SELETOR_KERNEL_CODE,
+			SELECTOR_KERNEL_CODE,
 			(VOID *)ISPEntryPoint[Index],
 			0,
 			TRAP_GATE | DPL0
@@ -168,7 +168,7 @@ void DescriptorSet()
 		SetGateDescriptor(
 			IDTPtr,
 			Index,
-			SELETOR_KERNEL_CODE,
+			SELECTOR_KERNEL_CODE,
 			(VOID *)ISPEntryPoint[Index],
 			0,
 			INT_GATE | DPL0
@@ -179,7 +179,7 @@ void DescriptorSet()
 	SetGateDescriptor(
 		IDTPtr,
 		0x80,
-		SELETOR_KERNEL_CODE,
+		SELECTOR_KERNEL_CODE,
 		(VOID *)ISPEntryPoint[Index],
 		0,
 		TRAP_GATE | DPL3
@@ -191,7 +191,7 @@ void DescriptorSet()
 		SetGateDescriptor(
 			IDTPtr,
 			Index,
-			SELETOR_KERNEL_CODE,
+			SELECTOR_KERNEL_CODE,
 			(VOID *)ISPEntryPoint[Index],
 			0,
 			TRAP_GATE | DPL0

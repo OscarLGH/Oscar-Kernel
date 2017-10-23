@@ -944,7 +944,7 @@ RETURN_STATUS VmOff(VOID);
 VIRTUAL_MACHINE *VmxNew();
 RETURN_STATUS VmxInit(VIRTUAL_MACHINE *Vm);
 
-
+VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm);
 VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm);
 VOID VmxSetVmcs(struct vmcs12 *vmcs_ptr);
 VOID GetVmxState(struct vmcs12 *vmcs_ptr);
