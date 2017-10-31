@@ -315,8 +315,8 @@ APEntry16:
 
 	; 关不可屏蔽中断
 	in al, 0x70                ; port 0x70
-    or al, 0x80                ; disable all NMI source
-    out 0x70, al
+	or al, 0x80                ; disable all NMI source
+	out 0x70, al
 	
 	; 加载IDT
 	; lidt [IDT_POINTER]

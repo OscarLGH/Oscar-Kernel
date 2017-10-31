@@ -96,10 +96,7 @@ VOID HostExec();
 extern GDTR GDT;
 extern IDTR IDT;
 extern TSS64 TSS[64];
-#define ACCESS_RIGHT_UNUSABLE (1 << 16)
-#define ACCESS_RIGHT_TR ((1 << 13) | (1 << 12) | (1 << 7) | 0xb)
-#define CS_ACCESS_RIGHT ((1 << 13) | (1 << 12) | (1 << 4) | (1 << 7) | 0xf)
-#define SS_ACCESS_RIGHT (1 << 16)
+
 
 VOID EptIdenticalMapping4G(VIRTUAL_MACHINE *Vm)
 {
@@ -113,13 +110,21 @@ VOID EptIdenticalMapping4G(VIRTUAL_MACHINE *Vm)
 		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_CACHE_WB | EPT_PDPTE_1GB_PAGE);
 	PDPT[2] = 0x80000000 | \
 		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_CACHE_WB | EPT_PDPTE_1GB_PAGE);
-	PDPT[3] = 0xc0000000 |  \
+	PDPT[3] = 0xc0000000 | \
 		(EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_UNCACHEABLE | EPT_PDPTE_1GB_PAGE);
 }
 
+#include "RealModeGuest.h"
+
 VOID EptRealModeMapping(VIRTUAL_MACHINE *Vm)
 {
-	VOID * GuestMemory = KMalloc(0x100000);
+	VOID * GuestMemory = KMalloc(0x400000);
+	
+	memset(GuestMemory, 0, 0x200000);
+
+	memcpy(((UINT8 *)GuestMemory + 0x200000 - 16), ResetVector, 16);
+	memcpy(((UINT8 *)GuestMemory + 0x7c00), GuestStartup16, (UINT64)ResetVector - (UINT64)GuestStartup16);
+	
 	UINT64 *PML4T = Vm->VmcsVirt.ept_pointer;
 	UINT64 *PDPT = (UINT64 *)((UINT8 *)Vm->VmcsVirt.ept_pointer + 0x1000);
 	PML4T[0] = (VIRT2PHYS(Vm->VmcsVirt.ept_pointer) + 0x1000) | \
@@ -137,8 +142,13 @@ VOID EptRealModeMapping(VIRTUAL_MACHINE *Vm)
 	PDT0_1G[0] = VIRT2PHYS(GuestMemory) | \
 		(EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_CACHE_WB | EPT_PDE_2MB_PAGE);
 
+	PDT0_1G[1] = VIRT2PHYS(GuestMemory) + 0x200000 | \
+		(EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_CACHE_WB | EPT_PDE_2MB_PAGE);
+
 	PDT3_4G[511] = VIRT2PHYS(GuestMemory) | \
 		(EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_CACHE_WB | EPT_PDE_2MB_PAGE);
+
+	printk("Guest Memory:%x\n", GuestMemory);
 }
 
 VIRTUAL_MACHINE *VmxNew()
@@ -183,7 +193,7 @@ VIRTUAL_MACHINE *VmxNew()
 	VmPtr->VmcsVirt.vm_exit_msr_load_addr = KMalloc(0x1000);
 	VmPtr->Vmcs.vm_exit_msr_load_addr = VIRT2PHYS(VmPtr->VmcsVirt.vm_exit_msr_load_addr);
 	
-	VmPtr->VmcsVirt.vm_exit_msr_store_addr = KMalloc(0x1000);
+	VmPtr->VmcsVirt.vm_exit_msr_store_addr = VmPtr->VmcsVirt.vm_entry_msr_load_addr;
 	VmPtr->Vmcs.vm_exit_msr_store_addr = VIRT2PHYS(VmPtr->VmcsVirt.vm_exit_msr_store_addr);
 	
 	VmPtr->VmcsVirt.xss_exit_bitmap = KMalloc(0x1000);
@@ -251,8 +261,6 @@ VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.eoi_exit_bitmap1 = 0;
 	Vm->Vmcs.eoi_exit_bitmap2 = 0;
 	Vm->Vmcs.eoi_exit_bitmap3 = 0;
-	Vm->Vmcs.eoi_exit_bitmap3 = 0;
-	Vm->Vmcs.eoi_exit_bitmap3 = 0;
 	Vm->Vmcs.xss_exit_bitmap = 0;
 	
 	Vm->Vmcs.guest_physical_address = 0;
@@ -267,19 +275,20 @@ VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.guest_pdptr2 = 0;
 	Vm->Vmcs.guest_pdptr3 = 0;
 	Vm->Vmcs.guest_bndcfgs = 0;
-	Vm->Vmcs.host_ia32_pat = 0;
-	Vm->Vmcs.host_ia32_efer = 0;
+	Vm->Vmcs.host_ia32_pat = X64ReadMsr(MSR_IA32_CR_PAT);
+	Vm->Vmcs.host_ia32_efer = X64ReadMsr(MSR_EFER);
 	Vm->Vmcs.host_ia32_perf_global_ctrl = 0;
 	Vm->Vmcs.pin_based_vm_exec_control = PIN_BASED_ALWAYSON_WITHOUT_TRUE_MSR;
-	Vm->Vmcs.cpu_based_vm_exec_control = CPU_BASED_FIXED_ONES | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS | CPU_BASED_USE_IO_BITMAPS;
-	Vm->Vmcs.exception_bitmap = 0;
+	Vm->Vmcs.cpu_based_vm_exec_control = CPU_BASED_FIXED_ONES | CPU_BASED_ACTIVATE_SECONDARY_CONTROLS | CPU_BASED_USE_IO_BITMAPS | CPU_BASED_USE_MSR_BITMAPS;
+	Vm->Vmcs.exception_bitmap = 0xffffffff;
 	Vm->Vmcs.page_fault_error_code_mask = 0;
 	Vm->Vmcs.page_fault_error_code_match = 0;
 	Vm->Vmcs.cr3_target_count = 0;
-	Vm->Vmcs.vm_exit_controls = VM_EXIT_ALWAYSON_WITHOUT_TRUE_MSR;
+	Vm->Vmcs.vm_exit_controls = VM_EXIT_ALWAYSON_WITHOUT_TRUE_MSR | VM_EXIT_SAVE_IA32_EFER | VM_EXIT_LOAD_IA32_EFER;
 	Vm->Vmcs.vm_exit_msr_store_count = 0;
 	Vm->Vmcs.vm_exit_msr_load_count = 0;
-	Vm->Vmcs.vm_entry_controls = (VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR) ^ 0x4;
+	Vm->Vmcs.vm_entry_controls = \
+		VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR | VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL | VM_ENTRY_LOAD_IA32_EFER;
 	Vm->Vmcs.vm_entry_msr_load_count = 0;
 	Vm->Vmcs.vm_entry_intr_info_field = 0;
 	Vm->Vmcs.vm_entry_exception_error_code = 0;
@@ -306,13 +315,18 @@ VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.guest_gdtr_limit = 0xffff;
 	Vm->Vmcs.guest_idtr_limit = 0xffff;
 	
-	Vm->Vmcs.guest_es_ar_bytes = VMX_AR_UNUSABLE_MASK;
+	Vm->Vmcs.guest_es_ar_bytes = 
+		VMX_AR_P_MASK | VMX_AR_TYPE_WRITABLE_DATA_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK;
 	Vm->Vmcs.guest_cs_ar_bytes = 
-		VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_WRITEABLE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK | BIT13;
-	Vm->Vmcs.guest_ss_ar_bytes = VMX_AR_UNUSABLE_MASK;
-	Vm->Vmcs.guest_ds_ar_bytes = VMX_AR_UNUSABLE_MASK;
-	Vm->Vmcs.guest_fs_ar_bytes = VMX_AR_UNUSABLE_MASK;
-	Vm->Vmcs.guest_gs_ar_bytes = VMX_AR_UNUSABLE_MASK;
+		VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_CODE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK;
+	Vm->Vmcs.guest_ss_ar_bytes = 
+		VMX_AR_P_MASK | VMX_AR_TYPE_WRITABLE_DATA_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK;
+	Vm->Vmcs.guest_ds_ar_bytes = 
+		VMX_AR_P_MASK | VMX_AR_TYPE_WRITABLE_DATA_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK;
+	Vm->Vmcs.guest_fs_ar_bytes =
+		VMX_AR_P_MASK | VMX_AR_TYPE_WRITABLE_DATA_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK;
+	Vm->Vmcs.guest_gs_ar_bytes = 
+		VMX_AR_P_MASK | VMX_AR_TYPE_WRITABLE_DATA_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK;
 	Vm->Vmcs.guest_ldtr_ar_bytes = VMX_AR_UNUSABLE_MASK;
 	Vm->Vmcs.guest_tr_ar_bytes = VMX_AR_P_MASK | VMX_AR_TYPE_BUSY_16_TSS;
 
@@ -321,8 +335,8 @@ VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.guest_sysenter_cs = 0;
 	Vm->Vmcs.vmx_preemption_timer_value = 0;
 	Vm->Vmcs.host_ia32_sysenter_cs = 0;
-	Vm->Vmcs.cr0_guest_host_mask = 0;
-	Vm->Vmcs.cr4_guest_host_mask = 0;
+	Vm->Vmcs.cr0_guest_host_mask = X64ReadMsr(MSR_IA32_VMX_CR0_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe;
+	Vm->Vmcs.cr4_guest_host_mask = X64ReadMsr(MSR_IA32_VMX_CR4_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR4_FIXED1);
 	Vm->Vmcs.cr0_read_shadow = 0;
 	Vm->Vmcs.cr4_read_shadow = 0;
 	Vm->Vmcs.cr3_target_value0 = 0;
@@ -331,9 +345,11 @@ VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.cr3_target_value3 = 0;
 	Vm->Vmcs.exit_qualification = 0;
 	Vm->Vmcs.guest_linear_address = 0;
-	Vm->Vmcs.guest_cr0 = 0x60000010 | X64ReadMsr(MSR_IA32_VMX_CR0_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR0_FIXED1) & 0x7ffffffe;
+	Vm->Vmcs.guest_cr0 = X64ReadMsr(MSR_IA32_VMX_CR0_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR0_FIXED1) & 0x7ffffffe;
+	printk("VMCS.GUEST_CR0:%08x\n", Vm->Vmcs.guest_cr0);
 	Vm->Vmcs.guest_cr3 = 0;
 	Vm->Vmcs.guest_cr4 = X64ReadMsr(MSR_IA32_VMX_CR4_FIXED0) & X64ReadMsr(MSR_IA32_VMX_CR4_FIXED1);
+	printk("VMCS.GUEST_CR4:%08x\n", Vm->Vmcs.guest_cr4);
 	Vm->Vmcs.guest_es_base = 0;
 	Vm->Vmcs.guest_cs_base = 0xffff0000;
 	Vm->Vmcs.guest_ss_base = 0;
@@ -360,7 +376,7 @@ VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm)
 	Vm->Vmcs.host_idtr_base = IDT.Base;
 	Vm->Vmcs.host_ia32_sysenter_esp = 0;
 	Vm->Vmcs.host_ia32_sysenter_eip = 0;
-	Vm->Vmcs.host_rsp = 0xffff800001000000;	//VmLaunch/VmResume will rewrite this field.
+	Vm->Vmcs.host_rsp = 0;					//VmLaunch/VmResume will rewrite this field.
 	Vm->Vmcs.host_rip = (u64)VmExit;
 }
 
@@ -461,7 +477,7 @@ VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm)
 
 	Vm->Vmcs.guest_es_ar_bytes = VMX_AR_UNUSABLE_MASK;
 	Vm->Vmcs.guest_cs_ar_bytes = 
-		VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_WRITEABLE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK | BIT13;
+		VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_CODE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK | BIT13;
 	Vm->Vmcs.guest_ss_ar_bytes = VMX_AR_UNUSABLE_MASK;
 	Vm->Vmcs.guest_ds_ar_bytes = VMX_AR_UNUSABLE_MASK;
 	Vm->Vmcs.guest_fs_ar_bytes = VMX_AR_UNUSABLE_MASK;
@@ -867,6 +883,90 @@ VOID VmHandleCpuId(VIRTUAL_MACHINE *Vm)
 		Vm->GuestRegs.RCX = 0;
 		Vm->GuestRegs.RDX = 0;
 	}
+
+	Vm->Vmcs.guest_rip += VmRead(VM_EXIT_INSTRUCTION_LEN);
+}
+
+VOID VmHandleException(VIRTUAL_MACHINE *Vm)
+{
+	UINT32 ExitQualification = VmRead(EXIT_QUALIFICATION);
+	printk("Exception Vector = %x\n", VmRead(VM_EXIT_INTR_INFO));
+	printk("Guest Physical Address = %x\n", VmRead(GUEST_PHYSICAL_ADDRESS));
+	printk("ExitQualification = %x\n", ExitQualification);
+	printk("VM Exit interruption error code:%x\n", VmRead(VM_EXIT_INTR_ERROR_CODE));
+	printk("Guest CR0:%x\n", VmRead(GUEST_CR0));
+	printk("Guest CR3:%x\n", VmRead(GUEST_CR3));
+	printk("Guest CR4:%x\n", VmRead(GUEST_CR4));
+	printk("Guest Memory:0x100000:%x\n", *(UINT64 *)(0xffff800002800000 + 0x100000));
+	printk("Guest Memory:0x101000:%x\n", *(UINT64 *)(0xffff800002800000 + 0x101000));
+	printk("Guest Memory:0x102000:%x\n", *(UINT64 *)(0xffff800002800000 + 0x102000));
+	while(1);
+}
+
+VOID VmHandleExternInterrupt(VIRTUAL_MACHINE *Vm)
+{
+	
+}
+
+VOID VmHandleIo(VIRTUAL_MACHINE *Vm)
+{
+	UINT32 ExitQualification = VmRead(EXIT_QUALIFICATION);
+	UINT16 PortNum = ExitQualification >> 16;
+	UINT8 Direction = ExitQualification & BIT3;
+	UINT8 IsString = ExitQualification & BIT4;
+	UINT8 IsRep = ExitQualification & BIT5;
+	UINT8 IsImme = ExitQualification & BIT6;
+	
+	printk("VM Exit:IO\n");
+	if (Direction)
+		printk("IN:Port = %04x\n", PortNum);
+	else
+		printk("OUT:Port = %04x\n", PortNum);
+
+	Vm->Vmcs.guest_rip += VmRead(VM_EXIT_INSTRUCTION_LEN);
+}
+
+VOID EnterLongMode(VIRTUAL_MACHINE *Vm)
+{
+	UINT32 Efer = VmRead(GUEST_IA32_EFER);
+	UINT32 OriCr0 = VmRead(GUEST_CR0);
+	UINT32 OriCr4 = VmRead(GUEST_CR4);
+	VmWrite(GUEST_CR0, OriCr0 | 0x80000001);
+	VmWrite(GUEST_CR4, OriCr4 | 0x00000200);
+	VmWrite(GUEST_TR_AR_BYTES, VMX_AR_P_MASK | VMX_AR_TYPE_BUSY_64_TSS);
+	/*VmWrite(GUEST_CS_AR_BYTES, VMX_AR_P_MASK | VMX_AR_TYPE_READABLE_CODE_MASK | VMX_AR_TYPE_CODE_MASK | VMX_AR_TYPE_ACCESSES_MASK | VMX_AR_S_MASK | BIT13);
+	VmWrite(GUEST_DS_AR_BYTES, VMX_AR_UNUSABLE_MASK);
+	VmWrite(GUEST_ES_AR_BYTES, VMX_AR_UNUSABLE_MASK);
+	VmWrite(GUEST_FS_AR_BYTES, VMX_AR_UNUSABLE_MASK);
+	VmWrite(GUEST_GS_AR_BYTES, VMX_AR_UNUSABLE_MASK);
+	VmWrite(GUEST_SS_AR_BYTES, VMX_AR_UNUSABLE_MASK);
+	VmWrite(GUEST_LDTR_AR_BYTES, VMX_AR_UNUSABLE_MASK);*/
+	VmWrite(VM_ENTRY_CONTROLS, 
+		VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR | 
+		VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL | 
+		VM_ENTRY_LOAD_IA32_EFER |
+		VM_ENTRY_IA32E_MODE);
+	VmWrite(GUEST_IA32_EFER, Efer | 0x500);
+}
+
+VOID VmHandleCrAccess(VIRTUAL_MACHINE *Vm)
+{
+	UINT32 ExitQualification = VmRead(EXIT_QUALIFICATION);
+	UINT8 AccessType = (ExitQualification >> 4) & 0x3;
+	UINT16 CrNum = ExitQualification & 0xf;
+	UINT8 Reg = (ExitQualification >> 8) & 0xf;
+	printk("Exit:%s CR%d\n",AccessType == 0 ? "Write":"Read" ,CrNum);
+	EnterLongMode(Vm);
+	Vm->Vmcs.guest_rip += VmRead(VM_EXIT_INSTRUCTION_LEN);
+}
+
+VOID VmHandleEptViolation(VIRTUAL_MACHINE *Vm)
+{
+	UINT32 ExitQualification = VmRead(EXIT_QUALIFICATION);
+	UINT64 GuestPhysicalAddress = VmRead(GUEST_PHYSICAL_ADDRESS);
+	printk("VM Exit:EPT Violation.\n");
+	printk("Guest Physical Address = %x\n", GuestPhysicalAddress);
+	printk("ExitQualification = %x\n", ExitQualification);
 }
 
 RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
@@ -876,6 +976,8 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 	UINT64 ExitQualification = VmRead(EXIT_QUALIFICATION);
 	UINT64 ExitInstructionLen = VmRead(VM_EXIT_INSTRUCTION_LEN);
 	UINT64 Rip = VmRead(GUEST_RIP);
+	Vm->Vmcs.guest_rip = Rip;
+	
 	extern SPIN_LOCK ConsoleSpinLock;
 	ConsoleSpinLock.SpinLock = 0;
 
@@ -884,15 +986,12 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 	switch (ExitReason & 0xff)
 	{
 		case EXIT_REASON_EXCEPTION_NMI:
+			VmHandleException(Vm);
 			break;
 		case EXIT_REASON_EXTERNAL_INTERRUPT:
-			//printk("EXT INT.\n");
-			//if (Rflags & FLAG_IF)
-			//	VmWrite(GUEST_INTERRUPTIBILITY_INFO, 0x800000ff);
+			VmHandleExternInterrupt(Vm);
 			break;
 		case EXIT_REASON_TRIPLE_FAULT:
-			printk("VM Exit.Triple Fault.\n");
-			printk("Guest RIP:%x\n", Rip);
 			Status = RETURN_ABORTED;
 			break;
 		case EXIT_REASON_PENDING_INTERRUPT:
@@ -935,16 +1034,12 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 		case EXIT_REASON_VMON:
 			break;
 		case EXIT_REASON_CR_ACCESS:
-			printk("Exit:Read CR%d\n", ExitQualification & 15);
+			VmHandleCrAccess(Vm);
 			break;
 		case EXIT_REASON_DR_ACCESS:
 			break;
 		case EXIT_REASON_IO_INSTRUCTION:
-			//printk("VM Exit:IO\n");
-			//if (ExitQualification & BIT3)
-			//	printk("IN:Port = %04x\n", ExitQualification >> 16);
-			//else
-			//	printk("OUT:Port = %04x\n", ExitQualification >> 16);
+			VmHandleIo(Vm);
 			break;
 		case EXIT_REASON_MSR_READ:
 			break;
@@ -959,6 +1054,8 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 		case EXIT_REASON_MWAIT_INSTRUCTION:
 			break;
 		case EXIT_REASON_MONITOR_TRAP_FLAG:
+			printk("VM Exit:Trap Flag.\n");
+			printk("Guest RIP:%x\n", Rip);
 			break;
 		case EXIT_REASON_MONITOR_INSTRUCTION:
 			break;
@@ -977,9 +1074,7 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 		case EXIT_REASON_LDTR_TR:
 			break;
 		case EXIT_REASON_EPT_VIOLATION:
-			printk("VM Exit:EPT Violation.\n");
-			printk("Guest Physical Address = %x\n", VmRead(GUEST_PHYSICAL_ADDRESS));
-			printk("ExitQualification = %x\n", ExitQualification);
+			VmHandleEptViolation(Vm);
 			break;
 		case EXIT_REASON_EPT_MISCONFIG:
 			break;
@@ -1015,11 +1110,7 @@ RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm)
 			break;
 	}
 
-	if (ExitReason != EXIT_REASON_CPUID)
-		printk("VM Exit.Reason:%d\n", ExitReason & 0xff);
-
-	if (ExitReason != EXIT_REASON_EXTERNAL_INTERRUPT && ExitReason != EXIT_REASON_EPT_VIOLATION)
-		VmWrite(GUEST_RIP, Rip + ExitInstructionLen);
+	VmWrite(GUEST_RIP, Vm->Vmcs.guest_rip);
 
 	return Status;
 }
