@@ -335,6 +335,9 @@ void * MainThreadTest(void * arg)
 	
 	printk("Main Thread Running.\n");
 
+	void VmTest();
+	VmTest();
+	
 	color = GetColor(&SysCon);
 	//while(1);
 	#define TestThreadCnt 10
@@ -638,84 +641,50 @@ extern PHYSICAL_MEMORY_AREA PhysicalMemoryArea;
 UINT64 ApStartSig = 0;
 
 #include "Vfs.h"
+
+#include "Vm.h"
 #include "../Arch/X86_64/Cpu/Vmx.h"
+#include "../Arch/X86_64/Cpu/UnrestrictedGuest/UnrestrictedGuest.h"
 
-void VmPerTest()
-{
-	printk("Test begins...\n");
-	UINT64 Counter = 0x40000000;
-	UINT64 Result = 0;
-	while(Counter--)
-	{
-		Result++;
-	}
-	printk("Test ends.Result = %x\n", Result);
-	Counter = 16;
-	while(Counter--)
-	{
-		printk("=================================================\n");
-	}
-}
-
+VCPU *VcpuGlobal;
 void VmTest()
 {
 	RETURN_STATUS Status;
-
-	Status = VmxSupport();
-
-	UINT64 X64ReadCr(UINT64 Index);
+	VIRTUAL_MACHINE *Vm = VmNew();
+	VmNodeCreate(Vm);
 	
-	printk("VMX Support:%s,%s\n", 
-		Status == RETURN_UNSUPPORTED ? "CPU Unsupported" : "CPU Supported", 
-		Status == RETURN_ABORTED ? "BIOS Disabled":"BIOS Enabled"
-	);
+	/*16MB RAM*/
+	VmemAllocate(Vm->VmNodeArray[0]->Vmem, 0, 0x1000000);
 
-	Status = VmxStatus();
-	printk("VMX Status:%s\n",
-		Status == RETURN_NOT_READY ? "Not Ready":"Ready");
+	/*16MB BIOS AREA */
+	VmemAllocate(Vm->VmNodeArray[0]->Vmem, 0xff000000, 0x1000000);
+	VCPU *Vcpu = Vm->VmNodeArray[0]->Vcpu;
+	VcpuGlobal = Vcpu;
 
-	VmxEnable();
+	VmemGuestMemoryWrite(Vm->VmNodeArray[0]->Vmem, 0x7c00, GuestStartup16, (UINT64)GuestCodeEnd - (UINT64)GuestStartup16);
+	VmemGuestMemoryWrite(Vm->VmNodeArray[0]->Vmem, 0x200000, (VOID *)PHYS2VIRT(0x200000), 0x100000);
+	VmemGuestMemoryWrite(Vm->VmNodeArray[0]->Vmem, 0xfffffff0, ResetVector, 16);
 
-	Status = VmxStatus();
-	printk("VMX Status:%s\n",
-		Status == RETURN_NOT_READY ? "Not Ready" : "Ready");
+	Status = Vcpu->VcpuPinShadowPage(Vcpu, VIRT2PHYS(Vm->VmNodeArray[0]->Vmem->ShadowPageTable));
+	Status = Vcpu->PostedInterruptVectorSet(Vcpu, 0xff);
 	
-	VIRTUAL_MACHINE *Vm = VmxNew();
-		
-	Status = VmxInit(Vm);
-	if (Status == RETURN_SUCCESS)
-		printk("VMX:Enter VMX operation.\n");
-	else
-		printk("VMX:Failed to enter VMX operation.\n");
-
-	//VmxCopyHostState(Vm);
-	VmxCpuBistState(Vm);
-	VmxSetVmcs(&Vm->Vmcs);
-	
-	printk("Host RIP:%016x\n", VmRead(HOST_RIP));
-
-	
-
-	//printk("Host Test:\n");
-	//VmPerTest();
-
-	printk("VM Launch...\n");
-	//VmLaunch(&Vm->HostRegs, &Vm->GuestRegs);
-	//UINT32 VmExitReason = VmRead(VM_EXIT_REASON);
-	//extern SPIN_LOCK ConsoleSpinLock;
-	//ConsoleSpinLock.SpinLock = 0;
-	//printk("VM Exit.Exit reason:%02d\n", VmExitReason);
-	while (1) 
-	{
-		VcpuRun(Vm);
-		Status = VmExitHandler(Vm);
-		if (Status)
-			break;
+	Status = Vcpu->VcpuPrepare(Vcpu);
+	if (Status) {
+		printk("VCPU Prepare failed!%x\n", Status);
 	}
-	printk("VM Unhandled error.\n");
-	while(1);
+	
+	Status = VmVcpuRun(Vcpu);
+	if (Status) {
+		printk("VCPU Execution failed!Instruction Error:%d\n", VmRead(VM_INSTRUCTION_ERROR));
+		printk("EPT Pointer:%016x\n",  VmRead(EPT_POINTER));
+		printk("PinBased:%016x\n",  VmRead(PIN_BASED_VM_EXEC_CONTROL));
+	}
 }
 
+void DebugTestFunc()
+{
+	printk("DEBUG Test...\n");
+}
 
 void InitMain()
 {
@@ -740,7 +709,7 @@ void InitMain()
 
 	ApStartSig = 1;
 
-	VmTest();
+	//VmTest();
 
 	//while(Counter++ < 20)
 	//	printk("=================%d=================\n", Counter);
@@ -756,11 +725,25 @@ void InitMain()
 	
 	printk("Basic Initialization Done.\n");
 	printk("Waiting for Clock Interrupt to start 1st Progress...\n");
-	
-	printk("Enabling Interrupts...\n");
 
-	
-	
+	printk("Host APIC_BASE:%x\n", X64ReadMsr(MSR_IA32_APICBASE));
+
+	//asm("INT3");
+	//X64WriteDr(7, 0x5);
+	//void (*BreakPoint)();
+	//X64WriteDr(0, (UINT64)DebugTestFunc);
+	//X64WriteDr(1, (UINT64)DebugTestFunc);
+	//X64WriteDr(2, (UINT64)DebugTestFunc);
+	//X64WriteDr(3, (UINT64)DebugTestFunc);
+
+	//printk("DR0 = %016x\n", X64ReadDr(0));
+	//printk("DR1 = %016x\n", X64ReadDr(1));
+	//printk("DR2 = %016x\n", X64ReadDr(2));
+	//printk("DR3= %016x\n", X64ReadDr(3));
+	//printk("DR6 = %016x\n", X64ReadDr(6));
+	//printk("DR7 = %016x\n", X64ReadDr(7));
+
+	//DebugTestFunc();	
 	EnableIrqn(0x2);
 	EnableLocalIrq();
 

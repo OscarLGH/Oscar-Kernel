@@ -121,12 +121,12 @@ void MapPage(UINT64 * PgdBase, VOID * VirtAddr, VOID * PhysAddr, UINT64 PageSize
 	//	return;
 	
 	//计算虚拟地址在各级页表中索引
-	Index1 = ((UINT64)VirtAddr>>39);
-	Index2 = ((UINT64)VirtAddr>>30)&0x1FF;
-	Index3 = ((UINT64)VirtAddr>>21)&0x1FF;
-	Index4 = ((UINT64)VirtAddr>>12)&0x1FF;
-	Offset2M = (UINT64)VirtAddr&((1<<21)-1);
-	Offset4K = (UINT64)VirtAddr&((1<<12)-1);
+	Index1 = ((UINT64)VirtAddr >> 39);
+	Index2 = ((UINT64)VirtAddr >> 30) & 0x1FF;
+	Index3 = ((UINT64)VirtAddr >> 21) & 0x1FF;
+	Index4 = ((UINT64)VirtAddr >> 12) & 0x1FF;
+	Offset2M = (UINT64)VirtAddr & ((1 << 21) - 1);
+	Offset4K = (UINT64)VirtAddr & ((1 << 12) - 1);
 	
 	switch(PageSize)
 	{

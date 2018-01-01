@@ -2,6 +2,7 @@
 #define _APIC_H
 
 #include "Type.h"
+#include "Cpu.h"
 #include "SystemParameters.h"
 
 //Local APIC 常量:

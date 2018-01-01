@@ -7,7 +7,7 @@
 #include "../Acpi.h"
 #include "BaseLib.h"
 
-//#define DEBUG
+#define DEBUG
 #include "Debug.h"
 
 #define HPET_DEFAULT_BASE0 0xFED00000

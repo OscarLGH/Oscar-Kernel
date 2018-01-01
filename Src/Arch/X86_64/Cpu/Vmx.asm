@@ -55,9 +55,9 @@ VmxOff:
 %define HOST_RSP                        0x00006c14
 %define HOST_RIP                        0x00006c16
 
-; @ProtoType:	VOID VmLaunch(REG_STATE *HostReg, REG_STATE *GuestReg);
+; @ProtoType:	RETURN_STATUS VmLaunch(REG_STATE *HostReg, REG_STATE *GuestReg);
 ; @Function:	Save host registers and launch virtual machine managed by current VMCS
-; Caution:	This "function" returns when vmexit.Then host will run 'VmExit' defined below.
+; Caution:	This "function" returns when vmexit or fail to enter guest.Then host will run 'VmExit' defined below.
 VmLaunch:
 	push rdi		; Saving host regs pointer.
 	push rsi		; Saving guest regs pointer.
@@ -108,6 +108,33 @@ VmLaunch:
 	
 	vmlaunch
 
+	pop rsi			; restoring guest regs pointer.
+	pop rdi			; restoring host regs pointer.
+	
+	;restoring host regs status.
+	mov r15, [rdi + 0 * 8]
+	mov r14, [rdi + 1 * 8]
+	mov r13, [rdi + 2 * 8]
+	mov r12, [rdi + 3 * 8]
+	mov r11, [rdi + 4 * 8]
+	mov r10, [rdi + 5 * 8]
+	mov r9, [rdi + 6 * 8]
+	mov r8, [rdi + 7 * 8]
+	
+	mov rsi, [rdi + 9 * 8]
+	mov rdi, [rdi + 8 * 8]
+	mov rbp, [rdi + 10 * 8]
+	;mov rsp, [rdi + 11 * 8]
+	mov rdx, [rdi + 12 * 8]
+	mov rcx, [rdi + 13 * 8]
+	mov rbx, [rdi + 14 * 8]
+	mov rax, [rdi + 15 * 8]
+	
+	
+	;mov rax, 0x80000015
+
+	ret
+
 ; @ProtoType:	VOID VmExit(VOID);
 ; @Function:	vmexit handler,Save guest registers and restore host registers.
 ; Caution: 	This is NOT a function,means it can not be called directly.
@@ -151,12 +178,14 @@ VmExit:
 	mov rbx, [rdi + 14 * 8]
 	mov rax, [rdi + 15 * 8]
 
+	mov rax, 0
+
 	ret
 
 ; @ProtoType:	VOID VmResume(REG_STATE *HostReg, REG_STATE *GuestReg);
 ; @Function:	Save host registers and restore guest registers,then 
 ;		resume to guest mode.
-; Caution:	This "function" returns when vmexit.Then host will run 'VmExit' defined above.
+; Caution:	This "function" returns when vmexit or fail to enter guest.Then host will run 'VmExit' defined above.
 VmResume:
 	push rdi		; Saving host regs pointer.
 	push rsi		; Saving guest regs pointer.
@@ -205,6 +234,35 @@ VmResume:
 	call VmWrite
 
 	vmresume
+
+	pop rsi			; restoring guest regs pointer.
+	pop rdi			; restoring host regs pointer.
+	
+	;restoring host regs status.
+	mov r15, [rdi + 0 * 8]
+	mov r14, [rdi + 1 * 8]
+	mov r13, [rdi + 2 * 8]
+	mov r12, [rdi + 3 * 8]
+	mov r11, [rdi + 4 * 8]
+	mov r10, [rdi + 5 * 8]
+	mov r9, [rdi + 6 * 8]
+	mov r8, [rdi + 7 * 8]
+	
+	mov rsi, [rdi + 9 * 8]
+	mov rbp, [rdi + 10 * 8]
+	;mov rsp, [rdi + 11 * 8]
+	mov rdx, [rdi + 12 * 8]
+	mov rcx, [rdi + 13 * 8]
+	mov rbx, [rdi + 14 * 8]
+	mov rax, [rdi + 15 * 8]
+	mov rdi, [rdi + 8 * 8]
+	
+	mov rax, 0x80000015
+
+	ret
+
+	mov rax, 0x80000015
+	ret
 
 ; @ProtoType:	VOID VmPtrLoad(UINT64 VmcsPhysAddr);
 ; @Function:	Loads the current VMCS pointer from memory

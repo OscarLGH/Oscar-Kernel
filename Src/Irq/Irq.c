@@ -91,6 +91,18 @@ void IrqRegister(UINT64 Vector, void Fun(void *), void * Dev)
 	SpinUnlockIrqRestore(&IrqDesc->SpinLock);
 }
 
+#include "Vm.h"
+int times = 0;
+void VmPostedInterruptTest()
+{
+	extern VCPU *VcpuGlobal;
+	if (VcpuGlobal) {
+		VcpuGlobal->PostedInterruptSet(VcpuGlobal, 0x20);
+		CallIrqDest(0xff, 1);
+		times++;
+	}
+}
+
 void IrqHandler(UINT64 Vector)
 {
 	IRQ_DESCRIPTOR * IrqDesc = &IrqVector.IrqTable[Vector];
@@ -98,10 +110,25 @@ void IrqHandler(UINT64 Vector)
 
 	IrqDesc->NestedIrq++;
 
-	//printk("IRQ %x on cpu %02d.\n", Vector, ArchGetCpuIdentifier());
-	if (Vector == 0xff)
+	//if (ArchGetCpuIdentifier() == 0x1)
+	//	printk("IRQ %x on cpu %02d.\n", Vector, ArchGetCpuIdentifier());
+	
+	
+	if (Vector == 0x20) {
+		VmPostedInterruptTest();
+	}
+	
+	if (Vector == 0x3)
 	{
-		printk("VMM Injected Interrupt.\n");
+		printk("#BP.\n");
+		return;
+		//TraceHandler(Vector);
+	}
+
+	if (Vector == 0x1)
+	{
+		printk("#DB.\n");
+		return;
 		//TraceHandler(Vector);
 	}
 
@@ -129,6 +156,7 @@ void IrqHandler(UINT64 Vector)
 	{
 		if(Vector < 0x20)
 			TraceHandler(Vector);
+		printk("Exeception:%d\n", Vector);
 	}
 
 	//MilliSecondDelay(20);

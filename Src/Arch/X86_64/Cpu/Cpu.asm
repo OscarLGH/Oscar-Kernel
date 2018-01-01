@@ -10,6 +10,8 @@ global X64WriteMsr
 global X64ReadTsc
 global X64ReadCr
 global X64WriteCr
+global X64ReadDr
+global X64WriteDr
 global X64GetFlagsReg
 global X64EnableLocalIrq
 global X64DisableLocalIrq
@@ -160,6 +162,96 @@ WrCr8:
 WrCr15:
 	ret
 
+
+; @ProtoType:	UINT64 X64ReadDr(UINT64 Index);
+; @Function:	Read Debug Register.
+; @Param:	IN	Index of control register,0-7
+; @Ret:		OUT	Value of control register,crn->rax
+X64ReadDr:
+
+RdDr0:
+	cmp rdi, 0
+	jne RdDr1
+	mov rax, dr0
+	ret
+
+RdDr1:
+	cmp rdi, 1
+	jne RdDr2
+	mov rax, dr1
+	ret
+
+RdDr2:
+	cmp rdi, 2
+	jne RdDr3
+	mov rax, dr2
+	ret
+
+RdDr3:
+	cmp rdi, 3
+	jne RdDr6
+	mov rax, dr3
+	ret
+
+RdDr6:
+	cmp rdi, 6
+	jne RdDr7
+	mov rax, dr6
+	ret
+
+RdDr7:
+	cmp rdi, 7
+	jne RdDrFault
+	mov rax, dr7
+	ret
+
+RdDrFault:
+	ret
+
+; @ProtoType:	UINT64 X64WriteCr(UINT64 Index, UINT64 Value);
+; @Function:	Write Control Register.
+; @Param: Index of control register,0-7
+; @Param: Value write to register.
+X64WriteDr:
+
+WrDr0:
+	cmp rdi, 0
+	jne WrDr1
+	mov dr0, rsi
+	ret
+
+WrDr1:
+	cmp rdi, 1
+	jne WrDr2
+	mov dr1, rsi
+	ret
+
+WrDr2:
+	cmp rdi, 2
+	jne WrDr3
+	mov dr2, rsi
+	ret
+
+WrDr3:
+	cmp rdi, 3
+	jne WrDr6
+	mov dr3, rsi
+	ret
+
+WrDr6:
+	cmp rdi, 6
+	jne WrDr7
+	mov dr6, rsi
+	ret
+
+WrDr7:
+	cmp rdi, 7
+	jne WrDrFault
+	mov dr7, rsi
+	ret
+
+WrDrFault:
+	ret
 
 ; @ProtoType:	UINT64 X64GetFlagsReg(VOID);
 ; @Function:	read RFLAGS register.

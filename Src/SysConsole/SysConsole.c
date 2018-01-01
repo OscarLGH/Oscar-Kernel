@@ -367,7 +367,7 @@ int serial_print(const char *fmt, ...)
 	long long i,j;
 	char buf[256] = {0};
 	
-	SpinLockIrqSave(&ConsoleSpinLock);
+	//SpinLockIrqSave(&ConsoleSpinLock);
 	
 	i = vsprintf(buf, fmt, ap);
 	va_end(ap);
@@ -377,14 +377,14 @@ int serial_print(const char *fmt, ...)
 	{
 		if(buf[j] == '\n')
 		{
-			SerialPortWrite('\r');
+			//SerialPortWrite('\r');
 			SerialPortWrite('\n');
 		}
 		else
 			SerialPortWrite(buf[j]);
 	}
 	
-	SpinUnlockIrqRestore(&ConsoleSpinLock);
+	//SpinUnlockIrqRestore(&ConsoleSpinLock);
 	
 	return i;
 }

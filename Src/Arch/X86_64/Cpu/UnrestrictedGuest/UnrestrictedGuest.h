@@ -2,4 +2,5 @@
 
 VOID GuestStartup16();
 VOID ResetVector();
+VOID GuestCodeEnd();
 

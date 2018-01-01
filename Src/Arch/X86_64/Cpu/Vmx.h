@@ -1,6 +1,7 @@
 #ifndef VMX_H
 #define VMX_H
 
+#include "Vm.h"
 #include "Cpu.h"
 
 /*
@@ -90,7 +91,6 @@
 #define VMX_MISC_SAVE_EFER_LMA					0x00000020
 #define VMX_MISC_ACTIVITY_HLT					0x00000040
 
-/* VMCS Encodings */
 enum vmcs_field {
 	VIRTUAL_PROCESSOR_ID            = 0x00000000,
 	POSTED_INTR_NV                  = 0x00000002,
@@ -103,7 +103,7 @@ enum vmcs_field {
 	GUEST_LDTR_SELECTOR             = 0x0000080c,
 	GUEST_TR_SELECTOR               = 0x0000080e,
 	GUEST_INTR_STATUS               = 0x00000810,
-	GUEST_PML_INDEX					= 0x00000812,
+	GUEST_PML_INDEX			= 0x00000812,
 	HOST_ES_SELECTOR                = 0x00000c00,
 	HOST_CS_SELECTOR                = 0x00000c02,
 	HOST_SS_SELECTOR                = 0x00000c04,
@@ -123,14 +123,14 @@ enum vmcs_field {
 	VM_EXIT_MSR_LOAD_ADDR_HIGH      = 0x00002009,
 	VM_ENTRY_MSR_LOAD_ADDR          = 0x0000200a,
 	VM_ENTRY_MSR_LOAD_ADDR_HIGH     = 0x0000200b,
-	PML_ADDRESS						= 0x0000200e,
-	PML_ADDRESS_HIGH				= 0x0000200f,
+	PML_ADDRESS			= 0x0000200e,
+	PML_ADDRESS_HIGH		= 0x0000200f,
 	TSC_OFFSET                      = 0x00002010,
 	TSC_OFFSET_HIGH                 = 0x00002011,
 	VIRTUAL_APIC_PAGE_ADDR          = 0x00002012,
 	VIRTUAL_APIC_PAGE_ADDR_HIGH     = 0x00002013,
-	APIC_ACCESS_ADDR				= 0x00002014,
-	APIC_ACCESS_ADDR_HIGH			= 0x00002015,
+	APIC_ACCESS_ADDR		= 0x00002014,
+	APIC_ACCESS_ADDR_HIGH		= 0x00002015,
 	POSTED_INTR_DESC_ADDR           = 0x00002016,
 	POSTED_INTR_DESC_ADDR_HIGH      = 0x00002017,
 	EPT_POINTER                     = 0x0000201a,
@@ -155,11 +155,11 @@ enum vmcs_field {
 	VMCS_LINK_POINTER_HIGH          = 0x00002801,
 	GUEST_IA32_DEBUGCTL             = 0x00002802,
 	GUEST_IA32_DEBUGCTL_HIGH        = 0x00002803,
-	GUEST_IA32_PAT					= 0x00002804,
-	GUEST_IA32_PAT_HIGH				= 0x00002805,
-	GUEST_IA32_EFER					= 0x00002806,
-	GUEST_IA32_EFER_HIGH			= 0x00002807,
-	GUEST_IA32_PERF_GLOBAL_CTRL		= 0x00002808,
+	GUEST_IA32_PAT			= 0x00002804,
+	GUEST_IA32_PAT_HIGH		= 0x00002805,
+	GUEST_IA32_EFER			= 0x00002806,
+	GUEST_IA32_EFER_HIGH		= 0x00002807,
+	GUEST_IA32_PERF_GLOBAL_CTRL	= 0x00002808,
 	GUEST_IA32_PERF_GLOBAL_CTRL_HIGH= 0x00002809,
 	GUEST_PDPTR0                    = 0x0000280a,
 	GUEST_PDPTR0_HIGH               = 0x0000280b,
@@ -171,11 +171,11 @@ enum vmcs_field {
 	GUEST_PDPTR3_HIGH               = 0x00002811,
 	GUEST_BNDCFGS                   = 0x00002812,
 	GUEST_BNDCFGS_HIGH              = 0x00002813,
-	HOST_IA32_PAT					= 0x00002c00,
-	HOST_IA32_PAT_HIGH				= 0x00002c01,
-	HOST_IA32_EFER					= 0x00002c02,
-	HOST_IA32_EFER_HIGH				= 0x00002c03,
-	HOST_IA32_PERF_GLOBAL_CTRL		= 0x00002c04,
+	HOST_IA32_PAT			= 0x00002c00,
+	HOST_IA32_PAT_HIGH		= 0x00002c01,
+	HOST_IA32_EFER			= 0x00002c02,
+	HOST_IA32_EFER_HIGH		= 0x00002c03,
+	HOST_IA32_PERF_GLOBAL_CTRL	= 0x00002c04,
 	HOST_IA32_PERF_GLOBAL_CTRL_HIGH	= 0x00002c05,
 	PIN_BASED_VM_EXEC_CONTROL       = 0x00004000,
 	CPU_BASED_VM_EXEC_CONTROL       = 0x00004002,
@@ -269,6 +269,7 @@ enum vmcs_field {
 	HOST_RSP                        = 0x00006c14,
 	HOST_RIP                        = 0x00006c16,
 };
+
 
 /*
  * Interruption-information format
@@ -700,7 +701,7 @@ enum vm_instruction_error_number {
  * If there are changes in this struct, VMCS12_REVISION must be changed.
  */
 typedef u64 natural_width;
-struct vmcs12 {
+typedef struct vmcs12 {
 	/* According to the Intel spec, a VMCS region must start with the
 	 * following two fields. Then follow implementation-specific data.
 	 */
@@ -858,9 +859,19 @@ struct vmcs12 {
 	u16 host_fs_selector;
 	u16 host_gs_selector;
 	u16 host_tr_selector;
-};
+}VMCS_SHADOW;
 
-struct vmcs_host
+
+typedef struct _POSTED_INTERRUPT_DESCRIPTOR
+{
+	UINT8 Vector[32];
+	UINT8 OutStanding:1;
+	UINT8 Reserved:7;
+	UINT8 Reserved0[31];
+}POSTED_INT_DESC;
+
+
+typedef struct vmcs_host
 {
 	void *io_bitmap_a;
 	void *io_bitmap_b;
@@ -869,12 +880,11 @@ struct vmcs_host
 	void *vm_exit_msr_load_addr;
 	void *vm_entry_msr_load_addr;
 	void *virtual_apic_page_addr;
-	void *apic_access_addr;
-	void *posted_intr_desc_addr;
+	POSTED_INT_DESC *posted_intr_desc_addr;
 	void *ept_pointer;
 	void *xss_exit_bitmap;
 	void *pml_address;
-};
+}VMCS_HOST_MAP;
 
 typedef struct _REG_STATE
 {
@@ -896,32 +906,29 @@ typedef struct _REG_STATE
 	UINT64 RAX;
 }REG_STATE;
 
-#define VM_STATUS_CLEAR 0
-#define VM_STATUS_LAUNCHED 1
 
-typedef struct vm
+typedef struct _X86_VMX_VCPU
 {
 	UINT64 VmxOnRegionPhysAddr;
 	VOID *VmxOnRegionVirtAddr;
 	UINT64 VmxRegionPhysAddr;
 	VOID *VmxRegionVirtAddr;
 
-	UINT64 VmStatus;
-	
-	struct vmcs12 Vmcs;
-	struct vmcs_host VmcsVirt;
+	VMCS_SHADOW Vmcs;
+	VMCS_HOST_MAP VmcsVirt;
 
 	REG_STATE HostRegs;
 	REG_STATE GuestRegs;
-	
-}VIRTUAL_MACHINE;
+}X86_VMX_VCPU;
+
+
 
 
 VOID VmxOn(UINT64 VmxOnRegionPhysAddr);
 VOID VmxOff(VOID);
-VOID VmLaunch(REG_STATE *HostReg, REG_STATE *GuestReg);
+RETURN_STATUS VmLaunch(REG_STATE *HostReg, REG_STATE *GuestReg);
 
-VOID VmResume(REG_STATE *HostReg, REG_STATE *GuestReg);
+RETURN_STATUS VmResume(REG_STATE *HostReg, REG_STATE *GuestReg);
 
 //Warning:This function may not be called directly.This pointer should be written to vmcs.host_rip.
 VOID VmExit(VOID);
@@ -943,16 +950,16 @@ RETURN_STATUS VmxOnPrepare(VOID * VmxOnRegionPtr);
 RETURN_STATUS VmOn(UINT64 VmxOnRegionPhys);
 RETURN_STATUS VmOff(VOID);
 
-VIRTUAL_MACHINE *VmxNew();
-RETURN_STATUS VmxInit(VIRTUAL_MACHINE *Vm);
+X86_VMX_VCPU *VmxNew();
+RETURN_STATUS VmxInit(X86_VMX_VCPU *Vcpu);
 
-VOID VmxCpuBistState(VIRTUAL_MACHINE *Vm);
-VOID VmxCopyHostState(VIRTUAL_MACHINE *Vm);
+VOID VmxCpuBistState(X86_VMX_VCPU *Vcpu);
+VOID VmxCopyHostState(X86_VMX_VCPU *Vcpu);
 VOID VmxSetVmcs(struct vmcs12 *vmcs_ptr);
 VOID GetVmxState(struct vmcs12 *vmcs_ptr);
 
-VOID VcpuRun(VIRTUAL_MACHINE *Vm);
-RETURN_STATUS VmExitHandler(VIRTUAL_MACHINE *Vm);
+RETURN_STATUS VcpuRun(VCPU *Vcpu);
+RETURN_STATUS VmExitHandler(VCPU *Vcpu);
 
 
 
