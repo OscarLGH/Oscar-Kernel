@@ -207,5 +207,22 @@ void DescriptorSetGuest()
 
 VOID IrqHandlerGuest(UINT64 Vector)
 {
+	//if (Vector != 0x20)
 	serial_print("Guest Int/Exp:0x%x\n", Vector);
+}
+
+VOID GuestLoop()
+{
+	UINT64 Counter0 = 0;
+	UINT64 Counter1 = 0;
+	UINT64 CounterT = 0;
+	while (1) {
+		Counter0 = 0;
+		while (Counter0++ < 10000) {
+			Counter1 = 0;
+			while (Counter1++ < 40000);
+		}
+		serial_print("Guest running %d.\n", ++CounterT);
+	}
+	//	serial_print("Guest running...\n");
 }

@@ -82,7 +82,7 @@ void HpetInit()
 		TimerChip.SetFrequency = HpetSetFrequency;
 		TimerChip.GetFrequency = HpetGetFrequency;
 
-		TimerChip.SetFrequency(&TimerChip, 0, 1000);
+		TimerChip.SetFrequency(&TimerChip, 0, 1);
 		KDEBUG("HPET Timer0 Frequency:%dHz.\n", TimerChip.GetFrequency(&TimerChip, 0));
 	}
 

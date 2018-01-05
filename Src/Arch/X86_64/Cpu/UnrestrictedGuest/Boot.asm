@@ -65,19 +65,19 @@ GuestStartup32:
 
 	; 设置页表(LEGACY PAE)
 
-	mov ebx, 0x100000
+	;mov ebx, 0x100000
 	; PDPTR[0x0]			
-	mov eax, 0x101000
-	or eax, PG_P
-	mov [ebx + 8 * 0], eax
-	mov DWORD[ebx + 8 * 0 + 4], 0
+	;mov eax, 0x101000
+	;or eax, PG_P
+	;mov [ebx + 8 * 0], eax
+	;mov DWORD[ebx + 8 * 0 + 4], 0
 
 	; PDPT[0x0]
-	mov ebx, 0x101000
-	mov eax, 0
-	or eax, PG_RWW | PG_USS | PG_P | PG_S
-	mov [ebx + 8 * 0], eax
-	mov DWORD[ebx + 8 * 0 + 4], 0
+	;mov ebx, 0x101000
+	;mov eax, 0
+	;or eax, PG_RWW | PG_USS | PG_P | PG_S
+	;mov [ebx + 8 * 0], eax
+	;mov DWORD[ebx + 8 * 0 + 4], 0
 
 
 	; 设置页表(Long Mode)
@@ -212,15 +212,33 @@ extern DescriptorSetGuest
 %xdefine PHYS2VIRT(x) ((x+KERNEL_SPACE))
 %xdefine VIRT2PHYS(x) ((x-KERNEL_SPACE))
 
-%define PML4T_BASE 0x100000
+%define PML4T_BASE 0x180000
 %define PDPT_BASE PML4T_BASE + 0x1000
 %define PDT_BASE PDPT_BASE + 0x1000 * 16
 
 %define KERNEL_INIT_STACK 0x600000
 
+extern GuestLoop
+
 bits 64
 
 Header64:
+	
+	;mov rax, 0x1122334455667788
+	;mov rbx, 0x1234567887654321
+	;mov rcx, 0x8765432112345678
+	;mov rdx, 0x2345678998765432
+	;mov rsi, 0x3456789009876543
+	;mov rdi, 0x1111222233334444
+	;mov rbp, 0x4433221111223344
+	;mov r8,  0x9988776666778899
+	;mov r9,  0x8877665555667788
+	;mov r10, 0x6655443333445566
+	;mov r11, 0x6789987623455432
+	;mov r12, 0xaabbccddddccbbaa
+	;mov r13, 0xccddeeffffeeddcc
+	;mov r14, 0xabcddcbaabcddcba
+	;mov r15, 0xaaaabbbbccccdddd
 
 	mov rsp, KERNEL_INIT_STACK
 	mov rax, VIRT2PHYS(SetupKernelPageGuest)
@@ -277,6 +295,9 @@ StartAddr:
 	
 	sti
 
+	mov rax, GuestLoop
+	call rax
+	
 	jmp $
 ;---------------------------------------------------------------------------------
 ; 函数名: void SetupKernelPage(void)
@@ -288,7 +309,7 @@ StartAddr:
 ; 
 ;--------------------------------------------------------------------------------
 SetupKernelPageGuest:
-
+	
 	mov rdi, PML4T_BASE
 	mov rdx, rdi
 	

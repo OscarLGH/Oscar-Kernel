@@ -56,6 +56,7 @@ RETURN_STATUS VmemRemoveMemMap(VMEM *Vmem, UINT64 Gpa, UINT64 Hva, UINT64 Len)
 RETURN_STATUS VmemAllocate(VMEM *Vmem, UINT64 Gpa, UINT64 Size)
 {
 	UINT8 *GuestMemory = KMalloc(Size);
+	memset(GuestMemory, 0, Size);
 
 	UINT64 Index;
 	for (Index = 0; Index * 0x200000 < Size; Index++)

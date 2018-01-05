@@ -19,6 +19,7 @@ global X64GetSpinLock
 global X64ReleaseSpinLock
 global X64HaltCpu
 global X64RefreshTlb
+global X64IntN
 
 
 
@@ -302,3 +303,24 @@ X64InvalidateTlb:
 	invlpg [rdi]
 	ret
 
+; @ProtoType:	VOID X64IntN(UINT8 Vector);
+; @Function:	Software Interrupt.
+; @Param:	IN	VectorS
+X64IntN:
+	mov rax, rdi
+	mov rbx, SwInt1 - SwInt0
+	mul rbx
+	mov rdi, SwInt0
+	add rax, rdi
+	jmp rax
+%assign i 0
+%rep	0x100
+%assign vec i
+ALIGN 16
+SwInt%+i:                
+	int vec
+	jmp SwIntEnd
+%assign i i+1
+%endrep
+SwIntEnd:
+	ret

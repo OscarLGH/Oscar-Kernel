@@ -833,6 +833,7 @@ VOID X64ReleaseSpinLock(UINT64 * SpinLock);
 //注意：这两个函数必须使用全局变量地址作为参数，局部变量因存放在栈上，每个CPU/线程有不同的栈，导致自旋锁失效
 VOID X64HaltCpu(VOID);
 VOID X64RefreshTlb(UINT64 LinearAddress);
+VOID X64IntN(UINT8 Vector);
 VOID X64VmxOn(UINT64 VmxOnRegionPhysAddr);
 VOID X64VmxOff(VOID);
 

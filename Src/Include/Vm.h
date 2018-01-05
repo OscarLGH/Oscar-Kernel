@@ -27,7 +27,7 @@ typedef struct _VCPU
 	RETURN_STATUS (*VcpuStop)(struct _VCPU *Vcpu);
 	RETURN_STATUS (*ExitHandler)(struct _VCPU *Vcpu);
 	
-	RETURN_STATUS (*ExceptionInject)(struct _VCPU *Vcpu, UINT64 Type, UINT64 Vector);
+	RETURN_STATUS (*EventInject)(struct _VCPU *Vcpu, UINT64 Type, UINT64 Vector);
 	RETURN_STATUS (*PostedInterruptVectorSet)(struct _VCPU *Vcpu, UINT64 Vector);
 	RETURN_STATUS (*PostedInterruptSet)(struct _VCPU *Vcpu, UINT64 Vector);
 

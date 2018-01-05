@@ -106,4 +106,6 @@ VOID ArchCallIrqLocal(UINT32 Vector);
 VOID ArchCallIrqAll(UINT32 Vector);
 VOID ArchCallIrqOther(UINT32 Vector);
 VOID ArchCallIrqDest(UINT32 Vector, UINT32 ApciId);
+VOID LocalApicSendIpiSelf(UINT64 Vector);
+
 #endif

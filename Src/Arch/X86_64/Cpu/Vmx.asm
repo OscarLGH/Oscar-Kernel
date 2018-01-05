@@ -62,6 +62,16 @@ VmLaunch:
 	push rdi		; Saving host regs pointer.
 	push rsi		; Saving guest regs pointer.
 
+	mov rdi, HOST_TR_SELECTOR
+	str si
+	call VmWrite
+	
+	mov rdi, HOST_RSP
+	mov rsi, rsp
+	call VmWrite
+	
+	mov rsi, [rsp + 0]
+	mov rdi, [rsp + 8]
 	; Saving host regs status.
 	mov [rdi + 0 * 8], r15
 	mov [rdi + 1 * 8], r14
@@ -71,10 +81,10 @@ VmLaunch:
 	mov [rdi + 5 * 8], r10
 	mov [rdi + 6 * 8], r9
 	mov [rdi + 7 * 8], r8
-	mov [rdi + 8 * 8], rdi
-	mov [rdi + 9 * 8], rsi
+	;mov [rdi + 8 * 8], rdi
+	;mov [rdi + 9 * 8], rsi
 	mov [rdi + 10 * 8], rbp
-	mov [rdi + 11 * 8], rsp
+	;mov [rdi + 11 * 8], rsp
 	mov [rdi + 12 * 8], rdx
 	mov [rdi + 13 * 8], rcx
 	mov [rdi + 14 * 8], rbx
@@ -90,22 +100,16 @@ VmLaunch:
 	mov r9, [rsi + 6 * 8]
 	mov r8, [rsi + 7 * 8]
 	mov rdi, [rsi + 8 * 8]
-	mov rsi, [rsi + 9 * 8]
+	;mov rsi, [rsi + 9 * 8]
 	mov rbp, [rsi + 10 * 8]
 	;mov rsp, [rsi + 11 * 8]
 	mov rdx, [rsi + 12 * 8]
 	mov rcx, [rsi + 13 * 8]
 	mov rbx, [rsi + 14 * 8]
 	mov rax, [rsi + 15 * 8]
+	
+	mov rsi, [rsi + 9 * 8]
 
-	mov rdi, HOST_TR_SELECTOR
-	str si
-	call VmWrite
-	
-	mov rdi, HOST_RSP
-	mov rsi, rsp
-	call VmWrite
-	
 	vmlaunch
 
 	pop rsi			; restoring guest regs pointer.
@@ -121,8 +125,8 @@ VmLaunch:
 	mov r9, [rdi + 6 * 8]
 	mov r8, [rdi + 7 * 8]
 	
-	mov rsi, [rdi + 9 * 8]
-	mov rdi, [rdi + 8 * 8]
+	;mov rsi, [rdi + 9 * 8]
+	;mov rdi, [rdi + 8 * 8]
 	mov rbp, [rdi + 10 * 8]
 	;mov rsp, [rdi + 11 * 8]
 	mov rdx, [rdi + 12 * 8]
@@ -130,8 +134,10 @@ VmLaunch:
 	mov rbx, [rdi + 14 * 8]
 	mov rax, [rdi + 15 * 8]
 	
+	;mov rdi, [rdi + 8 * 8]
 	
-	;mov rax, 0x80000015
+	
+	mov rax, 0x8000000000000015
 
 	ret
 
@@ -140,8 +146,12 @@ VmLaunch:
 ; Caution: 	This is NOT a function,means it can not be called directly.
 ;		VmExit should be filled in Vmcs.HostRip
 VmExit:
-	pop rsi			; restoring guest regs pointer.
-	pop rdi			; restoring host regs pointer.
+	push rdi		; Saving guest rsi
+	push rsi		; Saving guest rdi
+	
+	mov rsi, [rsp + 16]	; restoring guest regs pointer.
+	mov rdi, [rsp + 24]	; restoring host regs pointer.
+	
 	; saving guest regs status.
 	mov [rsi + 0 * 8], r15
 	mov [rsi + 1 * 8], r14
@@ -151,10 +161,14 @@ VmExit:
 	mov [rsi + 5 * 8], r10
 	mov [rsi + 6 * 8], r9
 	mov [rsi + 7 * 8], r8
-	mov [rsi + 8 * 8], rdi
-	mov [rsi + 9 * 8], rsi
+
+	pop r15
+	pop r14
+	
+	mov [rsi + 8 * 8], r14		;guest rdi
+	mov [rsi + 9 * 8], r15		;guest rsi
 	mov [rsi + 10 * 8], rbp
-	mov [rsi + 11 * 8], rsp
+	;mov [rsi + 11 * 8], rsp
 	mov [rsi + 12 * 8], rdx
 	mov [rsi + 13 * 8], rcx
 	mov [rsi + 14 * 8], rbx
@@ -169,15 +183,18 @@ VmExit:
 	mov r10, [rdi + 5 * 8]
 	mov r9, [rdi + 6 * 8]
 	mov r8, [rdi + 7 * 8]
-	mov rdi, [rdi + 8 * 8]
-	mov rsi, [rdi + 9 * 8]
+	;mov rdi, [rdi + 8 * 8]
+	;mov rsi, [rdi + 9 * 8]
 	mov rbp, [rdi + 10 * 8]
 	;mov rsp, [rdi + 11 * 8]
 	mov rdx, [rdi + 12 * 8]
 	mov rcx, [rdi + 13 * 8]
 	mov rbx, [rdi + 14 * 8]
 	mov rax, [rdi + 15 * 8]
-
+	mov rdi, [rdi + 8 * 8]
+	pop rsi
+	pop rdi
+	
 	mov rax, 0
 
 	ret
@@ -189,6 +206,17 @@ VmExit:
 VmResume:
 	push rdi		; Saving host regs pointer.
 	push rsi		; Saving guest regs pointer.
+
+	mov rdi, HOST_TR_SELECTOR
+	str si
+	call VmWrite
+	
+	mov rdi, HOST_RSP
+	mov rsi, rsp
+	call VmWrite
+
+	mov rsi, [rsp + 0]
+	mov rdi, [rsp + 8]
 	; Saving host regs status.
 	mov [rdi + 0 * 8], r15
 	mov [rdi + 1 * 8], r14
@@ -217,21 +245,14 @@ VmResume:
 	mov r9, [rsi + 6 * 8]
 	mov r8, [rsi + 7 * 8]
 	mov rdi, [rsi + 8 * 8]
-	mov rsi, [rsi + 9 * 8]
+	;mov rsi, [rsi + 9 * 8]
 	mov rbp, [rsi + 10 * 8]
 	;mov rsp, [rsi + 11 * 8]
 	mov rdx, [rsi + 12 * 8]
 	mov rcx, [rsi + 13 * 8]
 	mov rbx, [rsi + 14 * 8]
 	mov rax, [rsi + 15 * 8]
-
-	mov rdi, HOST_TR_SELECTOR
-	str si
-	call VmWrite
-	
-	mov rdi, HOST_RSP
-	mov rsi, rsp
-	call VmWrite
+	mov rsi, [rsi + 9 * 8]
 
 	vmresume
 
@@ -248,20 +269,19 @@ VmResume:
 	mov r9, [rdi + 6 * 8]
 	mov r8, [rdi + 7 * 8]
 	
-	mov rsi, [rdi + 9 * 8]
+	;mov rsi, [rdi + 9 * 8]
+	;mov rdi, [rdi + 8 * 8]
 	mov rbp, [rdi + 10 * 8]
 	;mov rsp, [rdi + 11 * 8]
 	mov rdx, [rdi + 12 * 8]
 	mov rcx, [rdi + 13 * 8]
 	mov rbx, [rdi + 14 * 8]
 	mov rax, [rdi + 15 * 8]
-	mov rdi, [rdi + 8 * 8]
 	
-	mov rax, 0x80000015
-
-	ret
-
-	mov rax, 0x80000015
+	;mov rdi, [rdi + 8 * 8]
+	
+	
+	mov rax, 0x8000000000000015
 	ret
 
 ; @ProtoType:	VOID VmPtrLoad(UINT64 VmcsPhysAddr);

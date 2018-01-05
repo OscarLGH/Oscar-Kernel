@@ -385,8 +385,8 @@ void * MainThreadTest(void * arg)
 	SetColor(&SysCon,0xFF00FFFF);
 	printk("Main Thread Continues Running:\n");
 
-	void VmTest();
-	VmTest();
+	//void VmTest();
+	//VmTest();
 	while(1);
 
 	printk("Timer test 5s...\n");
@@ -646,20 +646,54 @@ UINT64 ApStartSig = 0;
 #include "../Arch/X86_64/Cpu/Vmx.h"
 #include "../Arch/X86_64/Cpu/UnrestrictedGuest/UnrestrictedGuest.h"
 
-VCPU *VcpuGlobal;
+//Send IPI to guest cpu.
+void *VmTestThread(void * arg)
+{
+	VCPU *Vcpu = arg;
+	UINT64 Counter0 = 0;
+	UINT64 Counter1 = 0;
+	UINT64 CounterT = 0;
+
+	while (Counter0++ < 10000) {
+		Counter1 = 0;
+		while (Counter1++ < 40000);
+	}
+	printk("Virtual machine daemon thread starting...\n");
+	
+	while (1) {
+		Vcpu->PostedInterruptSet(Vcpu, 0x22);
+		CallIrqDest(0xff, 1);
+		Counter0 = 0;
+		while (Counter0++ < 10000) {
+			Counter1 = 0;
+			while (Counter1++ < 40000);
+		}
+
+		/*
+		*之前尝试在中断处理函数中给GUEST发送IPI中断，是不行的。
+		*因为此时Guest已经因为外部中断退出。
+		*中断其实发送给了Host。
+		*/
+		//CallIrqDest(0x25, 1);
+	}
+	return NULL;
+}
+
+VIRTUAL_MACHINE *VmG;
+
 void VmTest()
 {
 	RETURN_STATUS Status;
 	VIRTUAL_MACHINE *Vm = VmNew();
+	VmG = Vm;
 	VmNodeCreate(Vm);
-	
+	UINT8 Binary[4];
 	/*16MB RAM*/
 	VmemAllocate(Vm->VmNodeArray[0]->Vmem, 0, 0x1000000);
 
 	/*16MB BIOS AREA */
 	VmemAllocate(Vm->VmNodeArray[0]->Vmem, 0xff000000, 0x1000000);
 	VCPU *Vcpu = Vm->VmNodeArray[0]->Vcpu;
-	VcpuGlobal = Vcpu;
 
 	VmemGuestMemoryWrite(Vm->VmNodeArray[0]->Vmem, 0x7c00, GuestStartup16, (UINT64)GuestCodeEnd - (UINT64)GuestStartup16);
 	VmemGuestMemoryWrite(Vm->VmNodeArray[0]->Vmem, 0x200000, (VOID *)PHYS2VIRT(0x200000), 0x100000);
@@ -672,6 +706,10 @@ void VmTest()
 	if (Status) {
 		printk("VCPU Prepare failed!%x\n", Status);
 	}
+
+	THREAD_CONTROL_BLOCK *VmIpiThread;
+	ThreadCreate(&VmIpiThread, VmTestThread, Vcpu, 0, 10);
+	ThreadWakeUp(VmIpiThread);
 	
 	Status = VmVcpuRun(Vcpu);
 	if (Status) {

@@ -62,3 +62,11 @@ VOID LocalApicSendIpi(UINT64 ApicId, UINT64 Vector)
 	LocalApicRegWrite(APIC_REG_ICR1, Destination);
 	LocalApicRegWrite(APIC_REG_ICR0, Vector | APIC_ICR_FIXED | APIC_ICR_PHYSICAL | APIC_ICR_NOSHORTHAND);
 }
+
+VOID LocalApicSendIpiSelf(UINT64 Vector)
+{
+	UINT32 Reg;
+	LocalApicRegWrite(APIC_REG_ICR1, 0);
+	LocalApicRegWrite(APIC_REG_ICR0, Vector | APIC_ICR_FIXED | APIC_ICR_PHYSICAL | APIC_ICR_SELF);
+}
+
