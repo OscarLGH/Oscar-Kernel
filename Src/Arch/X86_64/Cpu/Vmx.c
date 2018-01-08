@@ -1042,24 +1042,69 @@ RETURN_STATUS HandleMonitorTrap(X86_VMX_VCPU *Vcpu)
 	UINT8 Binary[32];
 	VmemGuestMemoryRead(VmG->VmNodeArray[0]->Vmem, GuestRip - InstLen, Binary, InstLen);
 	
-	printk("RIP:%x RAX:%x RBX:%x RCX:%x RDX:%x RSI:%x RDI:%x RBP:%x RFLAGS:%x Instruction Code:",
-		GuestRip - InstLen,
+	printk("RIP:%016x Instruction Code:",GuestRip - InstLen);
+	UINT64 Index;
+	for (Index = 0; Index < InstLen; Index++)
+		printk("%02x ", Binary[Index]);
+	printk("\n");
+	
+	printk("RAX:%016x RBX:%016x RCX:%016x RDX:%016x RSI:%016x RDI:%016x RSP:%016x RBP:%016x\n",
 		Vcpu->GuestRegs.RAX,
 		Vcpu->GuestRegs.RBX,
 		Vcpu->GuestRegs.RCX,
 		Vcpu->GuestRegs.RDX,
 		Vcpu->GuestRegs.RSI,
 		Vcpu->GuestRegs.RDI,
-		Vcpu->GuestRegs.RBP,
+		VmRead(GUEST_RSP),
+		Vcpu->GuestRegs.RBP);
+	printk("R08:%016x R09:%016x R10:%016x R11:%016x R12:%016x R13:%016x R14:%016x R15:%016x\n",
+		Vcpu->GuestRegs.R8,
+		Vcpu->GuestRegs.R9,
+		Vcpu->GuestRegs.R10,
+		Vcpu->GuestRegs.R11,
+		Vcpu->GuestRegs.R12,
+		Vcpu->GuestRegs.R13,
+		Vcpu->GuestRegs.R14,
+		Vcpu->GuestRegs.R15);
+
+	printk("RFLAGS:%016x\n",
 		VmRead(GUEST_RFLAGS));
-	UINT64 Index;
-	for (Index = 0; Index < InstLen; Index++)
-		printk("%02x ", Binary[Index]);
-	printk("\n");
-	
-	
+	/*
+	printk("CR0:%016x CR2:%016x CR3:%016x CR4:%016x CR8:%016x\n",
+		VmRead(GUEST_CR0),
+		VmRead(GUEST_LINEAR_ADDRESS),
+		VmRead(GUEST_CR3),
+		VmRead(GUEST_CR4),
+		0
+		);
+	*/
 	return RETURN_SUCCESS;
 }
+
+RETURN_STATUS HandleVmcall(X86_VMX_VCPU *Vcpu)
+{
+	UINT64 Rax = Vcpu->GuestRegs.RAX;
+	UINT64 CpuBasedCtrl = VmRead(CPU_BASED_VM_EXEC_CONTROL);
+	printk("VM Exit:VMCALL.Function Num = %d\n", Rax);
+
+	switch (Rax) {
+		case 0x101:
+			CpuBasedCtrl |= CPU_BASED_MONITOR_TRAP_FLAG;
+			VmWrite(CPU_BASED_VM_EXEC_CONTROL, CpuBasedCtrl);
+			printk("VMCALL:MTF enabled.\n");
+			break;
+		case 0x102:
+			CpuBasedCtrl &= (~CPU_BASED_MONITOR_TRAP_FLAG);
+			VmWrite(CPU_BASED_VM_EXEC_CONTROL, CpuBasedCtrl);
+			printk("VMCALL:MTF disabled.\n");
+			break;
+		default:
+			break;
+	}
+	Vcpu->Vmcs.guest_rip += VmRead(VM_EXIT_INSTRUCTION_LEN);
+	return RETURN_SUCCESS;
+}
+
 
 RETURN_STATUS EnterLongMode(X86_VMX_VCPU *Vcpu)
 {
@@ -1186,6 +1231,7 @@ RETURN_STATUS VmxVcpuExitHandler(VCPU *Vcpu)
 		case EXIT_REASON_RDTSC:
 			break;
 		case EXIT_REASON_VMCALL:
+			Status = HandleVmcall(VcpuPtr);
 			break;
 		case EXIT_REASON_VMCLEAR:
 			break;

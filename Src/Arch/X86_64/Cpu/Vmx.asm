@@ -81,10 +81,10 @@ VmLaunch:
 	mov [rdi + 5 * 8], r10
 	mov [rdi + 6 * 8], r9
 	mov [rdi + 7 * 8], r8
-	;mov [rdi + 8 * 8], rdi
-	;mov [rdi + 9 * 8], rsi
+	mov [rdi + 8 * 8], rdi
+	mov [rdi + 9 * 8], rsi
 	mov [rdi + 10 * 8], rbp
-	;mov [rdi + 11 * 8], rsp
+	mov [rdi + 11 * 8], rsp
 	mov [rdi + 12 * 8], rdx
 	mov [rdi + 13 * 8], rcx
 	mov [rdi + 14 * 8], rbx

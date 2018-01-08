@@ -38,11 +38,17 @@ GuestStartup16:
 	in	al, 92h
 	or	al, 00000010b
 	out	92h, al
+
+	mov ax, 0x101
+	vmcall
 	
 	; 开启保护模式位PE
 	mov eax, cr0
 	bts eax, 0
 	mov cr0, eax
+
+	mov ax, 0x102
+	vmcall
 
 	; 跳转进入保护模式
 	jmp DWORD Selector32C:(GuestStartup32 - GuestStartup16 + PHYSICAL_ADDRESS)	; 此指令会刷新段寄存器不可见部分和cache
@@ -283,6 +289,9 @@ StartAddr:
 	mov gs, ax
 	mov ss, ax
 
+	mov rax, 0x101
+	vmcall
+
 	mov ecx, 1Bh
 	rdmsr
 	bts eax, 11							; enable = 1
@@ -292,6 +301,9 @@ StartAddr:
 	;mov rax, [rdi]
 
 	;ud2
+	
+	mov rax, 0x102
+	vmcall
 	
 	sti
 
