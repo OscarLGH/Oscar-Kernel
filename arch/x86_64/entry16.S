@@ -1,4 +1,7 @@
-/* 16bit real-mode entrance of x86_64 platform.
- * LiGuanhua, 6,25,2018
- *
+/* 16bit legacy real-mode entrance of x86_64 platform.
+ * Set C runtime environment (cpu mode/address space switch).
+ * Oscar
+ * Jul, 2018
  */
+
+ 
