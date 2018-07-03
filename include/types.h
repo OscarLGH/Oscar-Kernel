@@ -18,4 +18,5 @@ typedef unsigned char		uint8_t;
 typedef char				int8_t;
 #define true				1
 #define false				0
+#define NULL (void*)0
 

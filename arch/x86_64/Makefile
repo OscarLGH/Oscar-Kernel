@@ -3,7 +3,7 @@ CC		= gcc
 LD		= @ld
 
 ASMFLAGS	= --64
-CFLAGS		= -c -fno-builtin -fno-stack-protector -fPIC -Werror -g -mno-red-zone -I ../../include -I include
+CFLAGS		= -c -fno-builtin -fno-stack-protector -fPIC -fno-pie -Werror -g -mno-red-zone -mcmodel=large -I ../../include -I include
 
 LDFLAGS		= -T Link.lds --nmagic
 
