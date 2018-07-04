@@ -35,9 +35,9 @@ struct segment_desc {
 
 /* Segment descriptor attributes2: */
 
-#define CS_L	0x20　/* LongMode */
-#define CS_C_32	0x40　/* Compatibility mode，32-bit oprend */
-#define CS_C_16 0x00　/* Compatibility mode，16-bit oprend */
+#define CS_L	0x20	/* LongMode */
+#define CS_C_32	0x40	/* Compatibility mode，32-bit oprend */
+#define CS_C_16 0x00	/* Compatibility mode，16-bit oprend */
 
 struct gate_desc {
 	u16	offset0_15;
@@ -131,5 +131,84 @@ static inline void set_segment_descriptor(
 	gdt[index].attr1 = attr1;
 	gdt[index].reserved = 0;
 }
+
+static inline void lgdt(struct gdtr *gdtr_addr)
+{
+	asm volatile("lgdt (%rdi)\n");
+}
+
+static inline void lidt(struct gdtr *gdtr_addr)
+{
+	asm volatile("lidt (%rdi)\n");
+}
+
+static inline void sgdt(struct gdtr *gdtr_addr)
+{
+	asm volatile("sgdt (%rdi)\n");
+}
+
+static inline void sidt(struct gdtr *gdtr_addr)
+{
+	asm volatile("sidt (%rdi)\n");
+}
+
+static inline void ltr(u16 selector)
+{
+	asm volatile("ltr %di\n");
+}
+
+static inline void str(u16 selector)
+{
+	asm volatile("str %di\n");
+}
+
+struct long_jmp_64_desc {
+	u64 addr;
+	u16 selector;
+};
+
+
+/* notice: GAS use ljmp m16:32 by default, so we have to use REX.W for ljmp m16:64.
+* The better choice is to use iretq for better compability.
+* Early AMD CPUs do not support REX.W prefix.
+*/
+static inline void load_cs(u16 selector)
+{
+	asm volatile(
+		"pushq %rdi\n\t"
+		"movabsq $ni, %rax\n\t"
+		"pushq %rax\n\t"
+		".byte 0x48\n\t"
+		"ljmp *(%rsp)\n\t"
+		"ni: popq %rax\n\t"
+		"popq %rax\n\t"
+		);
+}
+
+static inline void load_ds(u16 selector)
+{
+	asm volatile("movw %di, %ds\n\t");
+}
+
+static inline void load_es(u16 selector)
+{
+	asm volatile("movw %di, %es\n\t");
+}
+
+static inline void load_fs(u16 selector)
+{
+	asm volatile("movw %di, %fs\n\t");
+}
+
+static inline void load_gs(u16 selector)
+{
+	asm volatile("movw %di, %gs\n\t");
+}
+
+static inline void load_ss(u16 selector)
+{
+	asm volatile("movw %di, %ss\n\t");
+}
+
 
 #endif

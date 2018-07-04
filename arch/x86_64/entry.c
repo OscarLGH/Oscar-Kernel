@@ -1,5 +1,6 @@
 #include <types.h>
 #include <kernel.h>
+#include <arch.h>
 #include <lapic.h>
 #include <msr.h>
 #include <paging.h>
@@ -16,7 +17,28 @@ u8 cpu_bitmap[128] = {0};
 
 void set_kernel_segment()
 {
+	u8 *percpu_base = (u8 *)PHYS2VIRT(get_percpu_area_base());
+	struct gdtr gdtr_percpu;
+	struct segment_desc *gdt_base = (void *)(percpu_base + 0);
 
+	set_segment_descriptor(gdt_base, SELECTOR_NULL_INDEX, 0, 0, 0, 0);
+	set_segment_descriptor(gdt_base, SELECTOR_KERNEL_CODE_INDEX, 0, 0, CS_NC | DPL0, CS_L);
+	set_segment_descriptor(gdt_base, SELECTOR_KERNEL_DATA_INDEX, 0, 0, DS_S_W | DPL0, 0);
+	set_segment_descriptor(gdt_base, SELECTOR_USER_CODE_INDEX, 0, 0, CS_NC | DPL3, CS_L);
+	set_segment_descriptor(gdt_base, SELECTOR_USER_DATA_INDEX, 0, 0, DS_S_W | DPL3, 0);
+	set_segment_descriptor(gdt_base, SELECTOR_TSS_INDEX, 0, 0, S_TSS | DPL0, 0);
+	
+	gdtr_percpu.base = (u64)percpu_base;
+	gdtr_percpu.limit = 256 * sizeof(struct segment_desc) - 1;
+	
+	lgdt(&gdtr_percpu);
+
+	load_cs(SELECTOR_KERNEL_CODE);
+	load_ds(SELECTOR_KERNEL_DATA);
+	load_es(SELECTOR_KERNEL_DATA);
+	load_fs(SELECTOR_KERNEL_DATA);
+	load_gs(SELECTOR_KERNEL_DATA);
+	load_ss(SELECTOR_KERNEL_DATA);
 }
 
 void map_kernel_memory()
@@ -38,7 +60,11 @@ void wakeup_all_processors()
 		dest[i] = src[i];
 
 	struct acpi_madt *madt_ptr = acpi_get_desc("APIC");
-
+	if (madt_ptr == NULL) {
+		//mp_init_all(ap_load_addr);
+		return;
+	}
+	
 	struct processor_lapic_structure *lapic_ptr;
 	u8 *ptr = (u8 *)madt_ptr + sizeof(*madt_ptr);
 
@@ -74,12 +100,15 @@ void arch_init()
 
 	bsp = is_bsp();
 	if (bsp) {
-		set_kernel_segment();
 		map_kernel_memory();
 		wakeup_all_processors();
 	} else {
 
 	}
+	set_kernel_segment();
+#if CONFIG_AMP
+	jmp_table_percpu[cpu_id]();
+#endif
 
 	asm("hlt");
 }

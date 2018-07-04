@@ -44,6 +44,18 @@ setup_init_mapping:
 	orq $0x83, %rax
 	movq %rax, 0x0(%rdi)
 
+	/* PDPT[1] */
+	movabsq $PDPT_BASE, %rdi
+	movabsq $0x40000000, %rax
+	orq $0x83, %rax
+	movq %rax, 0x8(%rdi)
+
+	/* PDPT[2] */
+	movabsq $PDPT_BASE, %rdi
+	movabsq $0x80000000, %rax
+	orq $0x83, %rax
+	movq %rax, 0x10(%rdi)
+	
 	/* PDPT[3] */
 	movabsq $PDPT_BASE, %rdi
 	movabsq $0xc0000000, %rax
@@ -83,7 +95,8 @@ bsp_entry_64:
  * We need to set new page table before setup_init_mapping returns.
  */
 	call *%rax
-
+	movabsq $kernel_space_entry, %rax
+	jmp *%rax
 kernel_space_entry:
 
 	/* Set init stack for each cpu */
