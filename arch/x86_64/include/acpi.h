@@ -40,7 +40,7 @@ struct xsdt {
 
 enum apic_struc_types
 {
-	PROCESSOR_LOCAL_APCI = 0,
+	PROCESSOR_LOCAL_APIC = 0,
 	IO_APIC,
 	INTERRUPT_SOURCE_OVERRIDE,
 	NMI_INTERRUPT_SOURCE,
@@ -74,7 +74,7 @@ struct io_apic_structure {
 };
 
 struct acpi_madt {
-	acpi_sdt_header header;
+	struct acpi_sdt_header header;
 	u32 lapic_addr;
 	u32 flags;
 };
@@ -88,7 +88,7 @@ struct mmcs_bar {
 };
 
 struct acpi_mcfg {
-	acpi_sdt_header header;
+	struct acpi_sdt_header header;
 	u64 reserved;
 	struct mmcs_bar confgure_arr[32];
 };
@@ -148,7 +148,7 @@ struct acpi_dmar {
 };
 
 struct acpi_hpet {
-	struct acpi_sdt_header;
+	struct acpi_sdt_header header;
 	u32 event_timer_block_id;
 	u8 address_space_id;
 	u8 register_bit_width;
@@ -159,6 +159,9 @@ struct acpi_hpet {
 	u16 main_counter_min_clock;
 	u8 attribure;
 };
+
+
+void *acpi_get_desc(char *name);
 
 #pragma pack()
 

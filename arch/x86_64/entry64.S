@@ -14,15 +14,9 @@ PML4T_BASE = 0x100000
 PDPT_BASE = PML4T_BASE + 0x1000
 PDT_BASE = PDPT_BASE + 0x1000
 
-KERNEL_SPACE_ADDR = kernel_space_entry
 .data
 
 .global jmp_table
-
-jmp_table:
-	.quad arch_init
-	.fill 256 - 1, 8, 0
-
 
 .global bsp_entry_64
 .code64
@@ -46,8 +40,8 @@ setup_init_mapping:
 
 	/* PDPT[0] */
 	movabsq $PDPT_BASE, %rdi
-	movabsq $PDT_BASE, %rax
-	orq $0x3, %rax
+	movabsq $0, %rax
+	orq $0x83, %rax
 	movq %rax, 0x0(%rdi)
 
 	/* PDPT[3] */
@@ -91,34 +85,6 @@ bsp_entry_64:
 	call *%rax
 
 kernel_space_entry:
-	/* Set init stack for each cpu */
-	movl $0x00000001, %eax
-	movl $0x00000000, %ecx
-	cpuid
-	shr $24, %ebx
-	/* ebx *= 0x1000 */
-	shl $12, %ebx
-	movabsq $(INIT_STACK_PHYS + KERNEL_OFFSET), %rsp
-	subq %rbx, %rsp
-
-	/* ===== SMP TEST CODE ======*/
-	/* Copy startup code for APs */
-	movabsq $ap_startup_vector, %rsi
-	movabsq $(KERNEL_OFFSET + AP_LOAD_ADDR), %rdi
-	movabsq $(ap_startup_end - ap_startup_vector), %rcx
-	rep movsb
-
-	movabsq $0xffff8000fee00300, %rbx
-	movl $0x000c4500, (%rbx)
-
-	movabsq $0xffff8000fee00300, %rbx
-	movl $0x000c4620, (%rbx)
-
-	movabsq $0xffff8000fee00300, %rbx
-	movl $0x000c4620, (%rbx)
-	/* ===== SMP TEST CODE ======*/
-
-kernel_space_entry_ap:
 
 	/* Set init stack for each cpu */
 	movl $0x00000001, %eax
@@ -131,7 +97,7 @@ kernel_space_entry_ap:
 	subq %rbx, %rsp
 
 	callq arch_init
-	jmp kernel_space_entry_ap
+	jmp kernel_space_entry
 
 
 /* Following code should be copied below 1MB space,
@@ -146,8 +112,6 @@ AP_ENTRY_32_PHYS = AP_LOAD_ADDR + ap_enrty_32 - ap_startup_vector
 .global ap_startup_end
 
 ap_startup_vector:
-
-KERNEL_ENTRY_AP = kernel_space_entry_ap
 
 .code16
 ap_entry_16:
@@ -221,7 +185,7 @@ ap_enrty_32:
 
 .code64
 ap_enrty_64:
-	movabsq $KERNEL_ENTRY_AP, %rax
+	movabsq $kernel_space_entry, %rax
 	jmpq *%rax
 
 ap_startup_end:

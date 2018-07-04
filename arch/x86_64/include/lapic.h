@@ -1,6 +1,11 @@
 #ifndef _APIC_H
 #define _APIC_H
 
+#include <types.h>
+#include <kernel.h>
+#include <msr.h>
+#include <cpuid.h>
+
 /* Local APIC Macros: */
 
 #define APIC_REG_BASE						0xFEE00000
@@ -63,8 +68,9 @@
 #define APIC_ICR_LOWEST                      0x0100
 #define APIC_ICR_SMI                         0x0200
 #define APIC_ICR_NMI                         0x0400
-#define APIC_ICR_EXTINT                      0x0700
 #define APIC_ICR_INIT                        0x0500
+#define APIC_ICR_STARTUP                     0x0600
+#define APIC_ICR_EXTINT                      0x0700
 #define APIC_ICR_FIXED_DELIVERY				 0x0000
 #define APIC_ICR_LOWEST_DELIVERY             0x0100
 #define APIC_ICR_SMI_DELIVERY                0x0200
@@ -93,9 +99,73 @@
 #define PHYSICAL_ID                             (APIC_ICR_ASSERT | APIC_ICR_EDGE | APIC_ICR_PHYSICAL | APIC_ICR_NOSHORTHAND | APIC_ICR_FIXED)
 #define LOGICAL_ID                              (APIC_ICR_ASSERT | APIC_ICR_EDGE | APIC_ICR_LOGICAL | APIC_ICR_NOSHORTHAND | APIC_ICR_FIXED)
 
-u32 lapic_reg_read32(u32 offset);
-u32 lapic_reg_write32(u32 offset, u32 value);
-bool is_bsp();
+inline static u32 lapic_reg_read32(u32 offset)
+{
+	u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
+	return *reg;
+}
+
+inline static u32 lapic_reg_write32(u32 offset, u32 value)
+{
+	u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
+	*reg = value;
+}
+
+inline static bool is_bsp()
+{
+	u64 value = rdmsr(MSR_IA32_APICBASE);
+	return (value >> 8) & 0x1;
+}
+
+inline static bool x2_apic_supported()
+{
+	u32 regs[4] = {0};
+	cpuid(0x00000001, 0x00000000, regs);
+	if (regs[2] & (BIT21) == 1)
+		return true;
+	return false;
+}
+
+inline static void lapic_enable()
+{
+	u64 value = rdmsr(MSR_IA32_APICBASE);
+	value |= BIT11;
+	if (x2_apic_supported() == true)
+		value |= BIT10;
+	wrmsr(MSR_IA32_APICBASE, value);
+}
+
+inline static void apic_base_set(u32 base)
+{
+	u64 value = rdmsr(MSR_IA32_APICBASE);
+
+	value &= (BIT8 | BIT10 | BIT11);
+	value |= (base & (SIZE_4KB - 1));
+
+	wrmsr(MSR_IA32_APICBASE, value);
+}
+
+inline static void lapic_send_ipi(u64 apic_id, u64 vector)
+{
+	u32 dest = (apic_id << 24);
+	lapic_reg_write32(APIC_REG_ICR1, dest);
+	lapic_reg_write32(APIC_REG_ICR0, vector | APIC_ICR_FIXED | APIC_ICR_PHYSICAL | APIC_ICR_NOSHORTHAND);
+}
+
+/* ap_startup_addr should below 1MB. */
+inline static void mp_init_single(u64 apic_id, u64 ap_startup_addr)
+{
+	lapic_send_ipi(apic_id, APIC_ICR_ASSERT | APIC_ICR_INIT);
+	lapic_send_ipi(apic_id, APIC_ICR_ASSERT | APIC_ICR_STARTUP | (ap_startup_addr >> 12));
+	lapic_send_ipi(apic_id, APIC_ICR_ASSERT | APIC_ICR_STARTUP | (ap_startup_addr >> 12));
+}
+
+inline static void mp_init_all(u64 ap_startup_addr)
+{
+	lapic_send_ipi(0, APIC_ICR_ASSERT | APIC_ICR_INIT | APIC_ICR_ALL_EX_SELF);
+	lapic_send_ipi(0, APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF | (ap_startup_addr >> 12));
+	lapic_send_ipi(0, APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF | (ap_startup_addr >> 12));
+}
 
 
 #endif
