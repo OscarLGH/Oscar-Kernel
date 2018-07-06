@@ -89,7 +89,6 @@ static inline void write_cr3(u64 cr3)
 static inline u64 read_cr2()
 {
 	u64 cr2;
-	/* Stop speculative execution by lfence */
 	asm volatile("movq %%cr2, %0\n\t"
 				: "=a"(cr2) :
 		);

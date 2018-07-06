@@ -37,5 +37,10 @@ static inline char toupper(char c)
 	return c + 0x20;
 }
 
+void memcpy(void *dst,const void *src,int size);
+void memset(void *dst,char value,int size);
+int memcmp(const void *s1,const void *s2,int size);
+
+
 
 #endif

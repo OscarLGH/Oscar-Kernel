@@ -49,6 +49,10 @@ struct gate_desc {
 	u32 reserved;
 };
 
+#define INT_GATE  0x8E
+#define TRAP_GATE 0x8F
+
+
 struct tss_desc {
 	u32 reserved0;
 	u64 rsp0;
@@ -137,7 +141,7 @@ static inline void lgdt(struct gdtr *gdtr_addr)
 	asm volatile("lgdt (%rdi)\n");
 }
 
-static inline void lidt(struct gdtr *gdtr_addr)
+static inline void lidt(struct idtr *gdtr_addr)
 {
 	asm volatile("lidt (%rdi)\n");
 }
@@ -168,7 +172,7 @@ struct long_jmp_64_desc {
 };
 
 
-/* notice: GAS use ljmp m16:32 by default, so we have to use REX.W for ljmp m16:64.
+/* NOTE: GAS use ljmp m16:32 by default, so we have to use REX.W for ljmp m16:64.
 * The better choice is to use iretq for better compability.
 * Early AMD CPUs do not support REX.W prefix.
 */
