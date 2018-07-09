@@ -244,28 +244,26 @@ char *i2a(u64 val, u64 base, char ** ps)
 	if (q) 
 		i2a(q, base, ps);
 	
-	*(*ps)++ = (m < 10) ? (m + '0') : (m - 10 + 'A');
+	*(*ps)++ = (m < 10) ? (m + '0') : (m - 10 + 'a');
 
 	return *ps;
 }
 
-char *i2a_full(u64 val, u64 base, u64 Digit, char ** ps)
+char *i2a_full(u64 val, u64 base, u64 digit, char ** ps)
 {
 	u64 m;
 	u64 q = val;
 	u64 i = 0;
-	(*ps) += (Digit-1);
+	(*ps) += (digit - 1);
 	
-	while(q)
-	{
+	while(q) {
 		m = q % base;
 		q /= base;
-		*(*ps)-- = (m < 10) ? (m + '0') : (m - 10 + 'A');
+		*(*ps)-- = (m < 10) ? (m + '0') : (m - 10 + 'a');
 		i++;
 	}
 	
-	for(;i<Digit;i++)
-	{
+	for(; i<digit; i++) {
 		*(*ps)-- = '0';
 	}
 	
@@ -281,10 +279,8 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 	char	cs;
 	int	align_nr;
 
-	for (p=buf;*fmt;fmt++)
-	{
-		if (*fmt != '%')
-		{
+	for (p = buf; *fmt; fmt++) {
+		if (*fmt != '%') {
 			*p++ = *fmt;
 			continue;
 		}
@@ -294,23 +290,17 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 
 		fmt++;
 
-		if (*fmt == '%')
-		{
+		if (*fmt == '%') {
 			*p++ = *fmt;
 			continue;
-		}
-		else if (*fmt == '0')
-		{
+		} else if (*fmt == '0') {
 			cs = '0';
 			fmt++;
-		}
-		else
-		{
+		} else {
 			cs = ' ';
 		}
 		
-		while (((unsigned char)(*fmt) >= '0') && ((unsigned char)(*fmt) <= '9'))
-		{
+		while (((unsigned char)(*fmt) >= '0') && ((unsigned char)(*fmt) <= '9')) {
 			align_nr *= 10;
 			align_nr += *fmt - '0';
 			fmt++;
@@ -319,40 +309,37 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 		char * q = inner_buf;
 		memset(q, 0, sizeof(inner_buf));
 
-		switch (*fmt)
-		{
-		case 'c':
-			*q++ = va_arg(args, long long);
-			//p_next_arg += 8;
-			break;
-		case 'x':
-			m = va_arg(args, long long);
-			i2a(m, 16, &q);
-			//p_next_arg += 8;
-			break;
-		case 'd':
-			m = va_arg(args, long long);
-			if (m < 0) {
-				m = m * (-1);
-				*q++ = '-';
-			}
-			i2a(m, 10, &q);
-			break;
-		case 's':
-			strcpy(q, va_arg(args, char *));
-			q += strlen(q);
-			break;
-		default:
-			break;
+		switch (*fmt) {
+			case 'c':
+				*q++ = va_arg(args, long long);
+				//p_next_arg += 8;
+				break;
+			case 'x':
+				m = va_arg(args, long long);
+				i2a(m, 16, &q);
+				//p_next_arg += 8;
+				break;
+			case 'd':
+				m = va_arg(args, long long);
+				if (m < 0) {
+					m = m * (-1);
+					*q++ = '-';
+				}
+				i2a(m, 10, &q);
+				break;
+			case 's':
+				strcpy(q, va_arg(args, char *));
+				q += strlen(q);
+				break;
+			default:
+				break;
 		}
 		int k;
-		for (k = 0; k < ((align_nr > strlen(inner_buf)) ? (align_nr - strlen(inner_buf)) : 0); k++)
-		{
+		for (k = 0; k < ((align_nr > strlen(inner_buf)) ? (align_nr - strlen(inner_buf)) : 0); k++) {
 			*p++ = cs;
 		}
 		q = inner_buf;
-		while (*q)
-		{
+		while (*q) {
 			*p++ = *q++;
 		}
 	}

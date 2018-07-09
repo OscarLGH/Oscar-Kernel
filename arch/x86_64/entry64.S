@@ -62,20 +62,6 @@ setup_init_mapping:
 	orq $0x83, %rax
 	movq %rax, 0x18(%rdi)
 
-	/* Mapping 16MB booting memory. */
-	/* PDT[0] - PDT[7] */
-	movabsq $PDT_BASE, %rdi
-	movabsq $0, %rax
-	orq $0x83, %rax
-	movq $0, %rcx
-
-1:
-	movq %rax, 0x0(%rdi, %rcx, 8)
-	addq $1, %rcx
-	addq $0x200000, %rax
-	cmp $8, %rcx
-	jl 1b
-
 	/* Load PML4T to CR3 */
 	movabsq $PML4T_BASE, %rax
 	movq %rax, %cr3
@@ -88,6 +74,7 @@ setup_init_mapping:
 
 bsp_entry_64:
 
+	cli
 	movabsq $INIT_STACK_PHYS, %rsp
 	movabsq $INIT_MAPPING_ADDR, %rax
 

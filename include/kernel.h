@@ -23,6 +23,7 @@ struct bootloader_parm_block {
 	u64 screen_width;
 	u64 screen_height;
 	u64 pixels_per_scanline;
+	u64 frame_buffer_base;
 	u64 processor_cnt;
 	u64 cpuid_array[512];
 	u64 ardc_cnt;

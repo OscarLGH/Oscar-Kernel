@@ -3,6 +3,7 @@
 #include <arch.h>
 #include <lapic.h>
 #include <msr.h>
+#include <cr.h>
 #include <paging.h>
 #include <segment.h>
 #include <spinlock.h>
@@ -12,11 +13,23 @@
 #include <string.h>
 
 void (*jmp_table_percpu[MAX_CPUS])() = {0};
-struct bootloader_parm_block *boot_parm = (void *)0x10000;
+struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
 
-u8 cpu_bitmap[128] = {0};
-u64 irq_table[256];
-u64 exception_table[32];
+u8 cpu_sync_bitmap1[128] = {0};
+u8 cpu_sync_bitmap2[128] = {0};
+
+
+void irq_handler(u64 vector)
+{
+	u8 cpu_id = 0;
+	u8 buffer[64] = {0};
+	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
+	cpu_id = buffer[7];
+	printk("interrupt vector:%d on cpu %d\n", vector, cpu_id);
+	if (vector >= 0x20) {
+		lapic_reg_write32(APIC_REG_EOI, 1);
+	}
+}
 
 void set_kernel_segment()
 {
@@ -62,7 +75,7 @@ void set_kernel_segment()
 
 	gdtr_percpu.base = (u64)gdt_base;
 	gdtr_percpu.limit = 256 * sizeof(struct segment_desc) - 1;
-	
+
 	lgdt(&gdtr_percpu);
 
 	load_cs(SELECTOR_KERNEL_CODE);
@@ -99,7 +112,7 @@ void set_intr_desc()
 		set_gate_descriptor(idt_base,
 			i,
 			SELECTOR_KERNEL_CODE,
-			irq_table[i],
+			irq_table[i - 0x20],
 			0,
 			INT_GATE | DPL0
 		);
@@ -107,14 +120,14 @@ void set_intr_desc()
 	set_gate_descriptor(idt_base,
 		0x80,
 		SELECTOR_KERNEL_CODE,
-		irq_table[0x80],
+		irq_table[0x80 - 0x20],
 		0,
 		TRAP_GATE | DPL3
 	);
 
 	idtr_percpu.base = (u64)idt_base;
 	idtr_percpu.limit = 256 * sizeof(struct gate_desc) - 1;
-	
+
 	lidt(&idtr_percpu);
 }
 
@@ -133,13 +146,50 @@ void set_tss_desc()
 		S_TSS | DPL0,
 		0
 	);
-	
+
 	ltr(SELECTOR_TSS);
 }
 
 void map_kernel_memory()
 {
+	struct ards *ardc_ptr = boot_parm->ardc_array;
+	u64 i;
+	u64 offset = 0x1000;
+	u64 pml4t_phys = 0x1000000;
+	u64 phy_addr = 0;
+	u64 *pml4t = (u64 *)PHYS2VIRT(pml4t_phys);
+	u64 *pdpt = (u64 *)PHYS2VIRT(pml4t_phys + offset);
+	u64 page_attr;
 
+	if (is_bsp()) {
+		page_attr = PG_PML4E_PRESENT | PG_PML4E_READ_WRITE | PG_PML4E_SUPERVISOR | PG_PML4E_CACHE_WT;
+		pml4t[0] = 0;
+		pml4t[0x100] = (pml4t_phys + offset) | page_attr;
+
+		page_attr = PG_PDPTE_PRESENT |
+				PG_PDPTE_READ_WRITE |
+				PG_PDPTE_SUPERVISOR |
+				PG_PDPTE_1GB_PAGE |
+				PG_PDPTE_1GB_PAT |
+				PG_PDPTE_1GB_GLOBAL;
+
+		for (i = 0; i < 512; i++) {
+			/* Use uncache memory type for MMIO. */
+			/* TODO:PCI BAR mapped to high address above 4GB. */
+			if (i == 3) {
+				pdpt[i] = i * SIZE_1GB | (page_attr | PG_PDPTE_CACHE_DISABLE);
+			} else {
+				pdpt[i] = i * SIZE_1GB | (page_attr | PG_PDPTE_CACHE_WT);
+			}
+		}
+	}
+
+	/* Enable PCID and global page.*/
+	u64 cr4 = read_cr4();
+	cr4 |= (CR4_PCIDE | CR4_PGE);
+	write_cr4(cr4);
+
+	write_cr3(pml4t_phys);
 }
 
 void wakeup_all_processors()
@@ -157,7 +207,7 @@ void wakeup_all_processors()
 
 	struct acpi_madt *madt_ptr = acpi_get_desc("APIC");
 	if (madt_ptr == NULL) {
-		//mp_init_all(ap_load_addr);
+		mp_init_all(ap_load_addr);
 		return;
 	}
 	
@@ -170,9 +220,9 @@ void wakeup_all_processors()
 				lapic_ptr = (struct processor_lapic_structure *)ptr;
 				if (lapic_ptr->apic_id != 0) {
 					//printk("waking up CPU:APIC ID = %d\n", lapic_ptr->apic_id);
-					cpu_bitmap[lapic_ptr->apic_id] = 0;
+					cpu_sync_bitmap1[lapic_ptr->apic_id] = 0;
 					mp_init_single(lapic_ptr->apic_id, ap_load_addr);
-					while(!cpu_bitmap[lapic_ptr->apic_id]);
+					while(!cpu_sync_bitmap1[lapic_ptr->apic_id]);
 				}
 				break;
 		}
@@ -200,24 +250,37 @@ void arch_init()
 	cpuid(0x80000002, 0x00000000, (u32 *)&buffer[0]);
 	cpuid(0x80000003, 0x00000000, (u32 *)&buffer[16]);
 	cpuid(0x80000004, 0x00000000, (u32 *)&buffer[32]);
-	cpu_bitmap[cpu_id] = 1;
-	printk("[CPU %02d] %s\n", cpu_id, buffer);
 
-	bsp = is_bsp();
-	if (bsp) {
-		map_kernel_memory();
+	printk("[CPU %02d] %s\n", cpu_id, buffer);
+	cpu_sync_bitmap1[cpu_id] = 1;
+
+	map_kernel_memory();
+
+	if (is_bsp()) {
 		wakeup_all_processors();
-	} else {
-		ap_work();
 	}
+
 	set_kernel_segment();
-	set_intr_desc();
 	set_tss_desc();
+	set_intr_desc();
+	lapic_enable();
+	asm("sti");
 
 #if CONFIG_AMP
 	jmp_table_percpu[cpu_id]();
 #endif
+
+	cpu_sync_bitmap2[cpu_id] = 1;
 	check_point();
+
+	if (is_bsp()) {
+		lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
+		lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
+		lapic_send_ipi(3, 0xff, APIC_ICR_ASSERT);
+	} else {
+		lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
+		lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
+	}
 
 	asm("hlt");
 }

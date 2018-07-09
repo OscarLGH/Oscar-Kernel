@@ -101,13 +101,13 @@
 
 inline static u32 lapic_reg_read32(u32 offset)
 {
-	u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
+	volatile u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
 	return *reg;
 }
 
 inline static u32 lapic_reg_write32(u32 offset, u32 value)
 {
-	u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
+	volatile u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
 	*reg = value;
 }
 
@@ -128,11 +128,17 @@ inline static bool x2_apic_supported()
 
 inline static void lapic_enable()
 {
+	/* Enable global APIC. */
 	u64 value = rdmsr(MSR_IA32_APICBASE);
 	value |= BIT11;
 	if (x2_apic_supported() == true)
 		value |= BIT10;
 	wrmsr(MSR_IA32_APICBASE, value);
+
+	/* Software enable APIC. */
+	value = lapic_reg_read32(APIC_REG_SVR);
+	value |= BIT8;
+	lapic_reg_write32(APIC_REG_SVR, value);
 }
 
 inline static void apic_base_set(u32 base)
@@ -145,26 +151,26 @@ inline static void apic_base_set(u32 base)
 	wrmsr(MSR_IA32_APICBASE, value);
 }
 
-inline static void lapic_send_ipi(u64 apic_id, u64 vector)
+inline static void lapic_send_ipi(u8 apic_id, u8 vector, u32 attr)
 {
 	u32 dest = (apic_id << 24);
 	lapic_reg_write32(APIC_REG_ICR1, dest);
-	lapic_reg_write32(APIC_REG_ICR0, vector | APIC_ICR_FIXED | APIC_ICR_PHYSICAL | APIC_ICR_NOSHORTHAND);
+	lapic_reg_write32(APIC_REG_ICR0, vector | attr);
 }
 
 /* ap_startup_addr should below 1MB. */
-inline static void mp_init_single(u64 apic_id, u64 ap_startup_addr)
+inline static void mp_init_single(u8 apic_id, u64 ap_startup_addr)
 {
-	lapic_send_ipi(apic_id, APIC_ICR_ASSERT | APIC_ICR_INIT);
-	lapic_send_ipi(apic_id, APIC_ICR_ASSERT | APIC_ICR_STARTUP | (ap_startup_addr >> 12));
-	lapic_send_ipi(apic_id, APIC_ICR_ASSERT | APIC_ICR_STARTUP | (ap_startup_addr >> 12));
+	lapic_send_ipi(apic_id, 0, APIC_ICR_ASSERT | APIC_ICR_INIT);
+	lapic_send_ipi(apic_id, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP);
+	lapic_send_ipi(apic_id, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP);
 }
 
 inline static void mp_init_all(u64 ap_startup_addr)
 {
-	lapic_send_ipi(0, APIC_ICR_ASSERT | APIC_ICR_INIT | APIC_ICR_ALL_EX_SELF);
-	lapic_send_ipi(0, APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF | (ap_startup_addr >> 12));
-	lapic_send_ipi(0, APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF | (ap_startup_addr >> 12));
+	lapic_send_ipi(0, 0, APIC_ICR_ASSERT | APIC_ICR_INIT | APIC_ICR_ALL_EX_SELF);
+	lapic_send_ipi(0, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF);
+	lapic_send_ipi(0, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF);
 }
 
 

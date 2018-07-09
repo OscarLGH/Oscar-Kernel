@@ -69,32 +69,6 @@
 #define PG_FAULT_PK (1 << 5)
 #define PG_FAULT_SGX (1 << 15)
 
-static inline u64 read_cr3()
-{
-	u64 cr3;
-	asm volatile("movq %%cr3, %0\n\t"
-				: "=a"(cr3) :
-		);
-	return cr3;
-}
-
-static inline void write_cr3(u64 cr3)
-{
-	asm volatile("movq %0, %%cr3\n\t"
-				: : "rdi"(cr3)
-		);
-}
-
-
-static inline u64 read_cr2()
-{
-	u64 cr2;
-	asm volatile("movq %%cr2, %0\n\t"
-				: "=a"(cr2) :
-		);
-	return cr2;
-}
-
 static inline void write_pg(u64 *table, u64 index, u64 value)
 {
 	table[index] = value;
