@@ -49,7 +49,7 @@ struct gate_desc {
 	u32 reserved;
 };
 
-#define INT_GATE  0x8E
+#define INTR_GATE  0x8E
 #define TRAP_GATE 0x8F
 
 

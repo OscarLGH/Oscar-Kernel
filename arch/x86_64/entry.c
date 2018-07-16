@@ -114,7 +114,7 @@ void set_intr_desc()
 			SELECTOR_KERNEL_CODE,
 			irq_table[i - 0x20],
 			0,
-			INT_GATE | DPL0
+			INTR_GATE | DPL0
 		);
 	}
 	set_gate_descriptor(idt_base,
@@ -184,11 +184,6 @@ void map_kernel_memory()
 		}
 	}
 
-	/* Enable PCID and global page.*/
-	u64 cr4 = read_cr4();
-	cr4 |= (CR4_PCIDE | CR4_PGE);
-	write_cr4(cr4);
-
 	write_cr3(pml4t_phys);
 }
 
@@ -237,6 +232,76 @@ void ap_work()
 
 void check_point()
 {
+	u8 buffer[64] = {0};
+	u8 cpu_id = 0;
+	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
+	cpu_id = buffer[7];
+	//printk("CPU %d readched the checkpoint.\n", cpu_id);
+}
+
+void enable_cpu_features()
+{
+	u32 regs[4] = {0};
+	u8 cpu_id = 0;
+	u32 features1, features2;
+	u8 cpu_string[64] = {0};
+	//u32 max_linear_bits, max_physical_bits;
+	cpuid(0x00000001, 0x00000000, &regs[0]);
+	cpu_id = ((u8 *)regs)[7];
+	features1 = regs[2];
+	features2 = regs[3];
+	//cpuid(0x00000000, 0x00000000, &buffer[0]);
+	//printk("Max leaf:%x\n", buffer[0]);
+
+	//cpuid(0x80000000, 0x00000000, &buffer[0]);
+	//printk("Max ext leaf:%x\n", buffer[0]);
+
+	//cpuid(0x00000001, 0x00000000, &buffer[0]);
+	//printk("Model:%08x\n", buffer[0]);
+	//printk("supported features:%08x, %08x\n", buffer[2], buffer[3]);
+
+	/* Lazy FPU ? */
+	//u64 cr0 = read_cr0();
+	//cr0 |= (CR0_MP | CR0_TS);
+	//write_cr0(cr0);
+
+	u64 cr4 = read_cr4();
+	if (features2 & BIT24 != 0) {
+		cr4 |= CR4_OSFXSR;
+	}
+
+	if (features1 & BIT5 != 0) {
+		cr4 |= CR4_VMXE;
+	}
+
+	if (features1 & BIT6 != 0) {
+		cr4 |= CR4_SMXE;
+	}
+
+	if (features1 & BIT17 != 0) {
+		cr4 |= CR4_PCIDE;
+	}
+
+	if (features2 & BIT13) {
+		cr4 |= CR4_PGE;
+	}
+
+	cr4 |= (CR4_SMAP | CR4_SMEP);
+
+	write_cr4(cr4);
+
+	cpuid(0x00000002, 0x00000000, &regs[0]);
+	/* TODO:Add more print here */
+
+	cpuid(0x80000008, 0x00000000, &regs[0]);
+	//max_linear_bits = (regs[0] >> 8) & 0xff;
+	//max_physical_bits = regs[0] & 0xff;
+
+	cpuid(0x80000002, 0x00000000, (u32 *)&cpu_string[0]);
+	cpuid(0x80000003, 0x00000000, (u32 *)&cpu_string[16]);
+	cpuid(0x80000004, 0x00000000, (u32 *)&cpu_string[32]);
+
+	printk("[CPU %02d] %s\n", cpu_id, cpu_string);
 }
 
 void arch_init()
@@ -247,11 +312,8 @@ void arch_init()
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
 
-	cpuid(0x80000002, 0x00000000, (u32 *)&buffer[0]);
-	cpuid(0x80000003, 0x00000000, (u32 *)&buffer[16]);
-	cpuid(0x80000004, 0x00000000, (u32 *)&buffer[32]);
+	enable_cpu_features();
 
-	printk("[CPU %02d] %s\n", cpu_id, buffer);
 	cpu_sync_bitmap1[cpu_id] = 1;
 
 	map_kernel_memory();
@@ -274,12 +336,12 @@ void arch_init()
 	check_point();
 
 	if (is_bsp()) {
-		lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
-		lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
-		lapic_send_ipi(3, 0xff, APIC_ICR_ASSERT);
+		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
+		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
+		//lapic_send_ipi(3, 0xff, APIC_ICR_ASSERT);
 	} else {
-		lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
-		lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
+		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
+		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
 	}
 
 	asm("hlt");

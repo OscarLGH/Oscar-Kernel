@@ -79,6 +79,34 @@ exception_table:
 	popq %rax
 .endm
 
+.macro SAVE_FREGS
+	subq $512, %rsp
+	fxsave (%rsp)
+	subq $512, %rsp
+	xsave (%rsp)
+.endm
+
+.macro RESTORE_FREGS
+	xrstors
+	addq &512, %rsp
+	fxrestor
+	addq &512, %rsp
+.endm
+
+.macro LAZY_FPU_SET
+	movq %cr0, %rax
+	bts $1, %rax
+	bts $3, %rax
+	movq %rax, %cr0
+.endm
+
+.macro LAZY_FPU_CLR
+	movq %cr0, %rax
+	btr $1, %rax
+	btr $3, %rax
+	movq %rax, %cr0
+.endm
+
 .macro EXCEPTION_COMMON vector=0 has_error_code=0
 .if \has_error_code == 0
 	pushq $0xffffffffffffffff

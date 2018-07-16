@@ -108,5 +108,13 @@ static inline u64 read_cr0()
 	return cr0;
 }
 
+static inline void write_cr0(u64 cr0)
+{
+	asm volatile("movq %0, %%cr0\n\t"
+				: : "rdi"(cr0)
+		);
+}
+
+
 #endif
 
