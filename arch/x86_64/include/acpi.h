@@ -20,12 +20,17 @@ struct acpi_sdt_header {
 	u8 signature[4];
 	u32 length;
 	u8 revision;
-	u8 chacksum;
+	u8 checksum;
 	u8 oem_id[6];
 	u64 oem_table_id;
 	u32 oem_revision;
 	u32 creator_id;
 	u32 creator_revision;
+};
+
+struct acpi_subtable_header {
+	u8 type;
+	u8 length;
 };
 
 struct rsdt {
@@ -57,16 +62,14 @@ enum apic_struc_types
 };
 
 struct processor_lapic_structure {
-	u8 type;
-	u8 length;
+	struct acpi_subtable_header sub_header;
 	u8 acpi_processor_id;
 	u8 apic_id;
 	u32 flags;
 };
 
 struct io_apic_structure {
-	u8 type;
-	u8 length;
+	struct acpi_subtable_header sub_header;
 	u8 io_apic_id;
 	u8 reserved;
 	u32 io_apic_addr;
@@ -93,6 +96,49 @@ struct acpi_mcfg {
 	struct mmcs_bar confgure_arr[32];
 };
 
+struct acpi_srat {
+	struct acpi_sdt_header header;
+	u32 reserved0;
+	u64 reserved1;
+};
+
+
+enum acpi_srat_type {
+	ACPI_SRAT_TYPE_CPU_AFFINITY = 0,
+	ACPI_SRAT_TYPE_MEMORY_AFFINITY = 1,
+	ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY = 2,
+	ACPI_SRAT_TYPE_RESERVED = 3	/* 3 and greater are reserved */
+};
+
+struct acpi_srat_cpu_affinity {
+	struct acpi_subtable_header sub_header;
+	u8 proximity_domain_lo;
+	u8 apic_id;
+	u32 flags;
+	u8 local_sapic_eid;
+	u8 proximity_domain_hi[3];
+	u32 reserved;		/* Reserved, must be zero */
+};
+
+struct acpi_srat_mem_affinity {
+	struct acpi_subtable_header sub_header;
+	u32 proximity_domain;
+	u16 reserved;		/* Reserved, must be zero */
+	u64 base_address;
+	u64 length;
+	u32 reserved1;
+	u32 flags;
+	u64 reserved2;	       /* Reserved, must be zero */
+};
+
+
+
+struct acpi_slit {
+	struct acpi_sdt_header header;
+	u64 locality_count;
+	u8 entry[1];
+};
+
 
 enum remapping_structure_types
 {
@@ -102,8 +148,7 @@ enum remapping_structure_types
 };
 
 struct device_scope_structure {
-	u8 type;
-	u8 length;
+	struct acpi_subtable_header sub_header;
 	u16 reserved;
 	u8 enumeration_id;
 	u8 start_bus_number;
@@ -111,8 +156,7 @@ struct device_scope_structure {
 };
 
 struct reserved_memory_region_structure {
-	u16 type;
-	u16 length;
+	struct acpi_subtable_header sub_header;
 	u16 reserved;
 	u16 segment_number;
 	u64 reserved_memory_region_base;
@@ -121,8 +165,7 @@ struct reserved_memory_region_structure {
 };
 
 struct root_port_ast_structure {
-	u16 type;
-	u16 length;
+	struct acpi_subtable_header sub_header;
 	u8 flags;
 	u8 reserved;
 	u16 segment_number;
@@ -130,8 +173,7 @@ struct root_port_ast_structure {
 };
 
 struct drhd_structure {
-	u16 type;
-	u16 length;
+	struct acpi_subtable_header sub_header;
 	u8 flags;
 	u8 reserved;
 	u16 segment_number;

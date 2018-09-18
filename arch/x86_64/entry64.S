@@ -106,7 +106,7 @@ kernel_space_entry:
 
 AP_LOAD_ADDR = 0x20000
 GDT_ADDR = gdt_desc - ap_startup_vector
-AP_ENTRY_32_PHYS = AP_LOAD_ADDR + ap_enrty_32 - ap_startup_vector
+AP_ENTRY_32_PHYS = AP_LOAD_ADDR + ap_entry_32 - ap_startup_vector
 
 .global ap_startup_vector
 .global ap_startup_end
@@ -155,10 +155,10 @@ gdt_desc:		.word 48 - 1
 	movl %eax, %cr0
 
 	/* Jump to protected mode, flush prefetch queue. */
-	data32 ljmp $(desc_code32 - gdt), $(AP_LOAD_ADDR + ap_enrty_32 - ap_startup_vector)
+	data32 ljmp $(desc_code32 - gdt), $(AP_LOAD_ADDR + ap_entry_32 - ap_startup_vector)
 
 .code32
-ap_enrty_32:
+ap_entry_32:
 
 	/* Enable PAE */
 	movl %cr4, %eax
@@ -181,10 +181,10 @@ ap_enrty_32:
 	movl %eax, %cr0
 
 	/* Jump to long mode, flush prefetch queue. */
-	ljmp $(desc_code64 - gdt), $(AP_LOAD_ADDR + ap_enrty_64 - ap_startup_vector)
+	ljmp $(desc_code64 - gdt), $(AP_LOAD_ADDR + ap_entry_64 - ap_startup_vector)
 
 .code64
-ap_enrty_64:
+ap_entry_64:
 	movabsq $kernel_space_entry, %rax
 	jmpq *%rax
 

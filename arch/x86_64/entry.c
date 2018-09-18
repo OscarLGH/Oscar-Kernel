@@ -17,7 +17,7 @@ struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
 
 u8 cpu_sync_bitmap1[128] = {0};
 u8 cpu_sync_bitmap2[128] = {0};
-
+void start_kernel();
 
 void irq_handler(u64 vector)
 {
@@ -174,7 +174,7 @@ void map_kernel_memory()
 				PG_PDPTE_1GB_GLOBAL;
 
 		for (i = 0; i < 512; i++) {
-			/* Use uncache memory type for MMIO. */
+			/* Use uncached memory type for MMIO. */
 			/* TODO:PCI BAR mapped to high address above 4GB. */
 			if (i == 3) {
 				pdpt[i] = i * SIZE_1GB | (page_attr | PG_PDPTE_CACHE_DISABLE);
@@ -209,7 +209,7 @@ void wakeup_all_processors()
 	struct processor_lapic_structure *lapic_ptr;
 	u8 *ptr = (u8 *)madt_ptr + sizeof(*madt_ptr);
 
-	while (ptr[1] != 0 && (u64)ptr < (u64)madt_ptr + madt_ptr->header.length) {
+	while ((u64)ptr < (u64)madt_ptr + madt_ptr->header.length - sizeof(*lapic_ptr)) {
 		switch(ptr[0]) {
 			case PROCESSOR_LOCAL_APIC:
 				lapic_ptr = (struct processor_lapic_structure *)ptr;
@@ -275,7 +275,7 @@ void enable_cpu_features()
 	}
 
 	if (features1 & BIT6 != 0) {
-		cr4 |= CR4_SMXE;
+		//cr4 |= CR4_SMXE;		//Vmware BUG ? Cause #GP here.
 	}
 
 	if (features1 & BIT17 != 0) {
@@ -304,11 +304,17 @@ void enable_cpu_features()
 	printk("[CPU %02d] %s\n", cpu_id, cpu_string);
 }
 
+extern void numa_init();
+
 void arch_init()
 {
 	u8 buffer[64] = {0};
 	bool bsp;
 	u8 cpu_id = 0;
+
+	if (is_bsp()) {
+		numa_init();
+	}
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
 
@@ -326,6 +332,7 @@ void arch_init()
 	set_tss_desc();
 	set_intr_desc();
 	lapic_enable();
+
 	asm("sti");
 
 #if CONFIG_AMP
@@ -336,6 +343,7 @@ void arch_init()
 	check_point();
 
 	if (is_bsp()) {
+		start_kernel();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(3, 0xff, APIC_ICR_ASSERT);

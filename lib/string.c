@@ -349,8 +349,12 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 	return (p - buf);
 }
 
+#include <console.h>
+
 #include <in_out.h>
 u64 lock = 0;
+int write_console(u32 chr);
+
 int printk(const char *fmt, ...)
 {
 	va_list ap;
@@ -363,6 +367,10 @@ int printk(const char *fmt, ...)
 	buf[i] = 0;
 	spin_lock(&lock);
 	for (j = 0; j < strlen(buf); j++) {
+		
+		write_console(buf[j]);
+
+		//early qemu debug purpose.remove when boot code is ready.
 		if (buf[j] == '\n')
 			out8(0x3f8, '\r');
 		out8(0x3f8, buf[j]);

@@ -1,3 +1,6 @@
+#ifndef TYPES_H
+#define TYPES_H
+
 typedef unsigned long long	u64;
 typedef long				s64;
 typedef unsigned int		u32;
@@ -19,6 +22,12 @@ typedef char				int8_t;
 #define true				1
 #define false				0
 #define NULL (void*)0
+typedef unsigned long size_t;
+
+struct list_head {
+	struct list_head *next, *prev;
+};
+
 
 #define  BIT0     0x00000001
 #define  BIT1     0x00000002
@@ -195,4 +204,4 @@ typedef char				int8_t;
 #define  BASE_4EB    0x4000000000000000ULL
 #define  BASE_8EB    0x8000000000000000ULL
 
-
+#endif

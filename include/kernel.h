@@ -30,8 +30,26 @@ struct bootloader_parm_block {
 	struct ards ardc_array[256];
 };
 
+#define offsetof(TYPE, MEMBER)	((size_t)&((TYPE *)0)->MEMBER)
+
+/**
+ * container_of - cast a member of a structure out to the containing structure
+ * @ptr:	the pointer to the member.
+ * @type:	the type of the container struct this is embedded in.
+ * @member:	the name of the member within the struct.
+ *
+ */
+#define container_of(ptr, type, member) ({				\
+	void *__mptr = (void *)(ptr);					\
+	((type *)(__mptr - offsetof(type, member))); })
+
+
+
 extern struct bootloader_parm_block *boot_parm;
 extern int printk(const char *fmt, ...);
 
+
+#define ASSERT(x) {if(!x)printk("Assert:%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);}
+void panic(void);
 
 #endif
