@@ -11,6 +11,8 @@
 
 void boot_fb_init();
 void graphic_con_init();
+void mm_enumate();
+
 
 void fb_test()
 {
@@ -36,11 +38,8 @@ int start_kernel()
 
 	printk("Oscar Kernel init start...\n");
 	printk("Build:%s %s\n", __DATE__, __TIME__);
-	struct fb_copyarea area;
 
-	for (int i = 0; i < 1000000; i++) {
-		printk("%d\n", i);
-	}
+	mm_enumate();
 	
 	return 0;
 }
