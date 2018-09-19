@@ -12,7 +12,6 @@ int fb_unregister(struct fb_info *fb_ptr)
 	list_del(&fb_ptr->list);
 }
 
-
 int early_fb_init()
 {
 	INIT_LIST_HEAD(&fb_list);
@@ -30,7 +29,27 @@ int fb_deactive(struct fb_info *fb_ptr)
 	return 0;
 }
 
-int blit_active_fb(const struct fb_image *image)
+int fillrect_active_fb(const struct fb_fillrect *rect)
+{
+	struct fb_info *fb_ptr;
+	list_for_each_entry(fb_ptr, &fb_list, list) {
+		if (fb_ptr->var.active == 1) {
+			fb_ptr->fbops->fb_fillrect(fb_ptr, rect);
+		}
+	}
+}
+
+int copyarea_active_fb(const struct fb_copyarea *area)
+{
+	struct fb_info *fb_ptr;
+	list_for_each_entry(fb_ptr, &fb_list, list) {
+		if (fb_ptr->var.active == 1) {
+			fb_ptr->fbops->fb_copyarea(fb_ptr, area);
+		}
+	}
+}
+
+int imageblit_active_fb(const struct fb_image *image)
 {
 	struct fb_info *fb_ptr;
 	list_for_each_entry(fb_ptr, &fb_list, list) {

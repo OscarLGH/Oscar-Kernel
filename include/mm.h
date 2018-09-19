@@ -2,14 +2,15 @@
 #define _MM_H
 
 #include <types.h>
+#include <list.h>
 
 struct node {
 	u64 socket;
-	//list_head *zone_list;
+	struct list_head zone_list;
 };
 
 struct zone {
-	//list_head list;
+	struct list_head list;
 	u64 start_pfn;
 	u64 end_pfn;
 	

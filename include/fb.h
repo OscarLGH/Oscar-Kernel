@@ -171,7 +171,9 @@ int fb_unregister(struct fb_info *fb_ptr);
 int early_fb_init();
 int fb_active(struct fb_info *fb_ptr);
 int fb_deactive(struct fb_info *fb_ptr);
-int blit_active_fb(const struct fb_image *image);
+int fillrect_active_fb(const struct fb_fillrect *rect);
+int copyarea_active_fb(const struct fb_copyarea *area);
+int imageblit_active_fb(const struct fb_image *image);
 struct fb_info *get_current_fb();
 
 #endif

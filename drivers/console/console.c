@@ -12,7 +12,6 @@ int console_unregister(struct console *con_ptr)
 	list_del(&con_ptr->list);
 }
 
-
 int console_active(struct console *con_ptr)
 {
 	con_ptr->active = 1;

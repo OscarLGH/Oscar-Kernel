@@ -29,7 +29,7 @@ void boot_fb_copyarea(struct fb_info *info,  const struct fb_copyarea *region)
 			dst_offset_y = (j + region->dy) * info->var.xres_virtual;
 			src_offset_y = (j + region->sy) * info->var.xres_virtual;
 			for (i = 0; i < region->width; i++) {
-				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sy];
+				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sx];
 			}
 		}
 	} else if (region->dy < region->sy && region->dx >= region->sx) {
@@ -37,15 +37,15 @@ void boot_fb_copyarea(struct fb_info *info,  const struct fb_copyarea *region)
 			dst_offset_y = (j + region->dy) * info->var.xres_virtual;
 			src_offset_y = (j + region->sy) * info->var.xres_virtual;
 			for (i = region->width - 1; i >= 0 ; i--) {
-				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sy];
+				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sx];
 			}
 		}
 	} else if (region->dy >= region->sy && region->dx < region->sx) {
 		for (j = region->height - 1; j >= 0; j--) {
 			dst_offset_y = (j + region->dy) * info->var.xres_virtual;
 			src_offset_y = (j + region->sy) * info->var.xres_virtual;
-			for (i = region->width - 1; i >= 0 ; i--) {
-				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sy];
+			for (i = 0; i < region->width; i++) {
+				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sx];
 			}
 		}
 	} else {
@@ -53,7 +53,7 @@ void boot_fb_copyarea(struct fb_info *info,  const struct fb_copyarea *region)
 			dst_offset_y = (j + region->dy) * info->var.xres_virtual;
 			src_offset_y = (j + region->sy) * info->var.xres_virtual;
 			for (i = region->width - 1; i >= 0 ; i--) {
-				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sy];
+				framebuffer_ptr[dst_offset_y + i + region->dx] = framebuffer_ptr[src_offset_y + i + region->sx];
 			}
 		}
 	}
@@ -71,8 +71,6 @@ void boot_fb_imageblit(struct fb_info *info, const struct fb_image *image)
 		}
 	}
 }
-
-u32 image_array[0x100000];
 
 int boot_fb_init()
 {
@@ -96,32 +94,4 @@ int boot_fb_init()
 	bootfb_ops.fb_imageblit = boot_fb_imageblit;
 
 	fb_register(&boot_fb);
-
-	for (int i = 0; i < 200; i++) {
-		for (int j = 0; j < 200; j++) {
-			if ((i - 100) * (i - 100) + (j - 100) * (j - 100) <= 10000)
-				image_array[i + j * 200] = 0x0000ffff + 0x00010000 * j;
-			else
-				image_array[i + j * 200] = 0x008f9f7f + 0x00010000 * i;
-		}
-	}
-
-	
-	struct fb_image image_test = {100, 100, 200, 200, 0, 0, 0, (char *)image_array};
-	blit_active_fb(&image_test);
-	//boot_fb.fbops->fb_imageblit(&boot_fb, &image_test);
-	//struct fb_fillrect fill_test = {100, 100, 100, 100, 0x0000ff00, 0};
-	//boot_fb.fbops->fb_fillrect(&boot_fb, &fill_test);
-	//struct fb_copyarea copy_test1 = {0, 0, 200, 200, 100, 100};
-	//boot_fb.fbops->fb_copyarea(&boot_fb, &copy_test1);
-
-	//struct fb_copyarea copy_test2 = {200, 0, 200, 200, 100, 100};
-	//boot_fb.fbops->fb_copyarea(&boot_fb, &copy_test2);
-
-	//struct fb_copyarea copy_test3 = {0, 200, 200, 200, 100, 100};
-	//boot_fb.fbops->fb_copyarea(&boot_fb, &copy_test3);
-
-	//struct fb_copyarea copy_test4 = {200, 200, 200, 200, 100, 100};
-	//boot_fb.fbops->fb_copyarea(&boot_fb, &copy_test4);
-	
 }

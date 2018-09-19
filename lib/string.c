@@ -367,10 +367,11 @@ int printk(const char *fmt, ...)
 	buf[i] = 0;
 	spin_lock(&lock);
 	for (j = 0; j < strlen(buf); j++) {
-		
+
+		/* Sync write currently. */
 		write_console(buf[j]);
 
-		//early qemu debug purpose.remove when boot code is ready.
+		/* early vmware/qemu debug purpose.remove when boot code is ready. */
 		if (buf[j] == '\n')
 			out8(0x3f8, '\r');
 		out8(0x3f8, buf[j]);
