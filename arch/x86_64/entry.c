@@ -209,11 +209,11 @@ void wakeup_all_processors()
 	struct processor_lapic_structure *lapic_ptr;
 	u8 *ptr = (u8 *)madt_ptr + sizeof(*madt_ptr);
 
-	while ((u64)ptr < (u64)madt_ptr + madt_ptr->header.length - sizeof(*lapic_ptr)) {
+	while ((u64)ptr < (u64)madt_ptr + madt_ptr->header.length - sizeof(*madt_ptr)) {
 		switch(ptr[0]) {
 			case PROCESSOR_LOCAL_APIC:
 				lapic_ptr = (struct processor_lapic_structure *)ptr;
-				if (lapic_ptr->apic_id != 0) {
+				if (lapic_ptr->apic_id != 0 && lapic_ptr->flags & 0x1 != 0) {
 					//printk("waking up CPU:APIC ID = %d\n", lapic_ptr->apic_id);
 					cpu_sync_bitmap1[lapic_ptr->apic_id] = 0;
 					mp_init_single(lapic_ptr->apic_id, ap_load_addr);
@@ -315,6 +315,7 @@ void arch_init()
 	if (is_bsp()) {
 		numa_init();
 	}
+
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
 
@@ -339,8 +340,8 @@ void arch_init()
 	jmp_table_percpu[cpu_id]();
 #endif
 
-	cpu_sync_bitmap2[cpu_id] = 1;
-	check_point();
+	//cpu_sync_bitmap2[cpu_id] = 1;
+	//check_point();
 
 	if (is_bsp()) {
 		start_kernel();
