@@ -286,7 +286,8 @@ void enable_cpu_features()
 		cr4 |= CR4_PGE;
 	}
 
-	cr4 |= (CR4_SMAP | CR4_SMEP);
+	/* Not fully supported on core i7 5960x ? */
+	//cr4 |= (CR4_SMAP | CR4_SMEP);
 
 	write_cr4(cr4);
 
@@ -311,10 +312,6 @@ void arch_init()
 	u8 buffer[64] = {0};
 	bool bsp;
 	u8 cpu_id = 0;
-
-	if (is_bsp()) {
-		numa_init();
-	}
 
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];

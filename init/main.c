@@ -34,10 +34,11 @@ void fb_test()
 		}
 	}
 
-	struct fb_image image_test = {100, 100, 200, 200, 0, 0, 0, (char *)image_array};
+	struct fb_image image_test = {600, 400, 200, 200, 0, 0, 0, (char *)image_array};
 	imageblit_active_fb(&image_test);
 }
 
+extern void arch_numa_init();
 int start_kernel()
 {
 	bss_init();
@@ -48,7 +49,10 @@ int start_kernel()
 	printk("Oscar Kernel init start...\n");
 	printk("Build:%s %s\n", __DATE__, __TIME__);
 
-	mm_enumate();
+	arch_numa_init();
+	extern void mminfo_print();
+	mminfo_print();
+	//mm_enumate();
 	
 	return 0;
 }

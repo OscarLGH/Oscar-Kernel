@@ -93,7 +93,7 @@ int boot_fb_init()
 	bootfb_ops.fb_copyarea = boot_fb_copyarea;
 	bootfb_ops.fb_imageblit = boot_fb_imageblit;
 
-	memset(boot_fb.screen_base, 0x00, 0x400000);
+	//memset(boot_fb.screen_base, 0x00, 0x400000);
 
 	fb_register(&boot_fb);
 }
