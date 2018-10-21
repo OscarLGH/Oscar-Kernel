@@ -9,6 +9,7 @@
 #include <spinlock.h>
 #include <in_out.h>
 #include <cpuid.h>
+#include <fpu.h>
 #include <acpi.h>
 #include <string.h>
 
@@ -243,13 +244,23 @@ void enable_cpu_features()
 {
 	u32 regs[4] = {0};
 	u8 cpu_id = 0;
-	u32 features1, features2;
+	u32 features1, features2, xcr0_mask;
 	u8 cpu_string[64] = {0};
+
+	cpuid(0x80000002, 0x00000000, (u32 *)&cpu_string[0]);
+	cpuid(0x80000003, 0x00000000, (u32 *)&cpu_string[16]);
+	cpuid(0x80000004, 0x00000000, (u32 *)&cpu_string[32]);
+
+	printk("[CPU %02d] %s\n", cpu_id, cpu_string);
+	printk("enabled features:");
 	//u32 max_linear_bits, max_physical_bits;
 	cpuid(0x00000001, 0x00000000, &regs[0]);
 	cpu_id = ((u8 *)regs)[7];
 	features1 = regs[2];
 	features2 = regs[3];
+
+	cpuid(0x0000000d, 0x00000000, &regs[0]);
+	xcr0_mask = regs[0];
 	//cpuid(0x00000000, 0x00000000, &buffer[0]);
 	//printk("Max leaf:%x\n", buffer[0]);
 
@@ -264,32 +275,81 @@ void enable_cpu_features()
 	//u64 cr0 = read_cr0();
 	//cr0 |= (CR0_MP | CR0_TS);
 	//write_cr0(cr0);
+	u64 cr0 = read_cr0();
+	cr0 |= (CR0_MP | CR0_NE);
+	cr0 & (~(CR0_EM));
+	write_cr0(cr0);
 
+	u32 xcr0 = 0;
 	u64 cr4 = read_cr4();
+
+	if (features2 & BIT25) {
+		printk("SSE ");
+		xcr0 |= XCR0_SSE;
+	}
+
+	if (features2 & BIT26) {
+		printk("SSE2 ");
+	}
+
+	if (features1 & BIT0) {
+		printk("SSE3 ");
+	}
+
+	if (features1 & BIT9) {
+		printk("SSSE3 ");
+	}
+
+	if (features1 & BIT27) {
+		printk("OSXSAVE ");
+		cr4 |= CR4_OSXSAVE;
+		xcr0 |= XCR0_X87;
+	}
+
 	if (features2 & BIT24 != 0) {
-		cr4 |= CR4_OSFXSR;
+		cr4 |= (CR4_OSFXSR | CR4_OSXMMEXCPT);
+		printk("FXSR ");
+	}
+
+	if ((features1 & BIT28) && (xcr0_mask & XCR0_AVX)) {
+		printk("AVX ");
+		xcr0 |= XCR0_AVX;
+	}
+
+	if ((xcr0_mask & XCR0_AVX) && (xcr0_mask & XCR0_OPMASK)
+		&& (xcr0_mask & XCR0_H16_ZMM) && (xcr0_mask & XCR0_ZMM_H256)) {
+		printk("AVX512 ");
+		xcr0 |= (XCR0_OPMASK | XCR0_H16_ZMM | XCR0_ZMM_H256);
 	}
 
 	if (features1 & BIT5 != 0) {
 		cr4 |= CR4_VMXE;
+		printk("VMX ");
 	}
 
 	if (features1 & BIT6 != 0) {
 		//cr4 |= CR4_SMXE;		//Vmware BUG ? Cause #GP here.
+		//printk("SMXE ");
 	}
 
 	if (features1 & BIT17 != 0) {
 		cr4 |= CR4_PCIDE;
+		printk("PCIDE ");
 	}
 
 	if (features2 & BIT13) {
 		cr4 |= CR4_PGE;
+		printk("PDE ");
 	}
 
+	printk("\n");
 	/* Not fully supported on core i7 5960x ? */
 	//cr4 |= (CR4_SMAP | CR4_SMEP);
 
 	write_cr4(cr4);
+	if (xcr0 & XCR0_X87) {
+		xsetbv(0, xcr0);
+	}
 
 	cpuid(0x00000002, 0x00000000, &regs[0]);
 	/* TODO:Add more print here */
@@ -297,12 +357,6 @@ void enable_cpu_features()
 	cpuid(0x80000008, 0x00000000, &regs[0]);
 	//max_linear_bits = (regs[0] >> 8) & 0xff;
 	//max_physical_bits = regs[0] & 0xff;
-
-	cpuid(0x80000002, 0x00000000, (u32 *)&cpu_string[0]);
-	cpuid(0x80000003, 0x00000000, (u32 *)&cpu_string[16]);
-	cpuid(0x80000004, 0x00000000, (u32 *)&cpu_string[32]);
-
-	printk("[CPU %02d] %s\n", cpu_id, cpu_string);
 }
 
 extern void numa_init();
@@ -331,6 +385,14 @@ void arch_init()
 	set_intr_desc();
 	lapic_enable();
 
+	printk("SSE2 test:\n");
+	asm("addpd %xmm1, %xmm2");
+
+	printk("AVX test:\n");
+	asm("vaddpd %ymm1, %ymm2, %ymm3");
+
+	printk("AVX512 test:\n");
+	asm("vaddpd %zmm1, %zmm2, %zmm3");
 	asm("sti");
 
 #if CONFIG_AMP

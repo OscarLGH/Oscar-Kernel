@@ -48,6 +48,7 @@ int start_kernel()
 
 	printk("Oscar Kernel init start...\n");
 	printk("Build:%s %s\n", __DATE__, __TIME__);
+	printk("==========================================\n");
 
 	arch_numa_init();
 	extern void mminfo_print();

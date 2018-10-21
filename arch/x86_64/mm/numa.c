@@ -21,8 +21,6 @@ void arch_numa_init()
 	struct acpi_srat *srat_ptr = acpi_get_desc("SRAT");
 
 	if (srat_ptr == NULL) {
-		/*qemu bug ?*/
-		printk("Warning:'SRAT' not found in ACPI table.Using 1 node by default.\n");
 		node = boot_mem_alloc(sizeof(*node));
 		mm_node_init(node);
 
@@ -35,7 +33,6 @@ void arch_numa_init()
 		mm_node_register(node);
 
 		if (madt_ptr == NULL) {
-			printk("Warning:'APIC' not found in ACPI table.Using apic_id=0 by default");
 			cpu = boot_mem_alloc(sizeof(*cpu));
 			cpu->id = 0;
 			list_add_tail(&cpu->list, &node->cpu_list);

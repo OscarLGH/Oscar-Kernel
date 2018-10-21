@@ -708,7 +708,7 @@ static inline u64 rdmsr(u32 msr)
 	return low | (high << 32);
 }
 
-static inline u64 wrmsr(u32 msr, u64 value)
+static inline void wrmsr(u32 msr, u64 value)
 {
 	u64 low = value, high = (value >> 32);
 	asm volatile("wrmsr\n"
