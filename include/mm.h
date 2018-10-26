@@ -40,9 +40,18 @@ struct page {
 	u64 attribute;
 };
 
+struct bootmem {
+	u8 *bitmap;
+	u64 last_alloc_offset;
+	u64 last_alloc_pfn;
+	u64 spin_lock;
+};
+
 struct page *allocate_page(u64 area);
 struct page *allocate_pages();
-void *boot_mem_alloc(u64 size);
+void *bootmem_alloc(u64 size);
+void bootmem_free(void *vaddr);
+void bootmem_init();
 void mm_node_init(struct node *node);
 void mm_node_register(struct node *node);
 struct node *mm_get_node_by_id(u64 id);

@@ -51,7 +51,7 @@ void mm_enumate()
 	struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
 	for (int i = 0; i < boot_parm->ardc_cnt; i++) {
 		if (1) {
-			struct zone *zone = boot_mem_alloc(sizeof(*zone));
+			struct zone *zone = bootmem_alloc(sizeof(*zone));
 			zone->page_size = 0x1000;
 			zone->start_pfn = boot_parm->ardc_array[i].base / zone->page_size;
 			zone->pfn_cnt = boot_parm->ardc_array[i].length / zone->page_size;

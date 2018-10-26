@@ -5,7 +5,7 @@
 #include <cpuid.h>
 
 #define PERCPU_AREA_BASE 0x2000000
-#define PERCPU_AREA_SIZE 0x200000
+#define PERCPU_AREA_SIZE 0x8000
 
 inline static u64 get_percpu_area_base()
 {

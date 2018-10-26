@@ -8,19 +8,11 @@
 #include <kernel.h>
 #include <string.h>
 #include <fb.h>
+#include <mm.h>
 
 void boot_fb_init();
 void graphic_con_init();
 void mm_enumate();
-
-void bss_init()
-{
-	extern int __bss_start, __bss_end;
-	int *p = &__bss_start;
-	for (; p < &__bss_end; p++)
-		*p = 0;
-}
-
 
 void fb_test()
 {
@@ -41,7 +33,6 @@ void fb_test()
 extern void arch_numa_init();
 int start_kernel()
 {
-	bss_init();
 	boot_fb_init();
 	graphic_con_init();
 	fb_test();

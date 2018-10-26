@@ -251,8 +251,6 @@ void enable_cpu_features()
 	cpuid(0x80000003, 0x00000000, (u32 *)&cpu_string[16]);
 	cpuid(0x80000004, 0x00000000, (u32 *)&cpu_string[32]);
 
-	printk("[CPU %02d] %s\n", cpu_id, cpu_string);
-	printk("enabled features:");
 	//u32 max_linear_bits, max_physical_bits;
 	cpuid(0x00000001, 0x00000000, &regs[0]);
 	cpu_id = ((u8 *)regs)[7];
@@ -270,6 +268,9 @@ void enable_cpu_features()
 	//cpuid(0x00000001, 0x00000000, &buffer[0]);
 	//printk("Model:%08x\n", buffer[0]);
 	//printk("supported features:%08x, %08x\n", buffer[2], buffer[3]);
+
+	printk("[CPU %02d] %s\n", cpu_id, cpu_string);
+	printk("enabled features:");
 
 	/* Lazy FPU ? */
 	//u64 cr0 = read_cr0();
@@ -361,11 +362,28 @@ void enable_cpu_features()
 
 extern void numa_init();
 
+void instruction_test()
+{
+	printk("SSE2 test:\n");
+	asm("addpd %xmm1, %xmm2");
+
+	printk("AVX test:\n");
+	asm("vaddpd %ymm1, %ymm2, %ymm3");
+
+	printk("AVX512 test:\n");
+	asm("vaddpd %zmm1, %zmm2, %zmm3");
+	asm("sti");
+}
+
+extern void bootmem_init();
+
 void arch_init()
 {
 	u8 buffer[64] = {0};
 	bool bsp;
 	u8 cpu_id = 0;
+
+	bootmem_init();
 
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
@@ -385,16 +403,6 @@ void arch_init()
 	set_intr_desc();
 	lapic_enable();
 
-	printk("SSE2 test:\n");
-	asm("addpd %xmm1, %xmm2");
-
-	printk("AVX test:\n");
-	asm("vaddpd %ymm1, %ymm2, %ymm3");
-
-	printk("AVX512 test:\n");
-	asm("vaddpd %zmm1, %zmm2, %zmm3");
-	asm("sti");
-
 #if CONFIG_AMP
 	jmp_table_percpu[cpu_id]();
 #endif
@@ -404,6 +412,7 @@ void arch_init()
 
 	if (is_bsp()) {
 		start_kernel();
+		//instruction_test();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(3, 0xff, APIC_ICR_ASSERT);
