@@ -27,7 +27,6 @@ static void set_bootmem_bitmap(u64 paddr)
 {
 	u64 index = (paddr >> (12 + 3));
 	u64 bit = (paddr >> 12) & 0x7;
-	//printk("%s:index = %d\n", __FUNCTION__, index);
 	bootmem.bitmap[index] |= (1 << bit);
 }
 
@@ -42,7 +41,6 @@ static u64 get_bootmem_bitmap(u64 paddr)
 {
 	u64 index = (paddr >> (12 + 3));
 	u64 bit = (paddr >> 12) & 0x7;
-	//printk("%s:index = %d\n", __FUNCTION__, index);
 	return (bootmem.bitmap[index] & (1 << bit));
 }
 
@@ -75,6 +73,7 @@ static u64 find_free_bitmap(u64 size)
 		for (addr2 = addr1; addr2 < 64 * 0x40000000ULL; addr2 += 0x1000) {
 			if (get_bootmem_bitmap(addr2))
 				break;
+
 			if (addr2 - addr1 >= size)
 				return addr1;
 		}
@@ -111,8 +110,17 @@ void *bootmem_alloc(u64 size)
 				}
 			}
 		} else {
-			paddr = bootmem.last_alloc_pfn * 0x1000 + bootmem.last_alloc_offset;
-			bootmem.last_alloc_offset = roundup((bootmem.last_alloc_offset + size) % 0x1000, 64);
+			if (bootmem.last_alloc_offset != 0) {
+				paddr = bootmem.last_alloc_pfn * 0x1000 + bootmem.last_alloc_offset;
+				bootmem.last_alloc_offset = roundup((bootmem.last_alloc_offset + size) % 0x1000, 64);
+			} else {
+				paddr = find_free_bitmap(0x1000);
+				if (paddr != -1) {
+					bootmem.last_alloc_offset = roundup((bootmem.last_alloc_offset + size) % 0x1000, 64);
+					bootmem.last_alloc_pfn = paddr / 0x1000;
+					set_bootmem_bitmap_area(paddr, size);
+				}
+			}
 		}
 	}
 	spin_unlock(&bootmem.spin_lock);
@@ -137,12 +145,14 @@ void bootmem_init()
 	bootmem.spin_lock = 0;
 	memset(bootmem_bitmap, 0xff, 0x200000);
 
-	set_bootmem_bitmap_area(0, 0x1000);
 	struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
 	for (int i = 0; i < boot_parm->ardc_cnt; i++) {
 		if (boot_parm->ardc_array[i].type == 1) {
 			clear_bootmem_bitmap_area(boot_parm->ardc_array[i].base, boot_parm->ardc_array[i].length);
 		}
 	}
+
+	/* Reserve 16MB memory for kernel code & data. */
+	set_bootmem_bitmap_area(0, 0x1000000);
 }
 

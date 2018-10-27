@@ -5,7 +5,7 @@
 #include <fpu.h>
 #include <list.h>
 
-struct X86_cpu {
+struct x86_cpu {
 	char name[64];
 	u64 apic_id;
 	u64 online;

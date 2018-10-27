@@ -12,9 +12,12 @@
 #include <fpu.h>
 #include <acpi.h>
 #include <string.h>
+#include <mm.h>
 
 void (*jmp_table_percpu[MAX_CPUS])() = {0};
 struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
+
+struct list_head cpu_list;
 
 u8 cpu_sync_bitmap1[128] = {0};
 u8 cpu_sync_bitmap2[128] = {0};
@@ -34,9 +37,8 @@ void irq_handler(u64 vector)
 
 void set_kernel_segment()
 {
-	u8 *percpu_base = (u8 *)PHYS2VIRT(get_percpu_area_base());
-	struct gdtr gdtr_percpu;
-	struct segment_desc *gdt_base = (void *)(percpu_base + 0);
+	struct gdtr gdtr;
+	struct segment_desc *gdt_base = bootmem_alloc(sizeof(*gdt_base) * 256);
 
 	set_segment_descriptor(gdt_base,
 		SELECTOR_NULL_INDEX,
@@ -74,10 +76,10 @@ void set_kernel_segment()
 		0
 	);
 
-	gdtr_percpu.base = (u64)gdt_base;
-	gdtr_percpu.limit = 256 * sizeof(struct segment_desc) - 1;
+	gdtr.base = (u64)gdt_base;
+	gdtr.limit = 256 * sizeof(struct segment_desc) - 1;
 
-	lgdt(&gdtr_percpu);
+	lgdt(&gdtr);
 
 	load_cs(SELECTOR_KERNEL_CODE);
 	load_ds(SELECTOR_KERNEL_DATA);
@@ -93,9 +95,8 @@ void set_intr_desc()
 	extern u64 exception_table[];
 	extern u64 irq_table[];
 
-	u8 *percpu_base = (u8 *)PHYS2VIRT(get_percpu_area_base());
-	struct idtr idtr_percpu;
-	struct gate_desc *idt_base = (void *)(percpu_base + 0x1000);
+	struct idtr idtr;
+	struct gate_desc *idt_base = bootmem_alloc(sizeof(*idt_base) * 256);
 	int i;
 
 	for (i = 0; i < 0x20; i++) {
@@ -126,20 +127,23 @@ void set_intr_desc()
 		TRAP_GATE | DPL3
 	);
 
-	idtr_percpu.base = (u64)idt_base;
-	idtr_percpu.limit = 256 * sizeof(struct gate_desc) - 1;
+	idtr.base = (u64)idt_base;
+	idtr.limit = 256 * sizeof(struct gate_desc) - 1;
 
-	lidt(&idtr_percpu);
+	lidt(&idtr);
 }
 
 void set_tss_desc()
 {
-	u8 *percpu_base = (u8 *)PHYS2VIRT(get_percpu_area_base());
-	struct segment_desc *gdt_base = (void *)(percpu_base + 0);
-	struct tss_desc *tss = (void *)(percpu_base + 0x2000);
+	struct gdtr gdtr;
+	struct segment_desc *gdt_base;
+	struct tss_desc *tss = bootmem_alloc(sizeof(*tss));
+
+	sgdt(&gdtr);
+	gdt_base = (struct segment_desc *)gdtr.base;
 
 	memset(tss, 0, sizeof(*tss));
-	tss->rsp0 = (u64)(percpu_base + PERCPU_AREA_SIZE);
+	tss->rsp0 = (u64)bootmem_alloc(0x100000);
 	set_segment_descriptor(gdt_base,
 		SELECTOR_TSS_INDEX,
 		(u64)tss,
@@ -151,21 +155,26 @@ void set_tss_desc()
 	ltr(SELECTOR_TSS);
 }
 
+u64 kernel_pt_phys = 0;
 void map_kernel_memory()
 {
-	struct ards *ardc_ptr = boot_parm->ardc_array;
 	u64 i;
-	u64 offset = 0x1000;
-	u64 pml4t_phys = 0x1000000;
-	u64 phy_addr = 0;
-	u64 *pml4t = (u64 *)PHYS2VIRT(pml4t_phys);
-	u64 *pdpt = (u64 *)PHYS2VIRT(pml4t_phys + offset);
+	u64 *pml4t;
+	u64 pml4t_phys;
+	u64 *pdpt;
+	u64 pdpt_phys;
+	u64 phy_addr;
 	u64 page_attr;
 
 	if (is_bsp()) {
+		pml4t = (u64 *)bootmem_alloc(0x1000);
+		pml4t_phys = VIRT2PHYS(pml4t);
+		kernel_pt_phys = pml4t_phys;
+		pdpt = (u64 *)bootmem_alloc(0x1000);
+		pdpt_phys = VIRT2PHYS(pdpt);
 		page_attr = PG_PML4E_PRESENT | PG_PML4E_READ_WRITE | PG_PML4E_SUPERVISOR | PG_PML4E_CACHE_WT;
 		pml4t[0] = 0;
-		pml4t[0x100] = (pml4t_phys + offset) | page_attr;
+		pml4t[0x100] = pdpt_phys | page_attr;
 
 		page_attr = PG_PDPTE_PRESENT |
 				PG_PDPTE_READ_WRITE |
@@ -185,7 +194,10 @@ void map_kernel_memory()
 		}
 	}
 
-	write_cr3(pml4t_phys);
+	if (kernel_pt_phys != 0)
+		write_cr3(kernel_pt_phys);
+	else
+		printk("kerneel_pt_phys = 0!\n");
 }
 
 void wakeup_all_processors()
@@ -383,7 +395,8 @@ void arch_init()
 	bool bsp;
 	u8 cpu_id = 0;
 
-	bootmem_init();
+	if (is_bsp())
+		bootmem_init();
 
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
