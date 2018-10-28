@@ -13,6 +13,7 @@
 #include <acpi.h>
 #include <string.h>
 #include <mm.h>
+#include <vmx.h>
 
 void (*jmp_table_percpu[MAX_CPUS])() = {0};
 struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
