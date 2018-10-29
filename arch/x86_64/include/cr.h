@@ -46,7 +46,7 @@ static inline u64 read_cr8()
 {
 	u64 cr8;
 	asm volatile("movq %%cr8, %0\n\t"
-				: "=a"(cr8) :
+				: "=r"(cr8) :
 		);
 	return cr8;
 }
@@ -62,7 +62,7 @@ static inline u64 read_cr4()
 {
 	u64 cr4;
 	asm volatile("movq %%cr4, %0\n\t"
-				: "=a"(cr4) :
+				: "=r"(cr4) :
 		);
 	return cr4;
 }
@@ -74,11 +74,25 @@ static inline void write_cr4(u64 cr4)
 		);
 }
 
+static inline void cr4_set_bits(u64 bits)
+{
+	u64 cr4 = read_cr4();
+	cr4 |= bits;
+	write_cr4(cr4);
+}
+
+static inline void cr4_clear_bits(u64 bits)
+{
+	u64 cr4 = read_cr4();
+	cr4 &= ~bits;
+	write_cr4(cr4);
+}
+
 static inline u64 read_cr3()
 {
 	u64 cr3;
 	asm volatile("movq %%cr3, %0\n\t"
-				: "=a"(cr3) :
+				: "=r"(cr3) :
 		);
 	return cr3;
 }
@@ -94,7 +108,7 @@ static inline u64 read_cr2()
 {
 	u64 cr2;
 	asm volatile("movq %%cr2, %0\n\t"
-				: "=a"(cr2) :
+				: "=r"(cr2) :
 		);
 	return cr2;
 }
@@ -103,7 +117,7 @@ static inline u64 read_cr0()
 {
 	u64 cr0;
 	asm volatile("movq %%cr0, %0\n\t"
-				: "=a"(cr0) :
+				: "=r"(cr0) :
 		);
 	return cr0;
 }
@@ -114,6 +128,21 @@ static inline void write_cr0(u64 cr0)
 				: : "rdi"(cr0)
 		);
 }
+
+static inline void cr0_set_bits(u64 bits)
+{
+	u64 cr0 = read_cr0();
+	cr0 |= bits;
+	write_cr0(cr0);
+}
+
+static inline void cr0_clear_bits(u64 bits)
+{
+	u64 cr0 = read_cr4();
+	cr0 &= ~bits;
+	write_cr4(cr0);
+}
+
 
 
 #endif

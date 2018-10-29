@@ -529,10 +529,25 @@ enum vm_instruction_error_number {
 	VMXERR_INVALID_OPERAND_TO_INVEPT_INVVPID = 28,
 };
 
+struct vmcs {
+	u32 revision_id;
+	u32 abort;
+	char data[0];
+};
+
+struct vmx_vcpu {
+	struct vmcs *vmxon_region;
+	u64 vmxon_region_phys;
+	struct vmcs *vmcs;
+	u64 vmcs_phys;
+	struct list_head list;
+};
+
+
 static inline void vmx_on(u64 paddr)
 {
-	asm volatile("vmxon (%1)"
-		::"m"(&paddr)
+	asm volatile("vmxon (%%rax)"
+		::"r"(&paddr), "m"(paddr)
 		);
 }
 
@@ -543,22 +558,22 @@ static inline void vmx_off()
 
 static inline void vmptr_load(u64 paddr)
 {
-	asm volatile("vmptrld (%1)"
-		::"m"(&paddr)
+	asm volatile("vmptrld (%%rax)"
+		::"a"(&paddr), "m"(paddr)
 		);
 }
 
 static inline void vmptr_store(u64 *paddr)
 {
-	asm volatile("vmptrst (%1)"
-		::"m"(paddr)
+	asm volatile("vmptrst (%%rax)"
+		::"a"(paddr), "m"(paddr)
 		);
 }
 
 static inline void vmclear(u64 paddr)
 {
 	asm volatile("vmclear (%1)"
-		::"m"(&paddr)
+		::"m"(&paddr), "m"(paddr)
 		);
 }
 

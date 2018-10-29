@@ -289,10 +289,8 @@ void enable_cpu_features()
 	//u64 cr0 = read_cr0();
 	//cr0 |= (CR0_MP | CR0_TS);
 	//write_cr0(cr0);
-	u64 cr0 = read_cr0();
-	cr0 |= (CR0_MP | CR0_NE);
-	cr0 & (~(CR0_EM));
-	write_cr0(cr0);
+	cr0_set_bits(CR0_MP | CR0_NE);
+	cr0_clear_bits(CR0_EM | CR0_CD | CR0_NW);
 
 	u32 xcr0 = 0;
 	u64 cr4 = read_cr4();
@@ -359,7 +357,7 @@ void enable_cpu_features()
 	printk("\n");
 	/* Not fully supported on core i7 5960x ? */
 	//cr4 |= (CR4_SMAP | CR4_SMEP);
-
+	printk("CR4:%x\n", cr4);
 	write_cr4(cr4);
 	if (xcr0 & XCR0_X87) {
 		xsetbv(0, xcr0);
@@ -389,6 +387,8 @@ void instruction_test()
 }
 
 extern void bootmem_init();
+
+extern struct vmx_vcpu *vmx_init();
 
 void arch_init()
 {
@@ -434,6 +434,8 @@ void arch_init()
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
 	}
+	vmx_init();
 
+	asm("sti");
 	asm("hlt");
 }
