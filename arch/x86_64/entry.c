@@ -388,7 +388,8 @@ void instruction_test()
 
 extern void bootmem_init();
 
-extern struct vmx_vcpu *vmx_init();
+extern void vm_init_test();
+
 
 void arch_init()
 {
@@ -402,7 +403,7 @@ void arch_init()
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
 
-	enable_cpu_features();
+	//enable_cpu_features();
 
 	cpu_sync_bitmap1[cpu_id] = 1;
 
@@ -434,7 +435,7 @@ void arch_init()
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
 	}
-	vmx_init();
+	vm_init_test();
 
 	asm("sti");
 	asm("hlt");

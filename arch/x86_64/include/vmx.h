@@ -54,6 +54,9 @@
 #define CPU_BASED_ACTIVATE_SECONDARY_CONTROLS   0x80000000
 
 #define CPU_BASED_ALWAYSON_WITHOUT_TRUE_MSR	0x0401e172
+#define CPU_BASED_FIXED_ONES					0x04006172
+#define CPU_BASED_FIXED_ZEROS					0xfff9fffe
+
 
 /*
  * Definitions of Secondary Processor-Based VM-Execution Controls.
@@ -541,6 +544,27 @@ struct vmx_vcpu {
 	struct vmcs *vmcs;
 	u64 vmcs_phys;
 	struct list_head list;
+	struct gr_regs {
+		u64 rax;
+		u64 rbx;
+		u64 rcx;
+		u64 rdx;
+		u64 rsi;
+		u64 rdi;
+		u64 rsp;
+		u64 rbp;
+		u64 r8;
+		u64 r9;
+		u64 r10;
+		u64 r11;
+		u64 r12;
+		u64 r13;
+		u64 r14;
+		u64 r15;
+	} host_regs, guest_regs;
+	struct fpu_regs {
+		void *xsave;
+	} host_fpu, guest_fpu;
 };
 
 
@@ -581,15 +605,15 @@ static inline void vmclear(u64 paddr)
 static inline u64 vmcs_read(u64 field)
 {
 	u64 ret;
-	asm volatile("vmread %1, %2\n\t"
+	asm volatile("vmread %%rdi, %%rax\n\t"
 		:"=a"(ret):"rdi"(field)
 		);
 }
 
 static inline void vmcs_write(u64 field, u64 value)
 {
-	asm volatile("vmwrite %1, %2\n\t"
-		::"r"(field), "rdi"(value)
+	asm volatile("vmwrite %%rsi, %%rdi\n\t"
+		::"rsi"(field), "rdi"(value)
 		);
 }
 

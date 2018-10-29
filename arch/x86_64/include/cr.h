@@ -138,9 +138,9 @@ static inline void cr0_set_bits(u64 bits)
 
 static inline void cr0_clear_bits(u64 bits)
 {
-	u64 cr0 = read_cr4();
+	u64 cr0 = read_cr0();
 	cr0 &= ~bits;
-	write_cr4(cr0);
+	write_cr0(cr0);
 }
 
 
