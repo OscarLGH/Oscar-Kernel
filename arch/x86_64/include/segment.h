@@ -151,7 +151,7 @@ static inline void sgdt(struct gdtr *gdtr_addr)
 	asm volatile("sgdt (%rdi)\n");
 }
 
-static inline void sidt(struct gdtr *gdtr_addr)
+static inline void sidt(struct idtr *idtr_addr)
 {
 	asm volatile("sidt (%rdi)\n");
 }
@@ -161,9 +161,9 @@ static inline void ltr(u16 selector)
 	asm volatile("ltr %di\n");
 }
 
-static inline void str(u16 selector)
+static inline u16 str()
 {
-	asm volatile("str %di\n");
+	asm volatile("str %ax\n");
 }
 
 struct long_jmp_64_desc {
@@ -213,6 +213,37 @@ static inline void load_ss(u16 selector)
 {
 	asm volatile("movw %di, %ss\n\t");
 }
+
+static inline u16 save_cs()
+{
+	asm volatile("movw %cs, %ax\n\t");
+}
+
+static inline u16 save_ds()
+{
+	asm volatile("movw %ds, %ax\n\t");
+}
+
+static inline u16 save_es()
+{
+	asm volatile("movw %es, %ax\n\t");
+}
+
+static inline u16 save_fs()
+{
+	asm volatile("movw %fs, %ax\n\t");
+}
+
+static inline u16 save_gs()
+{
+	asm volatile("movw %gs, %ax\n\t");
+}
+
+static inline u16 save_ss()
+{
+	asm volatile("movw %ss, %ax\n\t");
+}
+
 
 
 #endif

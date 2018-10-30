@@ -27,6 +27,9 @@
  *
  */
 #include <types.h>
+#include <msr.h>
+#include <segment.h>
+#include <cr.h>
 
 /*
  * Definitions of Primary Processor-Based VM-Execution Controls.
@@ -596,8 +599,8 @@ static inline void vmptr_store(u64 *paddr)
 
 static inline void vmclear(u64 paddr)
 {
-	asm volatile("vmclear (%1)"
-		::"m"(&paddr), "m"(paddr)
+	asm volatile("vmclear (%%rax)"
+		::"a"(&paddr), "m"(paddr)
 		);
 }
 
@@ -608,6 +611,7 @@ static inline u64 vmcs_read(u64 field)
 	asm volatile("vmread %%rdi, %%rax\n\t"
 		:"=a"(ret):"rdi"(field)
 		);
+	return ret;
 }
 
 static inline void vmcs_write(u64 field, u64 value)
@@ -617,4 +621,8 @@ static inline void vmcs_write(u64 field, u64 value)
 		);
 }
 
+int vm_launch(void *host_reg, void *guest_reg);
+int vm_resume(void *host_reg, void *guest_reg);
+
+int vm_run(struct vmx_vcpu *vcpu);
 #endif

@@ -427,6 +427,7 @@ void arch_init()
 
 	if (is_bsp()) {
 		start_kernel();
+		vm_init_test();
 		//instruction_test();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
@@ -435,7 +436,6 @@ void arch_init()
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
 	}
-	vm_init_test();
 
 	asm("sti");
 	asm("hlt");
