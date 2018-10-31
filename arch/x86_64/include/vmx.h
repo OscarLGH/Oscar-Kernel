@@ -393,8 +393,11 @@ enum vmcs_field {
 #define VMX_SEGMENT_AR_L_MASK (1 << 13)
 
 #define VMX_AR_TYPE_ACCESSES_MASK 1
-#define VMX_AR_TYPE_READABLE_MASK (1 << 1)
-#define VMX_AR_TYPE_WRITEABLE_MASK (1 << 2)
+#define VMX_AR_TYPE_READABLE_CODE_MASK (1 << 1)
+#define VMX_AR_TYPE_WRITABLE_DATA_MASK (1 << 1)
+#define VMX_AR_TYPE_CONFORMING_MASK (1 << 2)
+#define VMX_AR_TYPE_EXPAND_DOWN_MASK (1 << 2)
+
 #define VMX_AR_TYPE_CODE_MASK (1 << 3)
 #define VMX_AR_TYPE_MASK 0x0f
 #define VMX_AR_TYPE_BUSY_64_TSS 11
@@ -541,33 +544,87 @@ struct vmcs {
 	char data[0];
 };
 
+struct general_regs {
+	u64 rax;
+	u64 rbx;
+	u64 rcx;
+	u64 rdx;
+	u64 rsi;
+	u64 rdi;
+	u64 rsp;
+	u64 rbp;
+	u64 r8;
+	u64 r9;
+	u64 r10;
+	u64 r11;
+	u64 r12;
+	u64 r13;
+	u64 r14;
+	u64 r15;
+}; 
+
+struct fpu_regs {
+	void *xsave;
+};
+
+struct segment {
+	u64 selector;
+	u64 base;
+	u64 limit;
+	u64 ar_bytes;
+}; 
+
+
 struct vmx_vcpu {
+	u64 state;
 	struct vmcs *vmxon_region;
 	u64 vmxon_region_phys;
 	struct vmcs *vmcs;
 	u64 vmcs_phys;
+	u64 *io_bitmap_a;
+	u64 *io_bitmap_b;
+	u64 *vapic_page;
+	u64 *msr_bitmap;
+	u64 *eptp_base;
+
 	struct list_head list;
-	struct gr_regs {
-		u64 rax;
-		u64 rbx;
-		u64 rcx;
-		u64 rdx;
-		u64 rsi;
-		u64 rdi;
-		u64 rsp;
-		u64 rbp;
-		u64 r8;
-		u64 r9;
-		u64 r10;
-		u64 r11;
-		u64 r12;
-		u64 r13;
-		u64 r14;
-		u64 r15;
-	} host_regs, guest_regs;
-	struct fpu_regs {
-		void *xsave;
-	} host_fpu, guest_fpu;
+
+	struct host_state {
+		struct general_regs gr_regs;
+		struct fpu_regs fp_regs;
+		u64 *msr;
+	} host_state;
+
+	struct guest_state {
+		u64 rip;
+		u64 rflags;
+		struct general_regs gr_regs;
+		struct fpu_regs fp_regs;
+		struct segment cs, ds, es, fs, gs, ss, tr, ldtr;
+		u64 cr0;
+		u64 cr2;
+		u64 cr3;
+		u64 cr4;
+		u64 cr8;
+
+		u64 dr0;
+		u64 dr1;
+		u64 dr2;
+		u64 dr3;
+		u64 dr4;
+		u64 dr5;
+		u64 dr6;
+		u64 dr7;
+		
+		struct gdtr gdtr;
+		struct idtr idtr;
+
+		u64 *msr;
+		u64 pdpte0;
+		u64 pdpte1;
+		u64 pdpte2;
+		u64 pdpte3;
+	} guest_state;
 };
 
 
@@ -617,7 +674,7 @@ static inline u64 vmcs_read(u64 field)
 static inline void vmcs_write(u64 field, u64 value)
 {
 	asm volatile("vmwrite %%rsi, %%rdi\n\t"
-		::"rsi"(field), "rdi"(value)
+		::"rdi"(field), "rsi"(value)
 		);
 }
 
