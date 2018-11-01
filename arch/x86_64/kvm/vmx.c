@@ -6,6 +6,8 @@
 #include <kernel.h>
 #include <string.h>
 #include <mm.h>
+#include <math.h>
+#include <list.h>
 
 int vmx_enable()
 {
@@ -40,7 +42,8 @@ struct vmx_vcpu *vmx_preinit()
 {
 	int ret;
 	struct vmx_vcpu *vcpu_ptr = bootmem_alloc(sizeof(*vcpu_ptr));
-	//memset(vcpu_ptr, 0, sizeof(*vcpu_ptr));
+	memset(vcpu_ptr, 0, sizeof(*vcpu_ptr));
+	INIT_LIST_HEAD(&vcpu_ptr->guest_memory_list);
 	vcpu_ptr->vmxon_region = bootmem_alloc(0x1000);
 	memset(vcpu_ptr->vmxon_region, 0, 0x1000);
 	vcpu_ptr->vmxon_region_phys = VIRT2PHYS(vcpu_ptr->vmxon_region);
@@ -64,12 +67,19 @@ struct vmx_vcpu *vmx_preinit()
 int vmx_init(struct vmx_vcpu * vcpu)
 {
 	vcpu->vapic_page = bootmem_alloc(0x1000);
+	memset(vcpu->vapic_page, 0, 0x1000);
 	vcpu->io_bitmap_a = bootmem_alloc(0x1000);
+	memset(vcpu->io_bitmap_a, 0, 0x1000);
 	vcpu->io_bitmap_b = bootmem_alloc(0x1000);
+	memset(vcpu->io_bitmap_b, 0, 0x1000);
 	vcpu->msr_bitmap = bootmem_alloc(0x1000);
-	vcpu->eptp_base = bootmem_alloc(0x200000);
+	memset(vcpu->msr_bitmap, 0, 0x1000);
+	vcpu->eptp_base = bootmem_alloc(0x1000);
+	memset(vcpu->eptp_base, 0, 0x1000);
 	vcpu->host_state.msr = bootmem_alloc(0x1000);
+	memset(vcpu->host_state.msr, 0, 0x1000);
 	vcpu->guest_state.msr = bootmem_alloc(0x1000);
+	memset(vcpu->guest_state.msr, 0, 0x1000);
 
 	return 0;
 }
@@ -130,8 +140,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		pin_based_vm_exec_ctrl &= pin_based_allow1_mask;
 	}
 	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrl);
-	printk("PIN_BASED_VM_EXEC_CONTROL:%x\n", vmcs_read(PIN_BASED_VM_EXEC_CONTROL));
-
 	cpu_based_vm_exec_ctrl = CPU_BASED_FIXED_ONES
 		| CPU_BASED_ACTIVATE_SECONDARY_CONTROLS
 		| CPU_BASED_USE_IO_BITMAPS
@@ -146,7 +154,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		cpu_based_vm_exec_ctrl &= cpu_based_allow1_mask;
 	}
 	vmcs_write(CPU_BASED_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrl);
-	printk("CPU_BASED_VM_EXEC_CONTROL:%x\n", vmcs_read(CPU_BASED_VM_EXEC_CONTROL));
 
 	cpu_based_vm_exec_ctrl2 = SECONDARY_EXEC_UNRESTRICTED_GUEST
 		| SECONDARY_EXEC_ENABLE_EPT
@@ -161,7 +168,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		cpu_based_vm_exec_ctrl2 &= cpu_based2_allow1_mask;
 	}
 	vmcs_write(SECONDARY_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrl2);
-	printk("SECONDARY_VM_EXEC_CONTROL:%x\n", vmcs_read(SECONDARY_VM_EXEC_CONTROL));
 
 	vm_entry_ctrl = VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR
 		| VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL
@@ -173,7 +179,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		vm_entry_ctrl &= vm_entry_allow1_mask;
 	}
 	vmcs_write(VM_ENTRY_CONTROLS, vm_entry_ctrl);
-	printk("VM_ENTRY_CTRLS:%x\n", vmcs_read(VM_ENTRY_CONTROLS));
 
 	vm_exit_ctrl = VM_EXIT_ALWAYSON_WITHOUT_TRUE_MSR
 		| VM_EXIT_SAVE_IA32_EFER
@@ -188,7 +193,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		vm_exit_ctrl &= vm_exit_allow1_mask;
 	}
 	vmcs_write(VM_EXIT_CONTROLS, vm_exit_ctrl);
-	printk("VM_EXIT_CTRLS:%x\n", vmcs_read(VM_EXIT_CONTROLS));
 
 	return 0;
 }
@@ -321,96 +325,153 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 	vmcs_write(GUEST_BNDCFGS, 0);
 
 	vmcs_write(VMCS_LINK_POINTER, 0xffffffffffffffff);
+
+	vmcs_write(APIC_ACCESS_ADDR, 0xfee00000);
 	return 0;
 }
 
 int vmx_run(struct vmx_vcpu *vcpu)
-{
-	
+{	
 	return vm_launch(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
-
-	/*
-	asm volatile("mov %0, %%rax\n\t"
-		"movq %%rax, 0x0(%%rax)\n\t"
-		"movq %%rbx, 0x8(%%rax)\n\t"
-		"movq %%rcx, 0x10(%%rax)\n\t"
-		"movq %%rdx, 0x18(%%rax)\n\t"
-		"movq %%rsi, 0x20(%%rax)\n\t"
-		"movq %%rdi, 0x28(%%rax)\n\t"
-		//"movq %%rsp, 0x30(%%rax)\n\t"
-		"movq %%rbp, 0x38(%%rax)\n\t"
-		"movq %%r8, 0x40(%%rax)\n\t"
-		"movq %%r9, 0x48(%%rax)\n\t"
-		"movq %%r10, 0x50(%%rax)\n\t"
-		"movq %%r11, 0x58(%%rax)\n\t"
-		"movq %%r12, 0x60(%%rax)\n\t"
-		"movq %%r13, 0x68(%%rax)\n\t"
-		"movq %%r14, 0x70(%%rax)\n\t"
-		"movq %%r15, 0x78(%%rax)\n\t"
-
-		"movq %0, %%r15\n\t"
-		"movq 0x0(%%r15), %%rax\n\t"
-		"movq 0x8(%%r15), %%rbx\n\t"
-		"movq 0x10(%%r15), %%rcx\n\t"
-		"movq 0x18(%%r15), %%rdx\n\t"
-		"movq 0x20(%%r15), %%rsi\n\t"
-		"movq 0x28(%%r15), %%rdi\n\t"
-		//"movq 0x30(%%r15), %%rsp\n\t"
-		"movq 0x38(%%r15), %%rbp\n\t"
-		"movq 0x40(%%r15), %%r8\n\t"
-		"movq 0x48(%%r15), %%r9\n\t"
-		"movq 0x50(%%r15), %%r10\n\t"
-		"movq 0x58(%%r15), %%r11\n\t"
-		"movq 0x60(%%r15), %%r12\n\t"
-		"movq 0x68(%%r15), %%r13\n\t"
-		"movq 0x70(%%r15), %%r14\n\t"
-		"movq 0x78(%%r15), %%r15\n\t"
-		//"vmlaunch\n\t"
-		"vm_exit:\n\t"
-		
-		"pushq %%rax\n\t"
-		"movq %1, %%rax\n\t"
-		"movq %%rax, 0x0(%%rax)\n\t"
-		"movq %%rbx, 0x8(%%rax)\n\t"
-		"movq %%rcx, 0x10(%%rax)\n\t"
-		"movq %%rdx, 0x18(%%rax)\n\t"
-		"movq %%rsi, 0x20(%%rax)\n\t"
-		"movq %%rdi, 0x28(%%rax)\n\t"
-		//"movq %%rsp, 0x30(%%rax)\n\t"
-		"movq %%rbp, 0x38(%%rax)\n\t"
-		"movq %%r8, 0x40(%%rax)\n\t"
-		"movq %%r9, 0x48(%%rax)\n\t"
-		"movq %%r10, 0x50(%%rax)\n\t"
-		"movq %%r11, 0x58(%%rax)\n\t"
-		"movq %%r12, 0x60(%%rax)\n\t"
-		"movq %%r13, 0x68(%%rax)\n\t"
-		"movq %%r14, 0x70(%%rax)\n\t"
-		"movq %%r15, 0x78(%%rax)\n\t"
-		"popq %%rax\n\t"
-		"movq %1, %%rbx\n\t"
-		"movq %%rax, 0x0(%%rbx)\n\t"
-		
-		"movq %0, %%r15\n\t"
-		"movq 0x0(%%r15), %%rax\n\t"
-		"movq 0x8(%%r15), %%rbx\n\t"
-		"movq 0x10(%%r15), %%rcx\n\t"
-		"movq 0x18(%%r15), %%rdx\n\t"
-		"movq 0x20(%%r15), %%rsi\n\t"
-		"movq 0x28(%%r15), %%rdi\n\t"
-		//"movq 0x30(%%r15), %%rsp\n\t"
-		"movq 0x38(%%r15), %%rbp\n\t"
-		"movq 0x40(%%r15), %%r8\n\t"
-		"movq 0x48(%%r15), %%r9\n\t"
-		"movq 0x50(%%r15), %%r10\n\t"
-		"movq 0x58(%%r15), %%r11\n\t"
-		"movq 0x60(%%r15), %%r12\n\t"
-		"movq 0x68(%%r15), %%r13\n\t"
-		"movq 0x70(%%r15), %%r14\n\t"
-		"movq 0x78(%%r15), %%r15\n\t"
-		::"r"(&vcpu->host_regs), "r"(&vcpu->guest_regs)
-	);
-	*/
 }
+
+int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 attribute)
+{
+	//printk("ept map:gpa = %x hpa = %x page_size = %x\n", gpa, hpa, page_size);
+	u64 index1, index2, index3, index4, offset_1g, offset_2m, offset_4k;
+	u64 *pml4t, *pdpt, *pdt, *pt;
+	u64 pml4e, pdpte, pde, pte;
+	u64 pml4e_attr, pdpte_attr, pde_attr, pte_attr;
+	u64 *virt;
+	pml4e_attr = EPT_PML4E_READ | EPT_PML4E_WRITE | EPT_PML4E_EXECUTE | EPT_PML4E_ACCESS_FLAG;
+	pdpte_attr = EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_ACCESS_FLAG;
+	pde_attr = EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_ACCESS_FLAG;
+	pte_attr = EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_ACCESS_FLAG;
+	pml4t = (u64 *)vcpu->eptp_base;
+
+	index1 = (gpa >> 39) & 0x1ff;
+	index2 = (gpa >> 30) & 0x1ff;
+	index3 = (gpa >> 21) & 0x1ff;
+	index4 = (gpa >> 12) & 0x1ff;
+	offset_1g = gpa & ((1 << 30) - 1);
+	offset_2m = gpa & ((1 << 21) - 1);
+	offset_4k = gpa & ((1 << 12) - 1);
+
+	pml4e = pml4t[index1];
+	if (pml4e == 0) {
+		virt = bootmem_alloc(0x1000);
+		memset(virt, 0, 0x1000);
+		pml4t[index1] = VIRT2PHYS(virt) | pml4e_attr;
+	}
+
+	pdpt = (u64 *)(PHYS2VIRT(pml4t[index1] & ~0xfffULL));
+	pdpte = pdpt[index2];
+
+	if (page_size == 0x40000000) {
+		pdpt[index2] = hpa | attribute | EPT_PDPTE_1GB_PAGE;
+		return 0;
+	}
+
+	if (pdpte == 0) {
+		virt = bootmem_alloc(0x1000);
+		memset(virt, 0, 0x1000);
+		pdpt[index2] = VIRT2PHYS(virt) | pdpte_attr;
+	}
+
+	
+
+	pdt = (u64 *)(PHYS2VIRT(pdpt[index2] & ~0xfffULL));
+	pde = pdt[index3];
+
+	if (page_size == 0x200000) {
+		pdt[index3] = hpa | attribute | EPT_PDE_2MB_PAGE;
+		return 0;
+	}
+
+	if (pde == 0) {
+		virt = bootmem_alloc(0x1000);
+		memset(virt, 0, 0x1000);
+		pdt[index3] = VIRT2PHYS(virt) | pde_attr;
+	}
+
+	pt = (u64 *)(PHYS2VIRT(pdt[index3] & ~0xfffULL));
+	pte = pdt[index4];
+
+	if (page_size == 0x1000) {
+		pt[index4] = hpa | attribute;
+		return 0;
+	}
+	
+	return 0;
+}
+
+int map_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 len, u64 attr)
+{
+	u64 page_size;
+	s64 remain_len = len;
+	while (remain_len > 0) {
+		//if (remain_len >= 0x40000000) {
+		//	ept_map_page(vcpu, gpa, hpa, 0x40000000, attr);
+		//	remain_len -= 0x40000000;
+		//	gpa += 0x40000000;
+		//	hpa += 0x40000000;
+		//} else if (remain_len >= 0x200000) {
+		//	ept_map_page(vcpu, gpa, hpa, 0x200000, attr);
+		//	remain_len -= 0x200000;
+		//	gpa += 0x200000;
+		//	hpa += 0x200000;
+		//} else {
+			ept_map_page(vcpu, gpa, hpa, 0x1000, attr);
+			remain_len -= 0x1000;
+			gpa += 0x1000;
+			hpa += 0x1000;
+		//}
+	}
+}
+
+int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
+{
+	u64 hpa;
+	u64 *virt;
+	struct guest_memory_zone *zone = bootmem_alloc(sizeof(*zone));
+	memset(zone, 0, sizeof(*zone));
+	size = roundup(size, 0x1000);
+	virt = bootmem_alloc(size);
+	hpa = VIRT2PHYS(virt);
+	zone->hpa = hpa;
+	zone->page_nr = size / 0x1000;
+	zone->gpa = gpa;
+	printk("hpa = %x\n", hpa);
+	map_guest_memory(vcpu, gpa, hpa, size, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
+	list_add_tail(&zone->list, &vcpu->guest_memory_list);
+	return 0;
+}
+
+int read_guest_memory_gpa(struct vmx_vcpu *vcpu, u64 gpa, u64 size, void *buffer)
+{
+	struct guest_memory_zone *zone; 
+	list_for_each_entry(zone, &vcpu->guest_memory_list, list) {
+		if (gpa >= zone->gpa && gpa < zone->gpa + zone->page_nr * 0x1000) {
+			memcpy(buffer, (void *)PHYS2VIRT(zone->hpa + gpa - zone->gpa), size);
+			return 0;
+		}
+	}
+	return -1;
+}
+
+int write_guest_memory_gpa(struct vmx_vcpu *vcpu, u64 gpa, u64 size, void *buffer)
+{
+	struct guest_memory_zone *zone; 
+	list_for_each_entry(zone, &vcpu->guest_memory_list, list) {
+		if (gpa >= zone->gpa && gpa < zone->gpa + zone->page_nr * 0x1000) {
+			memcpy((void *)PHYS2VIRT(zone->hpa + gpa - zone->gpa), buffer, size);
+			return 0;
+		}
+	}
+	return -1;
+}
+
+
 
 int vm_exit_handler(struct vmx_vcpu *vcpu)
 {
@@ -419,12 +480,14 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	printk("vm_exit reason:%d\n", exit_reason);
 	printk("vm instruction error:%d\n", instruction_error);
 	printk("Exit qualification:%x\n", vmcs_read(EXIT_QUALIFICATION));
+	printk("Guest RIP:%x\n", vmcs_read(GUEST_RIP));
+	printk("GPA:%x\n", vmcs_read(GUEST_PHYSICAL_ADDRESS));
 }
 
 void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 {
-	vcpu->guest_state.cs.selector = 0xf000;
-	vcpu->guest_state.cs.base = 0xffff0000;
+	vcpu->guest_state.cs.selector = 0;
+	vcpu->guest_state.cs.base = 0;
 	vcpu->guest_state.cs.limit = 0xffff;
 	vcpu->guest_state.cs.ar_bytes = VMX_AR_P_MASK 
 		| VMX_AR_TYPE_READABLE_CODE_MASK 
@@ -496,7 +559,7 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.pdpte2 = 0;
 	vcpu->guest_state.pdpte3 = 0;
 
-	vcpu->guest_state.rip = 0xfff0;
+	vcpu->guest_state.rip = 0;
 	vcpu->guest_state.rflags = BIT1;
 	vcpu->guest_state.gr_regs.rsp = 0;
 }
@@ -504,13 +567,22 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 void vm_init_test()
 {
 	int ret;
+	u8 buf[4];
+	extern u64 test_guest, test_guest_end;
 	struct vmx_vcpu *vcpu = vmx_preinit();
 	vmx_init(vcpu);
 	vmx_set_ctrl_state(vcpu);
 	vmx_set_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
+	alloc_guest_memory(vcpu, 0, 0x1000000);
+	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
+	write_guest_memory_gpa(vcpu, 0, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
+	u8 *ptr = (u8 *)&test_guest;
+	printk("%02x %02x %02x %02x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
+	read_guest_memory_gpa(vcpu, 0, 4, buf);
+	printk("%02x %02x %02x %02x\n", buf[0], buf[1], buf[2], buf[3]);
 	vmx_set_guest_state(vcpu);
 	ret = vmx_run(vcpu);
-	printk("vm-exit.ret = %d\n", -1);
+	printk("vm-exit.ret = %d\n", ret);
 	vm_exit_handler(vcpu);
 }

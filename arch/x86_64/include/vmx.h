@@ -572,7 +572,15 @@ struct segment {
 	u64 base;
 	u64 limit;
 	u64 ar_bytes;
-}; 
+};
+
+struct guest_memory_zone {
+	u64 gpa;
+	u64 hpa;
+	u64 page_nr;
+	u64 attributes;
+	struct list_head list;
+};
 
 
 struct vmx_vcpu {
@@ -625,6 +633,8 @@ struct vmx_vcpu {
 		u64 pdpte2;
 		u64 pdpte3;
 	} guest_state;
+
+	struct list_head guest_memory_list;
 };
 
 
