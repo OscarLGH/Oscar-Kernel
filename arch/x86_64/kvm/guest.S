@@ -13,6 +13,10 @@ test_guest:
 
 	cpuid
 
+	vmcall
+
+	mov %cr0, %eax
+
 	jmp test_guest
 test_guest_end:
 	nop
