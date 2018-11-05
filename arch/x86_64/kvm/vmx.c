@@ -194,6 +194,10 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	}
 	vmcs_write(VM_EXIT_CONTROLS, vm_exit_ctrl);
 
+	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
+	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
+	vmcs_write(EXCEPTION_BITMAP, 0xffffffff);
+
 	return 0;
 }
 
@@ -477,9 +481,12 @@ int vmx_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
 int vmx_handle_exception(struct vmx_vcpu *vcpu)
 {
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	u64 vector = vmcs_read(VM_EXIT_INTR_INFO);
+	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
 	u64 err_code = vmcs_read(VM_EXIT_INTR_ERROR_CODE);
-	printk("VM-Exit:Guest exception (%d).error code:%x\n", vector, err_code);
+	printk("VM-Exit:Guest exception (%d).type:%d error code:%x\n", 
+		interruption_info & 0xff,
+		(interruption_info >> 8) & 0x7,
+		err_code);
 	return 0;
 }
 
@@ -539,7 +546,7 @@ static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
 	u64 efer = vmcs_read(GUEST_IA32_EFER);
 	u64 cr0 = vmcs_read(GUEST_CR0);
 	u64 cr4 = vmcs_read(GUEST_CR4);
-	vmcs_write(GUEST_CR0, cr0 | CR0_PE);
+	vmcs_write(GUEST_CR0, cr0 | CR0_PE | CR0_PG);
 	vmcs_write(GUEST_CR4, cr4 | CR4_PAE);
 	vmcs_write(GUEST_TR_AR_BYTES, VMX_AR_P_MASK | VMX_AR_TYPE_BUSY_64_TSS);
 	vmcs_write(VM_ENTRY_CONTROLS,
@@ -555,6 +562,7 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 	u64 cr = exit_qualification & 0xf;
 	printk("VM-Exit:CR%d %s.\n", cr, access_type ? "read" : "write");
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	vmx_enter_longmode(vcpu);
 	return 0;
 }
 
@@ -621,6 +629,34 @@ int vmx_handle_io(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
+int vmx_handle_xsetbv(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:xsetbv.\n");
+	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_xsaves(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:xsave.\n");
+	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_xrstors(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:xrstore.\n");
+	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+
 int vm_exit_handler(struct vmx_vcpu *vcpu)
 {
 	int ret = 0;
@@ -635,6 +671,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	} else {
 		switch(exit_reason & 0xff) {
 		case EXIT_REASON_EXCEPTION_NMI:
+			ret = vmx_handle_exception(vcpu);
 			break;
 		case EXIT_REASON_EXTERNAL_INTERRUPT:
 			ret = vmx_handle_external_interrupt(vcpu);
@@ -743,6 +780,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_WBINVD:
 			break;
 		case EXIT_REASON_XSETBV:
+			ret = vmx_handle_xsetbv(vcpu);
 			break;
 		case EXIT_REASON_APIC_WRITE:
 			break;
@@ -759,8 +797,10 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_PML_FULL:
 			break;
 		case EXIT_REASON_XSAVES:
+			ret = vmx_handle_xsaves(vcpu);
 			break;
 		case EXIT_REASON_XRSTORS:
+			ret = vmx_handle_xrstors(vcpu);
 			break;
 		default:
 			printk("VM-Exit:Enhandled exit reason:%d\n", exit_reason & 0xff);
@@ -847,7 +887,7 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.pdpte2 = 0;
 	vcpu->guest_state.pdpte3 = 0;
 
-	vcpu->guest_state.rip = 0;
+	vcpu->guest_state.rip = 0x7c00;
 	vcpu->guest_state.rflags = BIT1;
 	vcpu->guest_state.gr_regs.rsp = 0;
 }
@@ -881,7 +921,7 @@ void vm_init_test()
 {
 	int ret;
 	u8 buf[4];
-	extern u64 test_guest, test_guest_end;
+	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
 	struct vmx_vcpu *vcpu = vmx_preinit();
 	vmx_init(vcpu);
 	vmx_set_ctrl_state(vcpu);
@@ -889,7 +929,7 @@ void vm_init_test()
 	vmx_set_bist_state(vcpu);
 	alloc_guest_memory(vcpu, 0, 0x1000000);
 	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
-	write_guest_memory_gpa(vcpu, 0, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
+	write_guest_memory_gpa(vcpu, 0x7c00, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
 	u8 *ptr = (u8 *)&test_guest;
 	printk("%02x %02x %02x %02x\n", ptr[0], ptr[1], ptr[2], ptr[3]);
 	read_guest_memory_gpa(vcpu, 0, 4, buf);
