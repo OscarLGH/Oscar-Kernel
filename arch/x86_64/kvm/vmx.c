@@ -541,6 +541,72 @@ int vmx_handle_vmcall(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
+int vmx_handle_vmxon(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMXON.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_vmxoff(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMXOFF.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+
+int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMCLEAR.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+
+int vmx_handle_vmlaunch(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMLAUNCH.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_vmresume(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMRESUME.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMPTRLD.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMPTRST.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_vmread(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMREAD.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:VMWRITE.\n");
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+
 static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
 {
 	u64 efer = vmcs_read(GUEST_IA32_EFER);
@@ -705,22 +771,31 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 			ret = vmx_handle_vmcall(vcpu);
 			break;
 		case EXIT_REASON_VMCLEAR:
+			ret = vmx_handle_vmclear(vcpu);
 			break;
 		case EXIT_REASON_VMLAUNCH:
+			ret = vmx_handle_vmlaunch(vcpu);
 			break;
 		case EXIT_REASON_VMPTRLD:
+			ret = vmx_handle_vmptrld(vcpu);
 			break;
 		case EXIT_REASON_VMPTRST:
+			ret = vmx_handle_vmptrst(vcpu);
 			break;
 		case EXIT_REASON_VMREAD:
+			ret = vmx_handle_vmread(vcpu);
 			break;
 		case EXIT_REASON_VMRESUME:
+			ret = vmx_handle_vmresume(vcpu);
 			break;
 		case EXIT_REASON_VMWRITE:
+			ret = vmx_handle_vmwrite(vcpu);
 			break;
 		case EXIT_REASON_VMOFF:
+			ret = vmx_handle_vmxoff(vcpu);
 			break;
 		case EXIT_REASON_VMON:
+			ret = vmx_handle_vmxon(vcpu);
 			break;
 		case EXIT_REASON_CR_ACCESS:
 			vmx_handle_cr_access(vcpu);
