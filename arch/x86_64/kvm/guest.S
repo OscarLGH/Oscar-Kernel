@@ -95,6 +95,9 @@ guest_entry_64:
 	bts $18, %rax
 	movq %rax, %cr4
 
+	movq $0x0, %rcx
+	movabsq $0x55aaaa5512345678, %rax
+	movabsq $0x1234567887654321, %rdx
 	xsetbv
 	hlt
 

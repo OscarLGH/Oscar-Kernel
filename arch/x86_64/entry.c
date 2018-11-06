@@ -198,7 +198,7 @@ void map_kernel_memory()
 	if (kernel_pt_phys != 0)
 		write_cr3(kernel_pt_phys);
 	else
-		printk("kerneel_pt_phys = 0!\n");
+		printk("kernel_pt_phys = 0!\n");
 }
 
 void wakeup_all_processors()
@@ -312,7 +312,7 @@ void enable_cpu_features()
 		printk("SSSE3 ");
 	}
 
-	if (features1 & BIT27) {
+	if (features1 & BIT26) {
 		printk("OSXSAVE ");
 		cr4 |= CR4_OSXSAVE;
 		xcr0 |= XCR0_X87;
@@ -403,7 +403,7 @@ void arch_init()
 	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
 	cpu_id = buffer[7];
 
-	//enable_cpu_features();
+	enable_cpu_features();
 
 	cpu_sync_bitmap1[cpu_id] = 1;
 

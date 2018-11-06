@@ -624,6 +624,7 @@ struct general_regs {
 }; 
 
 struct fpu_regs {
+	u64 xcr0;
 	void *xsave;
 };
 

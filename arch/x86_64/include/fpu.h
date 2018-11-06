@@ -15,7 +15,7 @@
 static inline u64 xgetbv(u32 xcr_index)
 {
 	u64 low, high;
-	asm volatile("xgetbv\n"
+	asm volatile("xgetbv\n\t"
 				: "=a"(low), "=d"(high) : "c"(xcr_index)
 		);
 	return low | (high << 32);
@@ -24,7 +24,7 @@ static inline u64 xgetbv(u32 xcr_index)
 static inline void xsetbv(u32 xcr_index, u64 value)
 {
 	u64 low = value, high = (value >> 32);
-	asm volatile("xsetbv\n"
+	asm volatile("xsetbv\n\t"
 				: :"c"(xcr_index), "a"(low), "d"(high)
 		);
 }

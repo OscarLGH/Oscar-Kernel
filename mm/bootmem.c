@@ -148,6 +148,8 @@ void bootmem_init()
 	struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
 	for (int i = 0; i < boot_parm->ardc_cnt; i++) {
 		if (boot_parm->ardc_array[i].type == 1) {
+			if (boot_parm->ardc_array[i].base + boot_parm->ardc_array[i].length > 0x1000000000)
+				continue;
 			clear_bootmem_bitmap_area(boot_parm->ardc_array[i].base, boot_parm->ardc_array[i].length);
 		}
 	}

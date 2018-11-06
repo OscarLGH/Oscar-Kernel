@@ -8,6 +8,7 @@
 #include <mm.h>
 #include <math.h>
 #include <list.h>
+#include <fpu.h>
 
 int vmx_enable()
 {
@@ -201,7 +202,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
-int vmx_set_host_state(struct vmx_vcpu *vcpu)
+int vmx_save_host_state(struct vmx_vcpu *vcpu)
 {
 	struct gdtr host_gdtr;
 	struct idtr host_idtr;
@@ -238,6 +239,10 @@ int vmx_set_host_state(struct vmx_vcpu *vcpu)
 		:"=r"(host_rsp):);
 	vmcs_write(HOST_RSP, host_rsp + 8);
 	vmcs_write(HOST_RIP, (u64)vm_exit);
+
+	vcpu->host_state.fp_regs.xcr0 = xgetbv(0);
+
+	/*TODO: save host FPU states...*/
 
 	return 0;
 }
@@ -331,6 +336,15 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 	vmcs_write(VMCS_LINK_POINTER, 0xffffffffffffffff);
 
 	vmcs_write(APIC_ACCESS_ADDR, 0xfee00000);
+
+	xsetbv(0, vcpu->guest_state.fp_regs.xcr0);
+	return 0;
+}
+
+int vmx_resume_host_state(struct vmx_vcpu *vcpu)
+{
+	xsetbv(0, vcpu->host_state.fp_regs.xcr0);
+	/* TODO: Load host fpu regs...*/
 	return 0;
 }
 
@@ -698,6 +712,11 @@ int vmx_handle_io(struct vmx_vcpu *vcpu)
 int vmx_handle_xsetbv(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:xsetbv.\n");
+	printk("index(ecx) = 0x%x, eax = 0x%x, edx = 0x%x\n", 
+		vcpu->guest_state.gr_regs.rcx,
+		vcpu->guest_state.gr_regs.rax,
+		vcpu->guest_state.gr_regs.rdx
+		);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -729,8 +748,9 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	u32 exit_reason = vmcs_read(VM_EXIT_REASON);
 	u32 instruction_error = vmcs_read(VM_INSTRUCTION_ERROR);
 	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
+	vcpu->guest_state.gr_regs.rsp = vmcs_read(GUEST_RSP);
 	printk("vm_exit reason:%d\n", exit_reason);
-	printk("Guest RIP:%x\n", vmcs_read(GUEST_RIP));
+	printk("Guest RIP:%x\n", vcpu->guest_state.rip);
 	if (exit_reason & 0x80000000) {
 		printk("vm entry failed.\n");
 		vmx_handle_vm_entry_failed(vcpu);
@@ -798,17 +818,17 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 			ret = vmx_handle_vmxon(vcpu);
 			break;
 		case EXIT_REASON_CR_ACCESS:
-			vmx_handle_cr_access(vcpu);
+			ret = vmx_handle_cr_access(vcpu);
 			break;
 		case EXIT_REASON_DR_ACCESS:
 			break;
 		case EXIT_REASON_IO_INSTRUCTION:
 			break;
 		case EXIT_REASON_MSR_READ:
-			vmx_handle_rdmsr(vcpu);
+			ret = vmx_handle_rdmsr(vcpu);
 			break;
 		case EXIT_REASON_MSR_WRITE:
-			vmx_handle_wrmsr(vcpu);
+			ret = vmx_handle_wrmsr(vcpu);
 			break;
 		case EXIT_REASON_INVALID_STATE:
 			printk("VM Exit:Invalid Guest State.\n");
@@ -818,7 +838,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_MWAIT_INSTRUCTION:
 			break;
 		case EXIT_REASON_MONITOR_TRAP_FLAG:
-			vmx_handle_mtf(vcpu);
+			ret = vmx_handle_mtf(vcpu);
 			break;
 		case EXIT_REASON_MONITOR_INSTRUCTION:
 			break;
@@ -829,24 +849,24 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_TPR_BELOW_THRESHOLD:
 			break;
 		case EXIT_REASON_APIC_ACCESS:
-			vmx_handle_apic_access(vcpu);
+			ret = vmx_handle_apic_access(vcpu);
 			break;
 		case EXIT_REASON_EOI_INDUCED:
-			vmx_handle_eoi(vcpu);
+			ret = vmx_handle_eoi(vcpu);
 			break;
 		case EXIT_REASON_GDTR_IDTR:
 			break;
 		case EXIT_REASON_LDTR_TR:
 			break;
 		case EXIT_REASON_EPT_VIOLATION:
-			vmx_handle_ept_volation(vcpu);
+			ret = vmx_handle_ept_volation(vcpu);
 			break;
 		case EXIT_REASON_EPT_MISCONFIG:
 			break;
 		case EXIT_REASON_INVEPT:
 			break;
 		case EXIT_REASON_RDTSCP:
-			vmx_handle_rdtscp(vcpu);
+			ret = vmx_handle_rdtscp(vcpu);
 			break;
 		case EXIT_REASON_PREEMPTION_TIMER:
 			break;
@@ -878,11 +898,11 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 			ret = vmx_handle_xrstors(vcpu);
 			break;
 		default:
-			printk("VM-Exit:Enhandled exit reason:%d\n", exit_reason & 0xff);
+			printk("VM-Exit:Unhandled exit reason:%d\n", exit_reason & 0xff);
 			break;
 		}
 	}
-	printk("Next RIP:%x\n", vcpu->guest_state.rip);
+	//printk("Next RIP:%x\n", vcpu->guest_state.rip);
 	vmcs_write(GUEST_RIP, vcpu->guest_state.rip);
 	return ret;
 }
@@ -965,6 +985,8 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.rip = 0x7c00;
 	vcpu->guest_state.rflags = BIT1;
 	vcpu->guest_state.gr_regs.rsp = 0;
+
+	vcpu->guest_state.fp_regs.xcr0 = XCR0_X87;
 }
 
 
@@ -1000,7 +1022,7 @@ void vm_init_test()
 	struct vmx_vcpu *vcpu = vmx_preinit();
 	vmx_init(vcpu);
 	vmx_set_ctrl_state(vcpu);
-	vmx_set_host_state(vcpu);
+	vmx_save_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
 	alloc_guest_memory(vcpu, 0, 0x1000000);
 	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
@@ -1012,5 +1034,4 @@ void vm_init_test()
 	vmx_set_guest_state(vcpu);
 	ret = vmx_run(vcpu);
 	printk("vm-exit.ret = %d\n", ret);
-	vm_exit_handler(vcpu);
 }
