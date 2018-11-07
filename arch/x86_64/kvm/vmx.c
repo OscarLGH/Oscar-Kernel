@@ -79,8 +79,12 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	memset(vcpu->eptp_base, 0, 0x1000);
 	vcpu->host_state.msr = bootmem_alloc(0x1000);
 	memset(vcpu->host_state.msr, 0, 0x1000);
+	vcpu->host_state.fp_regs.fpu_region = bootmem_alloc(0x1000);
+	memset(vcpu->host_state.fp_regs.fpu_region, 0, 0x1000);
 	vcpu->guest_state.msr = bootmem_alloc(0x1000);
 	memset(vcpu->guest_state.msr, 0, 0x1000);
+	vcpu->guest_state.fp_regs.fpu_region = bootmem_alloc(0x1000);
+	memset(vcpu->guest_state.fp_regs.fpu_region, 0, 0x1000);
 
 	return 0;
 }
@@ -240,10 +244,9 @@ int vmx_save_host_state(struct vmx_vcpu *vcpu)
 	vmcs_write(HOST_RSP, host_rsp + 8);
 	vmcs_write(HOST_RIP, (u64)vm_exit);
 
+	/* save host FPU states...*/
 	vcpu->host_state.fp_regs.xcr0 = xgetbv(0);
-
-	/*TODO: save host FPU states...*/
-
+	xsave(vcpu->host_state.fp_regs.fpu_region, vcpu->host_state.fp_regs.xcr0);
 	return 0;
 }
 
@@ -258,8 +261,10 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 
 	cr4 = rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1);
 	vmcs_write(GUEST_CR0, cr0);
+	vmcs_write(CR0_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
 	vmcs_write(GUEST_CR3, vcpu->guest_state.cr3);
 	vmcs_write(GUEST_CR4, cr4);
+	vmcs_write(CR4_READ_SHADOW, vcpu->guest_state.cr4_read_shadow);
 
 	vmcs_write(GUEST_RIP, vcpu->guest_state.rip);
 	vmcs_write(GUEST_RFLAGS, vcpu->guest_state.rflags);
@@ -338,6 +343,7 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 	vmcs_write(APIC_ACCESS_ADDR, 0xfee00000);
 
 	xsetbv(0, vcpu->guest_state.fp_regs.xcr0);
+	xrstor(vcpu->guest_state.fp_regs.fpu_region, vcpu->guest_state.fp_regs.xcr0);
 	return 0;
 }
 
@@ -454,7 +460,6 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 	zone->hpa = hpa;
 	zone->page_nr = size / 0x1000;
 	zone->gpa = gpa;
-	printk("hpa = %x\n", hpa);
 	map_guest_memory(vcpu, gpa, hpa, size, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
 	list_add_tail(&zone->list, &vcpu->guest_memory_list);
 	return 0;
@@ -640,7 +645,68 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	u64 access_type = (exit_qualification >> 4) & 0x3;
 	u64 cr = exit_qualification & 0xf;
-	printk("VM-Exit:CR%d %s.\n", cr, access_type ? "read" : "write");
+	u64 reg = (exit_qualification >> 8) & 0xf;
+	u64 val = 0;
+	switch(reg) {
+		case 0:
+			val = vcpu->guest_state.gr_regs.rax;
+			break;
+		case 1:
+			val = vcpu->guest_state.gr_regs.rcx;
+			break;
+		case 2:
+			val = vcpu->guest_state.gr_regs.rdx;
+			break;
+		case 3:
+			val = vcpu->guest_state.gr_regs.rbx;
+			break;
+		case 4:
+			val = vcpu->guest_state.gr_regs.rsp;
+			break;
+		case 5:
+			val = vcpu->guest_state.gr_regs.rbp;
+			break;
+		case 6:
+			val = vcpu->guest_state.gr_regs.rsi;
+			break;
+		case 7:
+			val = vcpu->guest_state.gr_regs.rdi;
+			break;
+		case 8:
+			val = vcpu->guest_state.gr_regs.r8;
+			break;
+		case 9:
+			val = vcpu->guest_state.gr_regs.r9;
+			break;
+		case 10:
+			val = vcpu->guest_state.gr_regs.r10;
+			break;
+		case 11:
+			val = vcpu->guest_state.gr_regs.r11;
+			break;
+		case 12:
+			val = vcpu->guest_state.gr_regs.r12;
+			break;
+		case 13:
+			val = vcpu->guest_state.gr_regs.r13;
+			break;
+		case 14:
+			val = vcpu->guest_state.gr_regs.r14;
+			break;
+		case 15:
+			val = vcpu->guest_state.gr_regs.r15;
+			break;		
+	}
+	printk("VM-Exit:CR%d %s, val = 0x%x\n", cr, access_type ? "read" : "write", val);
+	if (cr == 0) {
+		vcpu->guest_state.cr0_read_shadow = val;
+		vmcs_write(CR0_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
+	}
+
+	if (cr == 4) {
+		vcpu->guest_state.cr4_read_shadow = val;
+		vmcs_write(CR4_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
+	}
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	vmx_enter_longmode(vcpu);
 	return 0;
@@ -711,12 +777,42 @@ int vmx_handle_io(struct vmx_vcpu *vcpu)
 
 int vmx_handle_xsetbv(struct vmx_vcpu *vcpu)
 {
+	u32 cpuid_regs[4] = {0};
+	u64 xcr0_mask = 0;
+
+	u64 g_cr0 = vmcs_read(GUEST_CR0);
+	u64 cr0_guest_host_mask = vmcs_read(CR0_GUEST_HOST_MASK);
+	u64 cr0_read_shadow = vmcs_read(CR0_READ_SHADOW);
+	u64 cr0 = g_cr0 & (~cr0_guest_host_mask) | (cr0_read_shadow & cr0_read_shadow);
+
+	u64 g_cr4 = vmcs_read(GUEST_CR4);
+	u64 cr4_guest_host_mask = vmcs_read(CR4_GUEST_HOST_MASK);
+	u64 cr4_read_shadow = vmcs_read(CR4_READ_SHADOW);
+	u64 cr4 = g_cr4 & (~cr4_guest_host_mask) | (cr4_read_shadow & cr4_read_shadow);
+
+	u64 index = vcpu->guest_state.gr_regs.rcx;
+	u64 xcr0 = vcpu->guest_state.gr_regs.rax | (vcpu->guest_state.gr_regs.rdx << 32);
+
 	printk("VM-Exit:xsetbv.\n");
 	printk("index(ecx) = 0x%x, eax = 0x%x, edx = 0x%x\n", 
 		vcpu->guest_state.gr_regs.rcx,
 		vcpu->guest_state.gr_regs.rax,
 		vcpu->guest_state.gr_regs.rdx
 		);
+
+	cpuid(0x0000000d, 0x00000000, &cpuid_regs[0]);
+	xcr0_mask = cpuid_regs[0];
+	printk("xsetbv:cr0:0x%x, cr4:0x%x\n", cr0, cr4);
+	if (index != 0 || ((xcr0 | xcr0_mask) != xcr0_mask) || 
+		!(xcr0 & 0x1) || ((xcr0 & 0x6) == 0x4) ||
+		/* TODO: Guest CPL check */
+		!(cr0 & CR0_MP) || !(cr0 & CR0_NE) || (cr0 & CR0_EM) || !(cr4 & CR4_OSXSAVE)) {
+		printk("invalid guest XCR0.\n");
+		/* TODO: inject #GP to guest.*/
+	} else {
+		xsetbv(index, xcr0);
+	}
+
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -977,6 +1073,9 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.cr3 = 0;
 	vcpu->guest_state.cr4 = 0;
 
+	vcpu->guest_state.cr0_read_shadow = vcpu->guest_state.cr0;
+	vcpu->guest_state.cr4_read_shadow = vcpu->guest_state.cr4;
+
 	vcpu->guest_state.pdpte0 = 0;
 	vcpu->guest_state.pdpte1 = 0;
 	vcpu->guest_state.pdpte2 = 0;
@@ -1019,6 +1118,9 @@ void vm_init_test()
 	int ret;
 	u8 buf[4];
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
+	u32 reg[4];
+	cpuid(0xd, 0x2, reg);
+	printk("AVX XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
 	struct vmx_vcpu *vcpu = vmx_preinit();
 	vmx_init(vcpu);
 	vmx_set_ctrl_state(vcpu);

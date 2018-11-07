@@ -95,11 +95,37 @@ guest_entry_64:
 	bts $18, %rax
 	movq %rax, %cr4
 
-	movq $0x0, %rcx
-	movabsq $0x55aaaa5512345678, %rax
-	movabsq $0x1234567887654321, %rdx
+	movq %cr0, %rax
+	bts $1, %rax
+	bts $5, %rax
+	btr $2, %rax
+	movq %rax, %cr0
+
+	movq %cr4, %rax
+	bts $18, %rax
+	movq %rax, %cr4
+
+	movl $0x7, %eax
+	movl $0, %edx
+	movl $0, %ecx
 	xsetbv
-	hlt
+
+	mov $0x180000, %rbx
+	movabsq $0x55aaaa5512345678, %rax
+	movq %rax, 0x0(%rbx)
+	movabsq $0x55aaaa5522345678, %rax
+	movq %rax, 0x8(%rbx)
+	movabsq $0x55aaaa5532345678, %rax
+	movq %rax, 0x10(%rbx)
+	movabsq $0x55aaaa5542345678, %rax
+	movq %rax, 0x18(%rbx)
+
+	vmovapd (%rbx), %ymm0
+	vmovapd (%rbx), %ymm1
+
+	vaddpd %ymm0, %ymm1, %ymm2
+
+	hlt	
 
 test_guest_end:
 	nop

@@ -625,7 +625,7 @@ struct general_regs {
 
 struct fpu_regs {
 	u64 xcr0;
-	void *xsave;
+	struct x86_fpu_region *fpu_region;
 };
 
 struct segment {
@@ -675,6 +675,9 @@ struct vmx_vcpu {
 		u64 cr3;
 		u64 cr4;
 		u64 cr8;
+
+		u64 cr0_read_shadow;
+		u64 cr4_read_shadow;
 
 		u64 dr0;
 		u64 dr1;
