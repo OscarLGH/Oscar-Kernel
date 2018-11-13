@@ -153,16 +153,17 @@ vm_exit:
 	movq %rbx, 0x8(%rsi)
 	movq %rcx, 0x10(%rsi)
 	movq %rdx, 0x18(%rsi)
-	movq %rsi, 0x20(%rsi)
-	movq %rdi, 0x28(%rsi)
-	movq %rsp, 0x30(%rsi)
+	//movq %rsp, 0x30(%rsi)
 	movq %rbp, 0x38(%rsi)
 
 	popq %rax
 	popq %rbx
+
+	movq %rax, 0x20(%rsi)
+	movq %rbx, 0x28(%rsi)
 	
-	movq %rax, 0x40(%rsi)
-	movq %rbx, 0x48(%rsi)
+	movq %r8, 0x40(%rsi)
+	movq %r9, 0x48(%rsi)
 	movq %r10, 0x50(%rsi)
 	movq %r11, 0x58(%rsi)
 	movq %r12, 0x60(%rsi)

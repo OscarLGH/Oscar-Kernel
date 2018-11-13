@@ -40,7 +40,7 @@ static inline char toupper(char c)
 void memcpy(void *dst,const void *src,int size);
 void memset(void *dst,char value,int size);
 int memcmp(const void *s1,const void *s2,int size);
-
-
+int hex_dump(void *addr, u64 len);
+int long_int_print(void *addr, u64 len);
 
 #endif

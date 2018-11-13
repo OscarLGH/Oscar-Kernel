@@ -24,6 +24,18 @@ typedef char				int8_t;
 #define NULL (void*)0
 typedef unsigned long size_t;
 
+typedef struct {
+	u64 bits[2];
+}u128;
+
+typedef struct {
+	u64 bits[4];
+}u256;
+
+typedef struct {
+	u64 bits[8];
+}u512;
+
 struct list_head {
 	struct list_head *next, *prev;
 };

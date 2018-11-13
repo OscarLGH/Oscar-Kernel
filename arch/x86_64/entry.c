@@ -375,15 +375,82 @@ extern void numa_init();
 
 void instruction_test()
 {
-	printk("SSE2 test:\n");
-	asm("addpd %xmm1, %xmm2");
+	u64 zmm0[8];
+	u64 zmm1[8];
+	u32 reg[4];
+	cpuid(0xd, 2, reg);
+	printk("AVX XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
+	cpuid(0xd, 3, reg);
+	printk("AVX MPX BNDREGS size %d, OFFSET:%d\n", reg[0], reg[1]);
+	cpuid(0xd, 4, reg);
+	printk("AVX MPX BNDCSR size %d, OFFSET:%d\n", reg[0], reg[1]);
+	cpuid(0xd, 5, reg);
+	printk("AVX512 OPMASK XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
+	cpuid(0xd, 6, reg);
+	printk("AVX512 ZMM_Hi256 XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
+	cpuid(0xd, 7, reg);
+	printk("AVX512 Hi16_ZMM XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
+	struct xsave_area *xsave_area = bootmem_alloc(0x1000);
+	memset(xsave_area, 0, 0x1000);
+	//printk("SSE2 test:\n");
+	//asm("addpd %xmm1, %xmm2");
 
-	printk("AVX test:\n");
-	asm("vaddpd %ymm1, %ymm2, %ymm3");
+	//printk("AVX test:\n");
+	//asm("vaddpd %ymm1, %ymm2, %ymm3");
+	
+	memset(&zmm0[4], 0x33, 32);
+	memset(&zmm0[2], 0x22, 16);
+	memset(&zmm0[0], 0x11, 16);
 
-	printk("AVX512 test:\n");
-	asm("vaddpd %zmm1, %zmm2, %zmm3");
-	asm("sti");
+	memset(&zmm1[4], 0x66, 32);
+	memset(&zmm1[2], 0x55, 16);
+	memset(&zmm1[0], 0x44, 16);
+
+	/*
+	asm volatile(
+		"vmovapd (%0), %%zmm0\n\t"
+		"vmovapd (%1), %%zmm1\n\t"
+		"vmovapd (%0), %%zmm16\n\t"
+		"vmovapd (%1), %%zmm17\n\t"
+		::"r"(&zmm0), "r"(&zmm1)
+	);
+	*/
+	asm volatile(
+		"vmovapd (%0), %%ymm0\n\t"
+		"vmovapd (%1), %%ymm1\n\t"
+		::"r"(&zmm0), "r"(&zmm1)
+	);
+
+	xsave(xsave_area, 0xe7);
+
+	printk("XSTATE_BV:\n");
+	long_int_print((u8 *)&xsave_area->xsave_header.xstate_bv, 8);
+	printk("XCOMP_BV:\n");
+	long_int_print((u8 *)&xsave_area->xsave_header.xcomp_bv, 8);
+	
+	printk("ZMM0 lower 128bit:\n");
+	long_int_print((u8 *)&xsave_area->legacy_region.xmm_reg[0], 16);
+	printk("ZMM0 middle 128bit:\n");
+	long_int_print((u8 *)&xsave_area->avx_state.ymm[0], 16);
+	printk("ZMM0_Hi256:\n");
+	long_int_print((u8 *)&xsave_area->avx512_state.zmm_hi256.zmm_hi256[0], 16);
+
+	printk("ZMM1 lower 128bit:\n");
+	long_int_print((u8 *)&xsave_area->legacy_region.xmm_reg[1], 16);
+	printk("ZMM1 middle 128bit:\n");
+	long_int_print((u8 *)&xsave_area->avx_state.ymm[1], 16);
+	printk("ZMM1_Hi256:\n");
+	long_int_print((u8 *)&xsave_area->avx512_state.zmm_hi256.zmm_hi256[1], 16);
+
+	printk("ZMM16:\n");
+	long_int_print((u8 *)&xsave_area->avx512_state.hi16_zmm.hi_zmm[0], 64);
+
+	printk("ZMM17:\n");
+	long_int_print((u8 *)&xsave_area->avx512_state.hi16_zmm.hi_zmm[1], 64);
+	
+	//printk("AVX512 test:\n");
+	//asm("vaddpd %zmm1, %zmm2, %zmm3");
+	
 }
 
 extern void bootmem_init();
@@ -410,7 +477,7 @@ void arch_init()
 	map_kernel_memory();
 
 	if (is_bsp()) {
-		wakeup_all_processors();
+		//wakeup_all_processors();
 	}
 
 	set_kernel_segment();

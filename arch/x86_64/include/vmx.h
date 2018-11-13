@@ -625,7 +625,7 @@ struct general_regs {
 
 struct fpu_regs {
 	u64 xcr0;
-	struct x86_fpu_region *fpu_region;
+	struct xsave_area *xsave_area;
 };
 
 struct segment {

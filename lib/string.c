@@ -43,7 +43,6 @@ int memcmp(const void *s1,const void *s2,int size)
 	return 0;
 }
 
-
 unsigned long strlen(const char *s)
 {
 	const char *sc;
@@ -236,7 +235,7 @@ int findstr(unsigned char *data, int size, const char *str, int len)
 }
 
 
-char *i2a(u64 val, u64 base, char ** ps)
+char *i2a(u64 val, u64 base, char **ps)
 {
 	u64 m = val % base;
 	u64 q = val / base;
@@ -249,7 +248,7 @@ char *i2a(u64 val, u64 base, char ** ps)
 	return *ps;
 }
 
-char *i2a_full(u64 val, u64 base, u64 digit, char ** ps)
+char *i2a_full(u64 val, u64 base, u64 digit, char **ps)
 {
 	u64 m;
 	u64 q = val;
@@ -268,6 +267,11 @@ char *i2a_full(u64 val, u64 base, u64 digit, char ** ps)
 	}
 	
 	return *ps;
+}
+
+char *i2a_long(void *val, u64 base, u64 digit, char **ps)
+{
+	
 }
 
 int vsprintf(char *buf, const char *fmt, va_list args)
@@ -379,5 +383,29 @@ int printk(const char *fmt, ...)
 	}
 	spin_unlock(&lock);
 	return i;
+}
+
+int hex_dump(void *addr, u64 len)
+{
+	int i;
+
+	printk("Memory dump @ 0x%016x \n", addr);
+	for(i = 0; i < len; i++) {
+		if(i % 16 == 0)
+			printk("\n0x%016x: ", addr + i);
+
+		printk("%02x ",*((unsigned char*)addr + i));
+
+	}
+	printk("\n\n");
+}
+
+int long_int_print(void *addr, u64 len)
+{
+	int i;
+	for(i = len - 1; i >= 0; i--) {
+		printk("%02x",*((unsigned char*)addr + i));
+	}
+	printk("\n");
 }
 

@@ -12,7 +12,7 @@
 #define XCR0_H16_ZMM BIT7
 #define XCR0_PKRU BIT9
 
-struct x86_fpu_region {
+struct fpu_legacy_region {
 	u16 fcw;
 	u16 fsw;
 	u8 ftw;
@@ -28,16 +28,58 @@ struct x86_fpu_region {
 	u32 mxcsr;
 	u32 mxcsr_mask;
 
-	u8 mm_reg[8][16];
-	u8 xmm_reg[16][16];
+	u128 mm_reg[8];
+	u128 xmm_reg[16];
+	u8 padding[96];
+};
 
-	u8 padding0[96];
-	
+struct xsave_header {
+	u64 xstate_bv;
+	u64 xcomp_bv;
+	u64 reserved[6];
+};
+
+struct avx_state {
+	u128 ymm[16];
+};
+
+struct mpx_state {
+	u8 place_holder[128];
+};
+
+struct avx512_opmask {
+	u64 kreg[8];
+};
+
+/*ZMM0H - ZMM15H, upper 256 bits */
+struct avx512_zmm_hi256 {
+	u256 zmm_hi256[16];
+};
+
+/*ZMM16 - ZMM31, 512 bits */
+struct avx512_hi16_zmm {
+	u512 hi_zmm[16];
+};
+
+struct avx512_state {
+	struct avx512_opmask opmask;
+	struct avx512_zmm_hi256 zmm_hi256;
+	struct avx512_hi16_zmm hi16_zmm;
+};
+
+struct xsave_area {
+	/* 0 */
+	struct fpu_legacy_region legacy_region;
 	/* 512 */
-	u8 xstate_bv[8];
-	u8 xcomp_bv[8];
-	u8 padding1[48];
-	
+	struct xsave_header xsave_header;
+	/*576 Extended state*/
+	struct avx_state avx_state;
+
+	u8 padding[128];
+	/* 960 */
+	struct mpx_state mpx_state;
+	/* 1088 */
+	struct avx512_state avx512_state;
 };
 
 static inline u64 xgetbv(u32 xcr_index)
@@ -57,7 +99,7 @@ static inline void xsetbv(u32 xcr_index, u64 value)
 		);
 }
 
-static inline void xsave(struct x86_fpu_region *addr, u64 mask)
+static inline void xsave(struct xsave_area *addr, u64 mask)
 {
 	u64 low = mask, high = (mask >> 32);
 	asm volatile("xsave (%%rdi)\n\t"
@@ -65,7 +107,7 @@ static inline void xsave(struct x86_fpu_region *addr, u64 mask)
 		);
 }
 
-static inline void xrstor(struct x86_fpu_region *addr, u64 mask)
+static inline void xrstor(struct xsave_area *addr, u64 mask)
 {
 	u64 low = mask, high = (mask >> 32);
 	asm volatile("xrstor (%%rdi)\n\t"
