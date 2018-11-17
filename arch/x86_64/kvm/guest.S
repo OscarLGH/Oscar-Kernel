@@ -107,6 +107,8 @@ guest_entry_64:
 	bts $18, %rax
 	movq %rax, %cr4
 
+	vmcall
+
 	movl $0x7, %eax
 	movl $0, %edx
 	movl $0, %ecx
@@ -124,8 +126,13 @@ guest_entry_64:
 
 	vmovapd (%rbx), %ymm0
 	vmovapd (%rbx), %ymm1
+	vmovapd (%rbx), %ymm2
+	vmovapd (%rbx), %ymm3
+	vmovapd (%rbx), %ymm4
+	vmovapd (%rbx), %ymm5
 
 	//vaddpd %ymm0, %ymm1, %ymm2
+	//vaddpd %ymm1, %ymm2, %ymm3
 
 	movabsq $0x55aaaa5500000000, %rax
 	movabsq $0x55aaaa5500000001, %rbx

@@ -406,6 +406,5 @@ int long_int_print(void *addr, u64 len)
 	for(i = len - 1; i >= 0; i--) {
 		printk("%02x",*((unsigned char*)addr + i));
 	}
-	printk("\n");
 }
 

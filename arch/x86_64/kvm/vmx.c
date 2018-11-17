@@ -77,14 +77,14 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	memset(vcpu->msr_bitmap, 0, 0x1000);
 	vcpu->eptp_base = bootmem_alloc(0x1000);
 	memset(vcpu->eptp_base, 0, 0x1000);
+	vcpu->host_state.fp_regs = bootmem_alloc(0x1000);
+	memset(vcpu->host_state.fp_regs, 0, 0x1000);
 	vcpu->host_state.msr = bootmem_alloc(0x1000);
 	memset(vcpu->host_state.msr, 0, 0x1000);
-	vcpu->host_state.fp_regs.xsave_area = bootmem_alloc(0x1000);
-	memset(vcpu->host_state.fp_regs.xsave_area, 0, 0x1000);
+	vcpu->guest_state.fp_regs = bootmem_alloc(0x1000);
+	memset(vcpu->guest_state.fp_regs, 0, 0x1000);
 	vcpu->guest_state.msr = bootmem_alloc(0x1000);
 	memset(vcpu->guest_state.msr, 0, 0x1000);
-	vcpu->guest_state.fp_regs.xsave_area = bootmem_alloc(0x1000);
-	memset(vcpu->guest_state.fp_regs.xsave_area, 0, 0x1000);
 
 	return 0;
 }
@@ -245,26 +245,30 @@ int vmx_save_host_state(struct vmx_vcpu *vcpu)
 	vmcs_write(HOST_RIP, (u64)vm_exit);
 
 	/* save host FPU states...*/
-	vcpu->host_state.fp_regs.xcr0 = xgetbv(0);
-	xsave(vcpu->host_state.fp_regs.xsave_area, vcpu->host_state.fp_regs.xcr0);
+	vcpu->host_state.ctrl_regs.xcr0 = xgetbv(0);
+	xsave(vcpu->host_state.fp_regs, vcpu->host_state.ctrl_regs.xcr0);
 	return 0;
 }
 
 int vmx_save_guest_state(struct vmx_vcpu *vcpu)
 {
 	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
-	vcpu->guest_state.cr0 = vmcs_read(GUEST_CR0);
-	vcpu->guest_state.cr4 = vmcs_read(GUEST_CR4);
-	vcpu->guest_state.fp_regs.xcr0 = xgetbv(0);
-	xsave(vcpu->guest_state.fp_regs.xsave_area, vcpu->guest_state.fp_regs.xcr0);
+	vcpu->guest_state.ctrl_regs.cr0 = vmcs_read(GUEST_CR0);
+	vcpu->guest_state.ctrl_regs.cr2 = read_cr2();
+	vcpu->guest_state.ctrl_regs.cr3 = vmcs_read(GUEST_CR3);
+	vcpu->guest_state.ctrl_regs.cr4 = vmcs_read(GUEST_CR4);
+	vcpu->guest_state.ctrl_regs.cr8 = read_cr8();
+	vcpu->guest_state.ctrl_regs.xcr0 = xgetbv(0);
+	xsave(vcpu->guest_state.fp_regs, vcpu->guest_state.ctrl_regs.xcr0);
 	return 0;
 }
 
+void dump_guest_state(struct vmx_vcpu *vcpu);
 
 int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 {
 	u64 cr0, cr4;
-	cr0 = vcpu->guest_state.cr0 | rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1);
+	cr0 = vcpu->guest_state.ctrl_regs.cr0 | rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1);
 
 	if (vmcs_read(SECONDARY_VM_EXEC_CONTROL) & SECONDARY_EXEC_UNRESTRICTED_GUEST != 0) {
 		cr0 &= 0x7ffffffe;
@@ -273,7 +277,7 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 	cr4 = rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1);
 	vmcs_write(GUEST_CR0, cr0);
 	vmcs_write(CR0_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
-	vmcs_write(GUEST_CR3, vcpu->guest_state.cr3);
+	vmcs_write(GUEST_CR3, vcpu->guest_state.ctrl_regs.cr3);
 	vmcs_write(GUEST_CR4, cr4);
 	vmcs_write(CR4_READ_SHADOW, vcpu->guest_state.cr4_read_shadow);
 
@@ -353,15 +357,19 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 
 	vmcs_write(APIC_ACCESS_ADDR, 0xfee00000);
 
-	xsetbv(0, vcpu->guest_state.fp_regs.xcr0);
-	xrstor(vcpu->guest_state.fp_regs.xsave_area, vcpu->guest_state.fp_regs.xcr0);
+	xsetbv(0, vcpu->guest_state.ctrl_regs.xcr0);
+	//xrstor(vcpu->guest_state.fp_regs, vcpu->guest_state.ctrl_regs.xcr0);
+	/* Use host XCRO features to zero out all host fpu regs. */
+	xrstor(vcpu->guest_state.fp_regs, vcpu->host_state.ctrl_regs.xcr0);
+	//xrstor(vcpu->guest_state.fp_regs, XCR0_X87 | XCR0_SSE | XCR0_AVX);
+
 	return 0;
 }
 
 int vmx_resume_host_state(struct vmx_vcpu *vcpu)
 {
-	xsetbv(0, vcpu->host_state.fp_regs.xcr0);
-	xrstor(vcpu->host_state.fp_regs.xsave_area, vcpu->host_state.fp_regs.xcr0);
+	xsetbv(0, vcpu->host_state.ctrl_regs.xcr0);
+	xrstor(vcpu->host_state.fp_regs, vcpu->host_state.ctrl_regs.xcr0);
 	return 0;
 }
 
@@ -590,77 +598,109 @@ void dump_guest_state(struct vmx_vcpu *vcpu)
 		vcpu->guest_state.gr_regs.r15
 		);
 	printk("CR0:%016x CR2:%016x CR3:%016x CR4:%016x CR8:%016x\n", 
-		vcpu->guest_state.cr0,
-		vcpu->guest_state.cr2,
-		vcpu->guest_state.cr3,
-		vcpu->guest_state.cr4,
-		vcpu->guest_state.cr8
+		vcpu->guest_state.ctrl_regs.cr0,
+		vcpu->guest_state.ctrl_regs.cr2,
+		vcpu->guest_state.ctrl_regs.cr3,
+		vcpu->guest_state.ctrl_regs.cr4,
+		vcpu->guest_state.ctrl_regs.cr8
 		);
-	printk("XMM0:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[0], 16);
-	printk("XMM1:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[1], 16);
-	printk("XMM2:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[2], 16);
-	printk("XMM3:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[3], 16);
-	printk("XMM4:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[4], 16);
-	printk("XMM5:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[5], 16);
-	printk("XMM6:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[6], 16);
-	printk("XMM7:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[7], 16);
-	printk("XMM8:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[8], 16);
-	printk("XMM9:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[9], 16);
-	printk("XMM10:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[10], 16);
-	printk("XMM11:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[11], 16);
-	printk("XMM12:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[12], 16);
-	printk("XMM13:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[13], 16);
-	printk("XMM14:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[14], 16);
-	printk("XMM15:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->legacy_region.xmm_reg[15], 16);
-
-	printk("YMM0:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[0], 16);
-	printk("YMM1:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[1], 16);
-	printk("YMM2:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[2], 16);
-	printk("YMM3:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[3], 16);
-	printk("YMM4:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[4], 16);
-	printk("YMM5:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[5], 16);
-	printk("YMM6:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[6], 16);
-	printk("YMM7:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[7], 16);
-	printk("YMM8:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[8], 16);
-	printk("YMM9:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[9], 16);
-	printk("YMM10:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[10], 16);
-	printk("YMM11:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[11], 16);
-	printk("YMM12:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[12], 16);
-	printk("YMM13:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[13], 16);
-	printk("YMM14:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[14], 16);
-	printk("YMM15:");
-	long_int_print(&vcpu->guest_state.fp_regs.xsave_area->avx_state.ymm[15], 16);
+	printk("ZMM0:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[0], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[0], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[0], 16);
+	printk("\nZMM1:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[1], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[1], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[1], 16);
+	printk("\nZMM2:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[2], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[2], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[2], 16);
+	printk("\nZMM3:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[3], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[3], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[3], 16);
+	printk("\nZMM4:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[4], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[4], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[4], 16);
+	printk("\nZMM5:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[5], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[5], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[5], 16);
+	printk("\nZMM6:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[6], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[6], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[6], 16);
+	printk("\nZMM7:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[7], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[7], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[7], 16);
+	printk("\nZMM8:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[8], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[8], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[8], 16);
+	printk("\nZMM9:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[9], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[9], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[9], 16);
+	printk("\nZMM10:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[10], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[10], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[10], 16);
+	printk("\nZMM11:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[11], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[11], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[11], 16);
+	printk("\nZMM12:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[12], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[12], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[12], 16);
+	printk("\nZMM13:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[13], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[13], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[13], 16);
+	printk("\nZMM14:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[14], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[14], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[14], 16);
+	printk("\nZMM15:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.zmm_hi256[15], 32);
+	long_int_print(&vcpu->guest_state.fp_regs->avx_state.ymm[15], 16);
+	long_int_print(&vcpu->guest_state.fp_regs->legacy_region.xmm_reg[15], 16);
+	printk("\nZMM16:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[0], 64);
+	printk("\nZMM17:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[1], 64);
+	printk("\nZMM18:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[2], 64);
+	printk("\nZMM19:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[3], 64);
+	printk("\nZMM20:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[4], 64);
+	printk("\nZMM21:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[5], 64);
+	printk("\nZMM22:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[6], 64);
+	printk("\nZMM23:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[7], 64);
+	printk("\nZMM24:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[8], 64);
+	printk("\nZMM25:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[9], 64);
+	printk("\nZMM26:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[10], 64);
+	printk("\nZMM27:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[11], 64);
+	printk("\nZMM28:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[12], 64);
+	printk("\nZMM29:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[13], 64);
+	printk("\nZMM30:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[14], 64);
+	printk("\nZMM31:");
+	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[15], 64);
+	
 }
 
 int vmx_handle_vmcall(struct vmx_vcpu *vcpu)
@@ -736,7 +776,6 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
-
 static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
 {
 	u64 efer = vmcs_read(GUEST_IA32_EFER);
@@ -751,6 +790,7 @@ static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
 	vmcs_write(GUEST_IA32_EFER, efer | 0x500);
 	return 0;
 }
+
 int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 {
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
@@ -922,11 +962,11 @@ int vmx_handle_xsetbv(struct vmx_vcpu *vcpu)
 		/* TODO: inject #GP to guest.*/
 	} else {
 		xsetbv(index, xcr0);
-		vcpu->guest_state.fp_regs.xcr0 = xcr0;
+		vcpu->guest_state.ctrl_regs.xcr0 = xcr0;
 	}
 
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	
+
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -935,7 +975,7 @@ int vmx_handle_xsaves(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:xsave.\n");
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	
+
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -944,7 +984,7 @@ int vmx_handle_xrstors(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:xrstore.\n");
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	
+
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -1181,12 +1221,12 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.idtr.base = 0;
 	vcpu->guest_state.idtr.limit = 0xffff;
 	
-	vcpu->guest_state.cr0 = 0;
-	vcpu->guest_state.cr3 = 0;
-	vcpu->guest_state.cr4 = 0;
+	vcpu->guest_state.ctrl_regs.cr0 = 0;
+	vcpu->guest_state.ctrl_regs.cr3 = 0;
+	vcpu->guest_state.ctrl_regs.cr4 = 0;
 
-	vcpu->guest_state.cr0_read_shadow = vcpu->guest_state.cr0;
-	vcpu->guest_state.cr4_read_shadow = vcpu->guest_state.cr4;
+	vcpu->guest_state.cr0_read_shadow = vcpu->guest_state.ctrl_regs.cr0;
+	vcpu->guest_state.cr4_read_shadow = vcpu->guest_state.ctrl_regs.cr4;
 
 	vcpu->guest_state.pdpte0 = 0;
 	vcpu->guest_state.pdpte1 = 0;
@@ -1197,7 +1237,7 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.rflags = BIT1;
 	vcpu->guest_state.gr_regs.rsp = 0;
 
-	vcpu->guest_state.fp_regs.xcr0 = XCR0_X87;
+	vcpu->guest_state.ctrl_regs.xcr0 = XCR0_X87;
 }
 
 

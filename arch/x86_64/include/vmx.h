@@ -30,6 +30,7 @@
 #include <msr.h>
 #include <segment.h>
 #include <cr.h>
+#include <fpu.h>
 
 /*
  * Definitions of Primary Processor-Based VM-Execution Controls.
@@ -623,9 +624,24 @@ struct general_regs {
 	u64 r15;
 }; 
 
-struct fpu_regs {
+struct ctrl_regs {
+	u64 cr0;
+	u64 cr2;
+	u64 cr3;
+	u64 cr4;
+	u64 cr8;
 	u64 xcr0;
-	struct xsave_area *xsave_area;
+};
+
+struct debug_regs {
+	u64 dr0;
+	u64 dr1;
+	u64 dr2;
+	u64 dr3;
+	u64 dr4;
+	u64 dr5;
+	u64 dr6;
+	u64 dr7;
 };
 
 struct segment {
@@ -660,7 +676,9 @@ struct vmx_vcpu {
 
 	struct host_state {
 		struct general_regs gr_regs;
-		struct fpu_regs fp_regs;
+		struct xsave_area *fp_regs;
+		struct ctrl_regs ctrl_regs;
+		struct debug_regs debug_regs;
 		u64 *msr;
 	} host_state;
 
@@ -668,26 +686,14 @@ struct vmx_vcpu {
 		u64 rip;
 		u64 rflags;
 		struct general_regs gr_regs;
-		struct fpu_regs fp_regs;
+		struct xsave_area *fp_regs;
 		struct segment cs, ds, es, fs, gs, ss, tr, ldtr;
-		u64 cr0;
-		u64 cr2;
-		u64 cr3;
-		u64 cr4;
-		u64 cr8;
-
+		struct ctrl_regs ctrl_regs;
+		struct debug_regs debug_regs;
+		
 		u64 cr0_read_shadow;
 		u64 cr4_read_shadow;
 
-		u64 dr0;
-		u64 dr1;
-		u64 dr2;
-		u64 dr3;
-		u64 dr4;
-		u64 dr5;
-		u64 dr6;
-		u64 dr7;
-		
 		struct gdtr gdtr;
 		struct idtr idtr;
 

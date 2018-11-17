@@ -47,24 +47,13 @@ struct mpx_state {
 	u8 place_holder[128];
 };
 
-struct avx512_opmask {
-	u64 kreg[8];
-};
-
-/*ZMM0H - ZMM15H, upper 256 bits */
-struct avx512_zmm_hi256 {
-	u256 zmm_hi256[16];
-};
-
-/*ZMM16 - ZMM31, 512 bits */
-struct avx512_hi16_zmm {
-	u512 hi_zmm[16];
-};
-
 struct avx512_state {
-	struct avx512_opmask opmask;
-	struct avx512_zmm_hi256 zmm_hi256;
-	struct avx512_hi16_zmm hi16_zmm;
+	/* KREG, 64bits */
+	u64 opmask[8];
+	/*ZMM0H - ZMM15H, upper 256 bits */
+	u256 zmm_hi256[16];
+	/*ZMM16 - ZMM31, 512 bits */
+	u512 hi16_zmm[16];
 };
 
 struct xsave_area {
