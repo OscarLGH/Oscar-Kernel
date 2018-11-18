@@ -700,7 +700,7 @@ void dump_guest_state(struct vmx_vcpu *vcpu)
 	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[14], 64);
 	printk("\nZMM31:");
 	long_int_print(&vcpu->guest_state.fp_regs->avx512_state.hi16_zmm[15], 64);
-	
+	printk("\n");
 }
 
 int vmx_handle_vmcall(struct vmx_vcpu *vcpu)

@@ -16,7 +16,7 @@ static inline u16 in16(u16 port)
 {
 	u16 data;
 	asm volatile("inw %%dx, %%ax\n\t"
-				: "=rax"(data) : "dx"(port)
+				: "=rax"(data) : "rdx"(port)
 		);
 	return data;
 }
@@ -25,7 +25,7 @@ static inline u32 in32(u16 port)
 {
 	u32 data;
 	asm volatile("inl %%dx, %%eax\n\t"
-				: "=rax"(data) : "dx"(port)
+				: "=rax"(data) : "rdx"(port)
 		);
 	return data;
 }

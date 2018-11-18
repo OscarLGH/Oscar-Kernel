@@ -433,20 +433,20 @@ void instruction_test()
 	printk("ZMM0 middle 128bit:\n");
 	long_int_print((u8 *)&xsave_area->avx_state.ymm[0], 16);
 	printk("ZMM0_Hi256:\n");
-	long_int_print((u8 *)&xsave_area->avx512_state.zmm_hi256.zmm_hi256[0], 16);
+	long_int_print((u8 *)&xsave_area->avx512_state.zmm_hi256[0], 16);
 
 	printk("ZMM1 lower 128bit:\n");
 	long_int_print((u8 *)&xsave_area->legacy_region.xmm_reg[1], 16);
 	printk("ZMM1 middle 128bit:\n");
 	long_int_print((u8 *)&xsave_area->avx_state.ymm[1], 16);
 	printk("ZMM1_Hi256:\n");
-	long_int_print((u8 *)&xsave_area->avx512_state.zmm_hi256.zmm_hi256[1], 16);
+	long_int_print((u8 *)&xsave_area->avx512_state.zmm_hi256[1], 16);
 
 	printk("ZMM16:\n");
-	long_int_print((u8 *)&xsave_area->avx512_state.hi16_zmm.hi_zmm[0], 64);
+	long_int_print((u8 *)&xsave_area->avx512_state.hi16_zmm[0], 64);
 
 	printk("ZMM17:\n");
-	long_int_print((u8 *)&xsave_area->avx512_state.hi16_zmm.hi_zmm[1], 64);
+	long_int_print((u8 *)&xsave_area->avx512_state.hi16_zmm[1], 64);
 	
 	//printk("AVX512 test:\n");
 	//asm("vaddpd %zmm1, %zmm2, %zmm3");
@@ -456,7 +456,7 @@ void instruction_test()
 extern void bootmem_init();
 
 extern void vm_init_test();
-
+extern void x86_pci_hostbridge_init();
 
 void arch_init()
 {
@@ -494,7 +494,8 @@ void arch_init()
 
 	if (is_bsp()) {
 		start_kernel();
-		vm_init_test();
+		//vm_init_test();
+		x86_pci_hostbridge_init();
 		//instruction_test();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
