@@ -1,6 +1,7 @@
 #include <console.h>
 #include "font_8x16.h"
 #include <fb.h>
+#include <math.h>
 
 struct console graphics_con = {0};
 u32 blit_buffer[0x100000];
@@ -8,16 +9,25 @@ u32 blit_buffer[0x100000];
 
 int fbcon_scroll(struct console *con, int direction)
 {
-	struct fb_copyarea area;
+	struct fb_copyarea cp_area;
+	struct fb_fillrect fi_area;
 	if (direction == 1) {
-		area.dx = 0;
-		area.dy = 0;
-		area.width = con->width;
-		area.height = con->height - con->font_height;
-		area.sx = 0;
-		area.sy = con->font_height;
+		cp_area.dx = 0;
+		cp_area.dy = 0;
+		cp_area.width = con->width;
+		cp_area.height = rounddown(con->height - con->font_height, 16);
+		cp_area.sx = 0;
+		cp_area.sy = con->font_height;
 
-		copyarea_active_fb(&area);
+		copyarea_active_fb(&cp_area);
+
+		fi_area.dx = 0;
+		fi_area.dy = rounddown(con->height - con->font_height, 16);
+		fi_area.width = con->width;
+		fi_area.height = con->font_height;
+		fi_area.color = 0;
+		
+		fillrect_active_fb(&fi_area);
 	}
 }
 

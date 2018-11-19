@@ -39,12 +39,16 @@
 #define PCI_CONF_MINGNT						0x3E
 #define PCI_CONF_MAXLAT						0x3F
 
+#define PCI_RESOURCE_MEM 0
+#define PCI_RESOURCE_IO 1
+#define PCI_RESOURCE_PREFETCH 2
 struct pci_dev {
 	u8 seg;
 	u8 bus;
 	u8 device;
 	u8 fun;
 
+	u32 viddid;
 	u64 status;
 
 	/* Bridge or device ? */
@@ -62,6 +66,21 @@ struct pci_dev {
 		u64 flags;
 		u64 reserved;
 	} resource[7];
+};
+
+struct pci_device_id {
+	u32 viddid;
+	u32 class;
+	u32 class_mask;
+	u32 reserved;
+};
+#define PCI_DEVICE ((a),(b)) (((a)<<16)|(b))
+struct pci_driver {
+	char *name;
+	struct pci_device_id id_array[64];
+	int (*pci_probe)(struct pci_dev *pdev, struct pci_device_id *pent);
+	void (*pci_remove)(struct pci_dev *pdev);
+	struct list_head list;
 };
 
 /*
