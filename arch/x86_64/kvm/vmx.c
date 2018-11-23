@@ -706,7 +706,10 @@ void dump_guest_state(struct vmx_vcpu *vcpu)
 int vmx_handle_vmcall(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:VMCALL.\n");
-	dump_guest_state(vcpu);
+	//dump_guest_state(vcpu);
+	printk("LDTR limit:%x\n", vmcs_read(GUEST_LDTR_LIMIT));
+	printk("LDTR AR BYTES:%x\n", vmcs_read(GUEST_LDTR_AR_BYTES));
+	//vmcs_write(GUEST_LDTR_AR_BYTES, 0x10000);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }

@@ -18,6 +18,7 @@ desc_code32:	.octa 0x004f98000000ffff
 desc_data32:	.octa 0x00cf92000000ffff
 desc_code64:	.octa 0x002f98000000ffff
 desc_data64:	.octa 0x000f92000000ffff
+desc_ldt64:		.octa 0x008782000000ffff
 gdt_desc:		.word gdt_desc - gdt - 1
 				.quad gdt - guest_entry_16 + 0x7c00
 
@@ -91,7 +92,14 @@ guest_entry_32:
 guest_entry_64:
 
 	movabsq $0xffff800001000000, %rsp
-	
+
+	vmcall
+
+	movw $(desc_data64 - gdt), %ax
+	movw %ax, %ds
+	movw $(desc_null - gdt), %ax
+	lldt %ax
+
 	movq %cr4, %rax
 	bts $9, %rax
 	bts $18, %rax
@@ -108,6 +116,10 @@ guest_entry_64:
 	movq %rax, %cr4
 
 	vmcall
+	
+	movw $(desc_ldt64 - gdt), %ax
+	lldt %ax
+	
 
 	movl $0x7, %eax
 	movl $0, %edx

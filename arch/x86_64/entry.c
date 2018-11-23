@@ -494,8 +494,8 @@ void arch_init()
 
 	if (is_bsp()) {
 		start_kernel();
-		//vm_init_test();
-		x86_pci_hostbridge_init();
+		vm_init_test();
+		//x86_pci_hostbridge_init();
 		//instruction_test();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
