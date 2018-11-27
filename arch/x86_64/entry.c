@@ -14,6 +14,7 @@
 #include <string.h>
 #include <mm.h>
 #include <vmx.h>
+#include <cpu.h>
 
 void (*jmp_table_percpu[MAX_CPUS])() = {0};
 struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
@@ -36,40 +37,51 @@ void irq_handler(u64 vector)
 	}
 }
 
+u64 arch_cpuid()
+{
+	u8 buffer[64] = {0};
+	u8 cpu_id = 0;
+	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
+	cpu_id = buffer[7];
+	return cpu_id;
+}
+
 void set_kernel_segment()
 {
+	struct cpu *cpu = get_cpu();
+	struct x86_cpu *x86_cpu = cpu->arch_data;
 	struct gdtr gdtr;
-	struct segment_desc *gdt_base = bootmem_alloc(sizeof(*gdt_base) * 256);
+	x86_cpu->gdt_base = bootmem_alloc(sizeof(struct segment_desc) * 256);
 
-	set_segment_descriptor(gdt_base,
+	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_NULL_INDEX,
 		0,
 		0,
 		0,
 		0
 	);
-	set_segment_descriptor(gdt_base,
+	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_KERNEL_CODE_INDEX,
 		0,
 		0,
 		CS_NC | DPL0,
 		CS_L
 	);
-	set_segment_descriptor(gdt_base,
+	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_KERNEL_DATA_INDEX,
 		0,
 		0,
 		DS_S_W | DPL0,
 		0
 	);
-	set_segment_descriptor(gdt_base,
+	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_USER_CODE_INDEX,
 		0,
 		0,
 		CS_NC | DPL3,
 		CS_L
 	);
-	set_segment_descriptor(gdt_base,
+	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_USER_DATA_INDEX,
 		0,
 		0,
@@ -77,7 +89,7 @@ void set_kernel_segment()
 		0
 	);
 
-	gdtr.base = (u64)gdt_base;
+	gdtr.base = (u64)x86_cpu->gdt_base;
 	gdtr.limit = 256 * sizeof(struct segment_desc) - 1;
 
 	lgdt(&gdtr);
@@ -92,16 +104,18 @@ void set_kernel_segment()
 
 void set_intr_desc()
 {
+	struct cpu *cpu = get_cpu();
+	struct x86_cpu *x86_cpu = cpu->arch_data;
+	x86_cpu->idt_base = bootmem_alloc(sizeof(struct gate_desc) * 256);
 	/* defined in isr.asm */
 	extern u64 exception_table[];
 	extern u64 irq_table[];
 
 	struct idtr idtr;
-	struct gate_desc *idt_base = bootmem_alloc(sizeof(*idt_base) * 256);
 	int i;
 
 	for (i = 0; i < 0x20; i++) {
-		set_gate_descriptor(idt_base,
+		set_gate_descriptor(x86_cpu->idt_base,
 			i,
 			SELECTOR_KERNEL_CODE,
 			(u64)exception_table[i],
@@ -112,7 +126,7 @@ void set_intr_desc()
 	for (i = 0x20; i < 0x100; i++) {
 		if (i == 0x80)
 			continue;
-		set_gate_descriptor(idt_base,
+		set_gate_descriptor(x86_cpu->idt_base,
 			i,
 			SELECTOR_KERNEL_CODE,
 			irq_table[i - 0x20],
@@ -120,7 +134,7 @@ void set_intr_desc()
 			INTR_GATE | DPL0
 		);
 	}
-	set_gate_descriptor(idt_base,
+	set_gate_descriptor(x86_cpu->idt_base,
 		0x80,
 		SELECTOR_KERNEL_CODE,
 		irq_table[0x80 - 0x20],
@@ -128,7 +142,7 @@ void set_intr_desc()
 		TRAP_GATE | DPL3
 	);
 
-	idtr.base = (u64)idt_base;
+	idtr.base = (u64)x86_cpu->idt_base;
 	idtr.limit = 256 * sizeof(struct gate_desc) - 1;
 
 	lidt(&idtr);
@@ -136,19 +150,16 @@ void set_intr_desc()
 
 void set_tss_desc()
 {
-	struct gdtr gdtr;
-	struct segment_desc *gdt_base;
-	struct tss_desc *tss = bootmem_alloc(sizeof(*tss));
+	struct cpu *cpu = get_cpu();
+	struct x86_cpu *x86_cpu = cpu->arch_data;
+	x86_cpu->tss = bootmem_alloc(sizeof(struct tss_desc));
 
-	sgdt(&gdtr);
-	gdt_base = (struct segment_desc *)gdtr.base;
-
-	memset(tss, 0, sizeof(*tss));
-	tss->rsp0 = (u64)bootmem_alloc(0x100000);
-	set_segment_descriptor(gdt_base,
+	memset(x86_cpu->tss, 0, sizeof(struct tss_desc));
+	x86_cpu->tss->rsp0 = (u64)bootmem_alloc(0x100000);
+	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_TSS_INDEX,
-		(u64)tss,
-		sizeof(*tss) - 1,
+		(u64)x86_cpu->tss,
+		sizeof(struct tss_desc) - 1,
 		S_TSS | DPL0,
 		0
 	);
@@ -458,22 +469,12 @@ extern void bootmem_init();
 extern void vm_init_test();
 extern void x86_pci_hostbridge_init();
 
-void arch_init()
+void x86_cpu_init()
 {
-	u8 buffer[64] = {0};
-	bool bsp;
-	u8 cpu_id = 0;
-
-	if (is_bsp())
-		bootmem_init();
-
-	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
-	cpu_id = buffer[7];
+	struct cpu *cpu = get_cpu();
+	cpu->arch_data = bootmem_alloc(sizeof(struct x86_cpu));
 
 	enable_cpu_features();
-
-	cpu_sync_bitmap1[cpu_id] = 1;
-
 	map_kernel_memory();
 
 	if (is_bsp()) {
@@ -484,7 +485,21 @@ void arch_init()
 	set_tss_desc();
 	set_intr_desc();
 	lapic_enable();
+}
 
+void arch_numa_init();
+
+void arch_init()
+{
+	u8 buffer[64] = {0};
+	bool bsp;
+	u8 cpu_id = 0;
+
+	if (is_bsp())
+		bootmem_init();
+
+	arch_numa_init();
+	
 #if CONFIG_AMP
 	jmp_table_percpu[cpu_id]();
 #endif
@@ -494,8 +509,8 @@ void arch_init()
 
 	if (is_bsp()) {
 		start_kernel();
-		vm_init_test();
-		//x86_pci_hostbridge_init();
+		//vm_init_test();
+		x86_pci_hostbridge_init();
 		//instruction_test();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);

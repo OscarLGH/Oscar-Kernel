@@ -33,9 +33,7 @@ void arch_numa_init()
 		mm_node_register(node);
 
 		if (madt_ptr == NULL) {
-			cpu = bootmem_alloc(sizeof(*cpu));
-			cpu->id = 0;
-			list_add_tail(&cpu->list, &node->cpu_list);
+			register_cpu_remote(0, node);
 		} else {
 		
 			struct processor_lapic_structure *lapic_ptr;
@@ -46,9 +44,7 @@ void arch_numa_init()
 					case PROCESSOR_LOCAL_APIC:
 						lapic_ptr = (struct processor_lapic_structure *)ptr;
 						if (lapic_ptr->flags & 0x1 != 0) {
-							cpu = bootmem_alloc(sizeof(*cpu));
-							cpu->id = lapic_ptr->apic_id;
-							list_add_tail(&cpu->list, &node->cpu_list);
+							register_cpu_remote(lapic_ptr->apic_id, node);
 						}
 						break;
 				}
@@ -85,17 +81,13 @@ void arch_numa_init()
 						node->socket_id = srat_cpu_affinity_ptr->proximity_domain_lo;
 						mm_node_register(node);
 
-						cpu = bootmem_alloc(sizeof(*cpu));
-						cpu->id = srat_cpu_affinity_ptr->apic_id;
-						list_add_tail(&cpu->list, &node->cpu_list);
+						register_cpu_remote(srat_cpu_affinity_ptr->apic_id, node);
 						
 						node_bitmap[srat_cpu_affinity_ptr->proximity_domain_lo] = 1;
 					} else {
 						node = mm_get_node_by_id(srat_cpu_affinity_ptr->proximity_domain_lo);
 						if (node != NULL) {
-							cpu = bootmem_alloc(sizeof(*cpu));
-							cpu->id = srat_cpu_affinity_ptr->apic_id;
-							list_add_tail(&cpu->list, &node->cpu_list);
+							register_cpu_remote(srat_cpu_affinity_ptr->apic_id, node);
 						}
 					}
 				}

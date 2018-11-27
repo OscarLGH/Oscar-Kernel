@@ -47,6 +47,8 @@ struct bootmem {
 	u64 spin_lock;
 };
 
+extern struct list_head node_list;
+
 struct page *allocate_page(u64 area);
 struct page *allocate_pages();
 void *bootmem_alloc(u64 size);
