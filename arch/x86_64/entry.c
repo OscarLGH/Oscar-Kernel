@@ -216,6 +216,8 @@ void wakeup_all_processors()
 {
 	extern u64 ap_startup_vector;
 	extern u64 ap_startup_end;
+	struct node *node;
+	struct cpu *cpu;
 	u64 ap_load_addr = 0x20000;
 	u8 *dest = (u8 *)PHYS2VIRT(ap_load_addr);
 	u8 *src = (u8 *)&ap_startup_vector;
@@ -230,24 +232,19 @@ void wakeup_all_processors()
 		mp_init_all(ap_load_addr);
 		return;
 	}
-	
-	struct processor_lapic_structure *lapic_ptr;
-	u8 *ptr = (u8 *)madt_ptr + sizeof(*madt_ptr);
+	printk("CPU %d up.\n", get_cpu()->id);
+	list_for_each_entry(node, &node_list, list) {
+		list_for_each_entry(cpu, &node->cpu_list, list) {
+			if (cpu->id == 0)
+				continue;
 
-	while ((u64)ptr < (u64)madt_ptr + madt_ptr->header.length - sizeof(*madt_ptr)) {
-		switch(ptr[0]) {
-			case PROCESSOR_LOCAL_APIC:
-				lapic_ptr = (struct processor_lapic_structure *)ptr;
-				if (lapic_ptr->apic_id != 0 && lapic_ptr->flags & 0x1 != 0) {
-					//printk("waking up CPU:APIC ID = %d\n", lapic_ptr->apic_id);
-					cpu_sync_bitmap1[lapic_ptr->apic_id] = 0;
-					mp_init_single(lapic_ptr->apic_id, ap_load_addr);
-					while(!cpu_sync_bitmap1[lapic_ptr->apic_id]);
-				}
-				break;
+			printk("waking up cpu %d...\n", cpu->id);
+			mp_init_single(cpu->id, ap_load_addr);
+			while (cpu->status != 1);
+			printk("CPU %d up.\n", cpu->id);
 		}
-		ptr += ptr[1];
 	}
+					
 }
 
 void ap_work()
@@ -473,13 +470,10 @@ void x86_cpu_init()
 {
 	struct cpu *cpu = get_cpu();
 	cpu->arch_data = bootmem_alloc(sizeof(struct x86_cpu));
+	cpu->status = 1;
 
 	enable_cpu_features();
 	map_kernel_memory();
-
-	if (is_bsp()) {
-		//wakeup_all_processors();
-	}
 
 	set_kernel_segment();
 	set_tss_desc();
@@ -495,11 +489,13 @@ void arch_init()
 	bool bsp;
 	u8 cpu_id = 0;
 
-	if (is_bsp())
+	if (is_bsp()) {
 		bootmem_init();
+		arch_numa_init();
+	}
 
-	arch_numa_init();
-	
+	x86_cpu_init();
+
 #if CONFIG_AMP
 	jmp_table_percpu[cpu_id]();
 #endif
@@ -510,7 +506,7 @@ void arch_init()
 	if (is_bsp()) {
 		start_kernel();
 		//vm_init_test();
-		x86_pci_hostbridge_init();
+		//x86_pci_hostbridge_init();
 		//instruction_test();
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
@@ -518,6 +514,10 @@ void arch_init()
 	} else {
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
+	}
+	
+	if (is_bsp()) {
+		wakeup_all_processors();
 	}
 
 	asm("sti");
