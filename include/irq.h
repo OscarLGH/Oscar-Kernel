@@ -4,12 +4,27 @@
 #include <types.h>
 #include <cpu.h>
 
-#define MAX_NR_IRQ 512
+struct irq_chip {
+	int (*startup)();
+	int (*shutdown)();
+	int (*enable)();
+	int (*disable)();
+	int (*ack)(int irq);
+	int (*mask)(int irq);
+};
+
+struct irq_action {
+	void *data;
+	char *name;
+	int (*irq_handler)(int irq, void *data);
+	struct list_head list;
+};
 
 struct irq_desc {
-	u64 nr_irqs;
-	u512 irq_bitmap;
-	u64 (*irq_handler[MAX_NR_IRQ])();
+	int count;
+	char *name;
+	struct irq_chip *chip;
+	struct list_head irq_action_list;
 };
 
 #endif

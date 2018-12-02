@@ -4,7 +4,18 @@
 #include <types.h>
 #include <list.h>
 #include <mm.h>
+#include <irq.h>
 
+#define MAX_EXCEPTIONS 512
+struct exception_desc {
+	u512 exception_bitmap;
+	u64 exception_low;
+	u64 exception_high;
+	u64 irq_low;
+	u64 irq_high;
+	int (*exception_handler[512])(int exp, int type, u64 errno);
+	struct irq_desc *irq_desc;
+};
 struct cpu {
 	u64 id;
 	u64 domain;
@@ -16,7 +27,7 @@ struct cpu {
 	u64 page_level;
 	u64 nr_irq;
 	void *arch_data;
-	struct irq_desc *irq_desc;
+	struct exception_desc exception_desc;
 	struct list_head list;
 };
 
