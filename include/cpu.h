@@ -7,7 +7,7 @@
 #include <irq.h>
 
 #define MAX_EXCEPTIONS 512
-struct exception_desc {
+struct intr_desc {
 	u512 exception_bitmap;
 	u64 exception_low;
 	u64 exception_high;
@@ -27,7 +27,7 @@ struct cpu {
 	u64 page_level;
 	u64 nr_irq;
 	void *arch_data;
-	struct exception_desc exception_desc;
+	struct intr_desc *exception_desc;
 	struct list_head list;
 };
 
