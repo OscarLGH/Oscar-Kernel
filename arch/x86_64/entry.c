@@ -1,6 +1,5 @@
 #include <types.h>
 #include <kernel.h>
-#include <arch.h>
 #include <lapic.h>
 #include <msr.h>
 #include <cr.h>

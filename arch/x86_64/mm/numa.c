@@ -1,6 +1,5 @@
 #include <types.h>
 #include <kernel.h>
-#include <arch.h>
 #include <cr.h>
 #include <spinlock.h>
 #include <cpuid.h>

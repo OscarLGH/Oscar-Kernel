@@ -27,6 +27,7 @@
  *
  */
 #include <types.h>
+#include <x86_cpu.h>
 #include <msr.h>
 #include <segment.h>
 #include <cr.h>
@@ -604,25 +605,6 @@ struct vmcs {
 	u32 abort;
 	char data[0];
 };
-
-struct general_regs {
-	u64 rax;
-	u64 rbx;
-	u64 rcx;
-	u64 rdx;
-	u64 rsi;
-	u64 rdi;
-	u64 rsp;
-	u64 rbp;
-	u64 r8;
-	u64 r9;
-	u64 r10;
-	u64 r11;
-	u64 r12;
-	u64 r13;
-	u64 r14;
-	u64 r15;
-}; 
 
 struct ctrl_regs {
 	u64 cr0;

@@ -5,17 +5,17 @@
 #include <list.h>
 #include <mm.h>
 #include <irq.h>
+#include <bitmap.h>
 
 #define MAX_EXCEPTIONS 512
 struct intr_desc {
-	u512 exception_bitmap;
-	u64 exception_low;
-	u64 exception_high;
-	u64 irq_low;
-	u64 irq_high;
-	int (*exception_handler[512])(int exp, int type, u64 errno);
-	struct irq_desc *irq_desc;
+	struct bitmap exception_bitmap;
+	struct bitmap irq_bitmap;
+	int (*exception_handler[64])(int exp, int type, u64 errno);
+	struct irq_desc *irq_desc[256];
 };
+
+
 struct cpu {
 	u64 id;
 	u64 domain;
