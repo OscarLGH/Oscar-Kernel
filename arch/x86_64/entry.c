@@ -24,15 +24,53 @@ u8 cpu_sync_bitmap1[128] = {0};
 u8 cpu_sync_bitmap2[128] = {0};
 void start_kernel();
 
-void irq_handler(u64 vector)
+int local_apic_eoi()
 {
-	u8 cpu_id = 0;
-	u8 buffer[64] = {0};
-	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
-	cpu_id = buffer[7];
-	printk("interrupt vector:%d on cpu %d\n", vector, cpu_id);
-	if (vector >= 0x20) {
-		lapic_reg_write32(APIC_REG_EOI, 1);
+	lapic_reg_write32(APIC_REG_EOI, 1);
+}
+
+struct irq_chip irq_apic_chip = {
+	.eoi = local_apic_eoi,
+};
+
+void intr_handler_common(u64 vector)
+{
+	struct cpu *cpu = get_cpu();
+	struct irq_action *action_ptr;
+	printk("interrupt vector:%d on cpu %d\n", vector, cpu->id);
+
+	if (vector >= 32) {
+		struct irq_desc *desc = &cpu->intr_desc.irq_desc[vector - 32];
+		list_for_each_entry(action_ptr, &desc->irq_action_list, list) {
+			action_ptr->irq_handler(vector, action_ptr->data);
+		}
+		desc->chip->eoi();
+	}
+}
+
+int unhandled_irq(int irq, void *data)
+{
+	struct cpu *cpu = get_cpu();
+	printk("unhandled irq %d on cpu %d.\n", irq, cpu->id);
+	return 0;
+}
+
+void setup_irq()
+{
+	int i;
+	struct irq_desc *desc;
+	struct irq_action *action;
+	struct cpu *cpu = get_cpu();
+	cpu->intr_desc.irq_nr = 256 - 32;
+	cpu->intr_desc.irq_desc = bootmem_alloc(sizeof(struct irq_desc) * cpu->intr_desc.irq_nr);
+	for (i = 0; i < cpu->intr_desc.irq_nr; i++) {
+		desc = &cpu->intr_desc.irq_desc[i];
+		desc->chip = &irq_apic_chip;
+		action = bootmem_alloc(sizeof(*action));
+		action->irq_handler = unhandled_irq;
+		action->data = NULL;
+		INIT_LIST_HEAD(&desc->irq_action_list);
+		list_add_tail(&action->list, &desc->irq_action_list);
 	}
 }
 
@@ -244,20 +282,6 @@ void wakeup_all_processors()
 		}
 	}
 					
-}
-
-void ap_work()
-{
-	
-}
-
-void check_point()
-{
-	u8 buffer[64] = {0};
-	u8 cpu_id = 0;
-	cpuid(0x00000001, 0x00000000, (u32 *)&buffer[0]);
-	cpu_id = buffer[7];
-	//printk("CPU %d readched the checkpoint.\n", cpu_id);
 }
 
 void enable_cpu_features()
@@ -477,6 +501,7 @@ void x86_cpu_init()
 	set_kernel_segment();
 	set_tss_desc();
 	set_intr_desc();
+	setup_irq();
 	lapic_enable();
 }
 
@@ -499,9 +524,6 @@ void arch_init()
 	jmp_table_percpu[cpu_id]();
 #endif
 
-	//cpu_sync_bitmap2[cpu_id] = 1;
-	//check_point();
-
 	if (is_bsp()) {
 		start_kernel();
 		//vm_init_test();
@@ -514,11 +536,15 @@ void arch_init()
 		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
 	}
-	
+	asm("sti");
 	if (is_bsp()) {
 		wakeup_all_processors();
+		lapic_send_ipi(0, 0x27, APIC_ICR_ASSERT);
+		lapic_send_ipi(1, 0x27, APIC_ICR_ASSERT);
+		lapic_send_ipi(2, 0x27, APIC_ICR_ASSERT);
+		lapic_send_ipi(3, 0x28, APIC_ICR_ASSERT);
 	}
-
+	
 	asm("sti");
 	asm("hlt");
 }

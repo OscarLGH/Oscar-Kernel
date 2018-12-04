@@ -114,7 +114,7 @@ exception_table:
 	SAVE_CREGS
 	movq $\vector, %rdi
 	movq 90(%rsp), %rsi
-	call irq_handler
+	call intr_handler_common
 	RESTORE_CREGS
 	addq $8, %rsp
 	iretq
@@ -191,7 +191,7 @@ reserved_exception:
 .align 8
 	SAVE_CREGS
 	movq $\vector, %rdi
-	call irq_handler
+	call intr_handler_common
 	RESTORE_CREGS
 	iretq
 .endm

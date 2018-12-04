@@ -9,10 +9,9 @@
 
 #define MAX_EXCEPTIONS 512
 struct intr_desc {
-	struct bitmap exception_bitmap;
+	int irq_nr;
 	struct bitmap irq_bitmap;
-	int (*exception_handler[64])(int exp, int type, u64 errno);
-	struct irq_desc *irq_desc[256];
+	struct irq_desc *irq_desc;
 };
 
 
@@ -27,7 +26,7 @@ struct cpu {
 	u64 page_level;
 	u64 nr_irq;
 	void *arch_data;
-	struct intr_desc *exception_desc;
+	struct intr_desc intr_desc;
 	struct list_head list;
 };
 
