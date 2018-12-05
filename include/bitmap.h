@@ -16,9 +16,20 @@ static inline void bitmap_init(struct bitmap *bitmap, u64 size)
 		bitmap->bitmap_data[i] = 0;
 }
 
+static inline struct bitmap *bitmap_alloc(u64 size)
+{
+	struct bitmap *bitmap = bootmem_alloc(sizeof(*bitmap));
+	bitmap->bitmap_data = bootmem_alloc(size / 8);
+	bitmap->size = size;
+	if (bitmap == NULL || bitmap->bitmap_data == NULL)
+		return NULL;
+	bitmap_init(bitmap, size);
+	return bitmap;
+}
+
 static inline char bitmap_get(struct bitmap *bitmap, u64 bit)
 {
-	return bitmap->bitmap_data[bit >> 3] & (1 << (bit & 0x7));
+	return !!(bitmap->bitmap_data[bit >> 3] & (1 << (bit & 0x7)));
 }
 
 static inline void bitmap_set(struct bitmap *bitmap, u64 bit)
@@ -51,11 +62,15 @@ static inline int bitmap_find_free_region(struct bitmap *bitmap, u64 bits)
 	for (i = 0; i < bitmap->size; i++) {
 		if (bitmap_get(bitmap, i) == 1)
 			continue;
-		for (j = i; j < bits; j++) {
-			if (bitmap_get(bitmap, i) == 1)
+		
+		if (i + bits > bitmap->size)
+			return -1;
+
+		for (j = i; j < i + bits; j++) {
+			if (bitmap_get(bitmap, j) == 1)
 				break;
 
-			if (j - i >= bits)
+			if (j - i >= bits - 1)
 				return i;
 		}
 	}
@@ -69,7 +84,7 @@ static inline int bitmap_allocate_bits(struct bitmap *bitmap, u64 bits)
 	if (bit_f != -1) {
 		for (i = bit_f; i < bit_f + bits; i++)
 			bitmap_set(bitmap, i);
-		return 0;
+		return bit_f;
 	}
 	return -1;
 }

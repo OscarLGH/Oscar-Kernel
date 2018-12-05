@@ -14,6 +14,8 @@
 #include <mm.h>
 #include <vmx.h>
 #include <cpu.h>
+#include <stack.h>
+#include <irq.h>
 
 void (*jmp_table_percpu[MAX_CPUS])() = {0};
 struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
@@ -63,14 +65,12 @@ void setup_irq()
 	struct cpu *cpu = get_cpu();
 	cpu->intr_desc.irq_nr = 256 - 32;
 	cpu->intr_desc.irq_desc = bootmem_alloc(sizeof(struct irq_desc) * cpu->intr_desc.irq_nr);
+	cpu->intr_desc.irq_bitmap = bitmap_alloc(cpu->intr_desc.irq_nr);
 	for (i = 0; i < cpu->intr_desc.irq_nr; i++) {
 		desc = &cpu->intr_desc.irq_desc[i];
 		desc->chip = &irq_apic_chip;
-		action = bootmem_alloc(sizeof(*action));
-		action->irq_handler = unhandled_irq;
-		action->data = NULL;
 		INIT_LIST_HEAD(&desc->irq_action_list);
-		list_add_tail(&action->list, &desc->irq_action_list);
+		request_irq_smp(cpu, i, unhandled_irq, 0, "unhandled irq", NULL);
 	}
 }
 
@@ -493,7 +493,8 @@ void x86_cpu_init()
 {
 	struct cpu *cpu = get_cpu();
 	cpu->arch_data = bootmem_alloc(sizeof(struct x86_cpu));
-	cpu->status = 1;
+	cpu->kernel_stack = bootmem_alloc(0x200000);
+	load_sp((u64)cpu->kernel_stack);
 
 	enable_cpu_features();
 	map_kernel_memory();
@@ -503,6 +504,9 @@ void x86_cpu_init()
 	set_intr_desc();
 	setup_irq();
 	lapic_enable();
+
+	asm("sti");
+	cpu->status = 1;
 }
 
 void arch_numa_init();
@@ -529,22 +533,20 @@ void arch_init()
 		//vm_init_test();
 		//x86_pci_hostbridge_init();
 		//instruction_test();
-		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
-		//lapic_send_ipi(2, 0xff, APIC_ICR_ASSERT);
-		//lapic_send_ipi(3, 0xff, APIC_ICR_ASSERT);
 	} else {
-		//lapic_send_ipi(1, 0xff, APIC_ICR_ASSERT);
-		//lapic_send_ipi(0, 0xfe, APIC_ICR_ASSERT);
-	}
-	asm("sti");
-	if (is_bsp()) {
-		wakeup_all_processors();
-		lapic_send_ipi(0, 0x27, APIC_ICR_ASSERT);
-		lapic_send_ipi(1, 0x27, APIC_ICR_ASSERT);
-		lapic_send_ipi(2, 0x27, APIC_ICR_ASSERT);
-		lapic_send_ipi(3, 0x28, APIC_ICR_ASSERT);
+
 	}
 	
-	asm("sti");
-	asm("hlt");
+	if (is_bsp()) {
+		wakeup_all_processors();
+		lapic_send_ipi(0xff, 0xfe, APIC_ICR_ASSERT);
+		lapic_send_ipi(0, 0xfc, APIC_ICR_ASSERT);
+		lapic_send_ipi(2, 0xfc, APIC_ICR_ASSERT);
+		lapic_send_ipi(4, 0xfc, APIC_ICR_ASSERT);
+		lapic_send_ipi(6, 0xfc, APIC_ICR_ASSERT);
+	}	
+
+	while(1) {
+		asm("hlt");
+	};
 }

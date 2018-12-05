@@ -21,6 +21,7 @@ int register_cpu_remote(u64 id, struct node *node)
 		return -2;
 
 	cpu->id = id;
+	cpu->status = 0;
 	list_add_tail(&cpu->list, &node->cpu_list);
 	return 0;
 }

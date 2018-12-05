@@ -100,7 +100,7 @@ void arch_numa_init()
 						node->socket_id = srat_mem_affinity_ptr->proximity_domain;
 						mm_node_register(node);
 
-						zone = bootmem_alloc(sizeof(*cpu));
+						zone = bootmem_alloc(sizeof(*zone));
 						zone->start_pfn = srat_mem_affinity_ptr->base_address;
 						zone->pfn_cnt = srat_mem_affinity_ptr->length;
 						mm_zone_register(node, zone);
@@ -108,7 +108,7 @@ void arch_numa_init()
 					} else {
 						node = mm_get_node_by_id(srat_mem_affinity_ptr->proximity_domain);
 						if (node != NULL) {
-							zone = bootmem_alloc(sizeof(*cpu));
+							zone = bootmem_alloc(sizeof(*zone));
 							zone->start_pfn = srat_mem_affinity_ptr->base_address;
 							zone->pfn_cnt = srat_mem_affinity_ptr->length;
 							mm_zone_register(node, zone);
