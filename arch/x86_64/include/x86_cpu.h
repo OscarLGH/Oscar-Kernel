@@ -24,14 +24,6 @@ struct general_regs {
 	u64 r15;
 }; 
 
-struct intr_stack {
-	u64 error_code;
-	u64 rip;
-	u64 cs;
-	u64 rflags;
-	u64 rsp;
-	u64 ss;
-};
 struct x86_cpu {
 	char name[64];
 	u64 apic_id;
