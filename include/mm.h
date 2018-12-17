@@ -58,5 +58,8 @@ void mm_node_init(struct node *node);
 void mm_node_register(struct node *node);
 struct node *mm_get_node_by_id(u64 id);
 void mm_zone_register(struct node *node, struct zone *zone);
+void *ioremap(u64 phys_addr, u64 size);
+void *ioremap_nocache(u64 phys_addr, u64 size);
+void iounmap(void *virt_addr);
 
 #endif

@@ -1,15 +1,37 @@
 #include <irq.h>
 #include <cpu.h>
 
-int alloc_irq(int cpu)
+int alloc_irqs_cpu(int cpu, int nr_irq)
 {
 	struct node *node;
 	struct cpu *cpu_ptr;
+	int ret;
 	list_for_each_entry(node, &node_list, list) {
 		list_for_each_entry(cpu_ptr, &node->cpu_list, list) {
 			if (cpu_ptr->id == cpu) {
-				cpu_ptr->intr_desc.irq_nr++;
-				return bitmap_allocate_bits(cpu_ptr->intr_desc.irq_bitmap, 1);
+				ret = bitmap_allocate_bits(cpu_ptr->intr_desc.irq_bitmap, nr_irq);
+				if (ret != -1) {
+					cpu_ptr->intr_desc.irq_nr += nr_irq;
+					return ret;
+				}
+			}
+		}
+	}
+	return -1;
+}
+
+int alloc_irqs(int *cpu, int nr_irq)
+{
+	struct node *node;
+	struct cpu *cpu_ptr;
+	int ret;
+	list_for_each_entry(node, &node_list, list) {
+		list_for_each_entry(cpu_ptr, &node->cpu_list, list) {
+			ret = bitmap_allocate_bits(cpu_ptr->intr_desc.irq_bitmap, nr_irq);
+			if (ret != -1) {
+				cpu_ptr->intr_desc.irq_nr += nr_irq;
+				*cpu = cpu_ptr->id;
+				return ret;
 			}
 		}
 	}
@@ -30,6 +52,24 @@ int free_irq(int cpu, int irq)
 		}
 	}
 	return -1;
+}
+
+int alloc_irq_from_smp(int *cpu)
+{
+	struct node *node;
+	struct cpu *cpu_ptr;
+	int min_irqs = 0xffff;
+	struct cpu *min_irq_cpu;
+	list_for_each_entry(node, &node_list, list) {
+		list_for_each_entry(cpu_ptr, &node->cpu_list, list) {
+			if (cpu_ptr->intr_desc.irq_nr < min_irqs) {
+				min_irqs = cpu_ptr->intr_desc.irq_nr;
+				min_irq_cpu = cpu_ptr;
+			}
+		}
+	}
+	*cpu = min_irq_cpu->id;
+	return alloc_irqs_cpu(min_irq_cpu->id, 1);
 }
 
 int request_irq(int irq, irq_handler_t handler, unsigned long flags, char *name, void *dev)

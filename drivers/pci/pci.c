@@ -2,8 +2,6 @@
 #include <kernel.h>
 #include <mm.h>
 
-struct pci_host_bridge *host_bridge;
-
 struct list_head pci_device_list;
 struct list_head pci_driver_list;
 
@@ -37,63 +35,497 @@ void pci_unregister_driver(struct pci_driver *driver)
 	list_del(&driver->list);
 }
 
-int pci_read_config_byte(struct pci_dev *pdev, int offset, void *value)
+int pci_find_capability(struct pci_dev *dev, u8 id)
 {
-	return host_bridge->pci_read_config(pdev, offset, value, 1);
-}
+	u8 next_cap;
+	u8 cap_id;
+	pci_read_config_byte(dev, PCI_CAPABILITY_LIST, &next_cap);
 
-int pci_read_config_word(struct pci_dev *pdev, int offset, void *value)
-{
-	return host_bridge->pci_read_config(pdev, offset, value, 2);
-}
-
-int pci_read_config_dword(struct pci_dev *pdev, int offset, void *value)
-{
-	return host_bridge->pci_read_config(pdev, offset, value, 4);
-}
-
-int pci_write_config_byte(struct pci_dev *pdev, int offset, void *value)
-{
-	return host_bridge->pci_write_config(pdev, offset, value, 1);
-}
-
-int pci_write_config_word(struct pci_dev *pdev, int offset, void *value)
-{
-	return host_bridge->pci_write_config(pdev, offset, value, 2);
-}
-
-int pci_write_config_dword(struct pci_dev *pdev, int offset, void *value)
-{
-	return host_bridge->pci_write_config(pdev, offset, value, 4);
-}
-
-int pci_enable_device(struct pci_dev *pdev)
-{
-	u32 cmd_reg = 0;
-
-	pci_read_config_word(pdev, PCI_COMMAND, &cmd_reg);
-	cmd_reg |= 0x3;
-	pci_write_config_word(pdev, PCI_COMMAND, &cmd_reg);
+	while (next_cap) {
+		pci_read_config_byte(dev, next_cap, &cap_id);
+		if (cap_id == id)
+			return next_cap;
+		//printk("capability = %d\n", cap_id);
+		pci_read_config_byte(dev, next_cap + 1, &next_cap);
+	}
 
 	return 0;
 }
 
-int pci_set_master(struct pci_dev *pdev)
+int pci_irq_register(struct pci_dev *dev, int cpu, u64 vector)
 {
-	u32 cmd_reg = 0;
+	struct pci_irq_desc *desc = bootmem_alloc(sizeof(*desc));
+	if (desc == NULL)
+		return -ENOSPC;
+	desc->cpu = cpu;
+	desc->vector = vector;
+	INIT_LIST_HEAD(&desc->list);
+	list_add_tail(&desc->list, &dev->irq_list);
+	return 0;
+}
 
-	pci_read_config_word(pdev, PCI_COMMAND, &cmd_reg);
-	cmd_reg |= 0x4;
-	pci_write_config_word(pdev, PCI_COMMAND, &cmd_reg);
+static int msi_entry_setup(struct pci_dev *dev, u64 msg_addr, u64 msg_data, u64 mask)
+{
+	u16 control;
+	u32 addr_l = msg_addr & 0xffffffff;
+	u32 addr_h = (msg_addr >> 32);
+	u16 msi_data = msg_data;
+	u32 msi_mask = mask;
+	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
+	if (msi_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &control);
+
+	pci_write_config_dword(dev, msi_cap + PCI_MSI_ADDRESS_LO, addr_l);
+	if (control & PCI_MSI_FLAGS_64BIT) {
+		pci_write_config_dword(dev, msi_cap + PCI_MSI_ADDRESS_HI, addr_h);
+		pci_write_config_word(dev, msi_cap + PCI_MSI_DATA_64, msi_data);
+
+		if (control & PCI_MSI_FLAGS_MASKBIT) {
+			pci_write_config_dword(dev, msi_cap + PCI_MSI_MASK_64, msi_mask);
+		}
+	} else {
+		pci_write_config_word(dev, msi_cap + PCI_MSI_DATA_32, msi_data);
+
+		if (control & PCI_MSI_FLAGS_MASKBIT) {
+			pci_write_config_dword(dev, msi_cap + PCI_MSI_MASK_32, msi_mask);
+		}
+	}
 
 	return 0;
 }
 
-//TODO:
-int pci_enable_msi(struct pci_dev *pdev)
+static int msi_irq_mask(struct pci_dev *dev, int msi_irq, int mask)
 {
+	u16 control;
+	u32 msi_mask;
+	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
+	if (msi_cap == 0)
+		return -ENODEV;
+
+	if (mask) {
+		msi_mask |= (1 << (msi_irq));
+	} else {
+		msi_mask &= ~(1 << (msi_irq));
+	}
+
+	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &control);
+
+	if (control & PCI_MSI_FLAGS_64BIT) {
+
+		if (control & PCI_MSI_FLAGS_MASKBIT) {
+			pci_read_config_dword(dev, msi_cap + PCI_MSI_MASK_64, &msi_mask);
+			pci_write_config_dword(dev, msi_cap + PCI_MSI_MASK_64, msi_mask);
+		} else {
+			return -ENODEV;
+		}
+	} else {
+		if (control & PCI_MSI_FLAGS_MASKBIT) {
+			pci_read_config_dword(dev, msi_cap + PCI_MSI_MASK_32, &msi_mask);
+			pci_write_config_dword(dev, msi_cap + PCI_MSI_MASK_32, msi_mask);
+		} else {
+			return -ENODEV;
+		}
+	}
+
+	return 0;
+}
+
+static int msi_irq_pending(struct pci_dev *dev, int msi_irq)
+{
+	u16 control;
+	u32 msi_pending;
+	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
+	if (msi_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &control);
+
+	if (control & PCI_MSI_FLAGS_64BIT) {
+
+		if (control & PCI_MSI_FLAGS_MASKBIT) {
+			pci_read_config_dword(dev, msi_cap + PCI_MSI_PENDING_64, &msi_pending);
+		} else {
+			return -ENODEV;
+		}
+	} else {
+		if (control & PCI_MSI_FLAGS_MASKBIT) {
+			pci_read_config_dword(dev, msi_cap + PCI_MSI_PENDING_32, &msi_pending);
+		} else {
+			return -ENODEV;
+		}
+	}
+
+	return !!(msi_pending & (1 << msi_irq));
+}
+
+
+static int msi_capability_init(struct pci_dev *dev, int nvec,
+			       const struct irq_affinity *affd)
+
+{
+	int msi_cap_offset;
+	u16 msi_ctrl;
+	int ret;
+	int start_irq;
+	int cpu;
+	int i;
+	struct msi_data msi_data;
+
+	pci_msi_set_enable(dev, 0);
+	start_irq = alloc_irqs(&cpu, nvec);
+	if (start_irq == -1)
+		return -ENOSPC;
+
+	for (i = start_irq; i < start_irq + nvec; i++) {
+		pci_irq_register(dev, cpu, i);
+	}
+	arch_pci_build_msi_entry(&msi_data, start_irq, cpu);
+	msi_entry_setup(dev, msi_data.addr, msi_data.data, 0);
 	
+	pci_msi_set_enable(dev, 1);
 }
+
+/* return order 2 of nr_vectors. */
+int pci_msi_vec_count(struct pci_dev *dev)
+{
+	int ret;
+	u16 msgctl;	
+	u16 control;
+	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
+	if (msi_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &msgctl);
+	ret = 1 << ((msgctl & PCI_MSI_FLAGS_QMASK) >> 1);
+
+	return ret;
+}
+
+#define msix_table_size(flags)	((flags & PCI_MSIX_FLAGS_QSIZE) + 1)
+
+static int msix_entry_setup(struct pci_dev *dev, u64 index, u64 msg_addr, u64 msg_data, u64 mask)
+{
+	u16 control;
+	u32 addr_l = msg_addr & 0xffffffff;
+	u32 addr_h = (msg_addr >> 32);
+	u16 msi_data = msg_data;
+	u32 msi_mask = mask;
+	struct msi_x_table *table_base;
+	u64 phys_addr;
+	u32 table_offset;
+	u8 bir;
+	u32 nr_entries;
+
+	u8 msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
+	if (msix_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msix_cap + PCI_MSIX_FLAGS, &control);
+	nr_entries = msix_table_size(control);
+
+	pci_read_config_dword(dev, msix_cap + PCI_MSIX_TABLE,
+			      &table_offset);
+	bir = (u8)(table_offset & PCI_MSIX_TABLE_BIR);
+
+	table_offset &= PCI_MSIX_TABLE_OFFSET;
+	phys_addr = pci_resource_start(dev, bir) + table_offset;
+
+	table_base = ioremap_nocache(phys_addr, nr_entries * PCI_MSIX_ENTRY_SIZE);
+
+	table_base[index].addr_l = msg_addr;
+	table_base[index].addr_h = msg_addr >> 32;
+	table_base[index].data = msg_data;
+	table_base[index].vector_ctrl = (mask & 0x1);
+
+	iounmap(table_base);
+	return 0;
+}
+
+static int msix_irq_mask(struct pci_dev *dev, int msix_irq, int mask)
+{
+	u16 control;
+	struct msi_x_table *table_base;
+	u64 phys_addr;
+	u32 table_offset;
+	u8 bir;
+	u32 nr_entries;
+
+	u8 msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
+	if (msix_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msix_cap + PCI_MSIX_FLAGS, &control);
+	nr_entries = msix_table_size(control);
+
+	pci_read_config_dword(dev, msix_cap + PCI_MSIX_TABLE,
+			      &table_offset);
+	bir = (u8)(table_offset & PCI_MSIX_TABLE_BIR);
+
+	table_offset &= PCI_MSIX_TABLE_OFFSET;
+	phys_addr = pci_resource_start(dev, bir) + table_offset;
+
+	table_base = ioremap_nocache(phys_addr, nr_entries * PCI_MSIX_ENTRY_SIZE);
+
+	table_base[msix_irq].vector_ctrl = (mask & 0x1);
+	iounmap(table_base);
+	return 0;
+}
+
+static int msix_irq_pending(struct pci_dev *dev, int msix_irq)
+{
+	u16 control;
+	u64 *pba_base;
+	u64 phys_addr;
+	u32 pba_offset;
+	u8 bir;
+	u32 nr_entries;
+	u64 pending;
+
+	u8 msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
+	if (msix_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msix_cap + PCI_MSIX_FLAGS, &control);
+	nr_entries = msix_table_size(control);
+
+	pci_read_config_dword(dev, msix_cap + PCI_MSIX_PBA,
+			      &pba_offset);
+	bir = (u8)(pba_offset & PCI_MSIX_PBA_BIR);
+
+	pba_offset &= PCI_MSIX_PBA_OFFSET;
+	phys_addr = pci_resource_start(dev, bir) + pba_offset;
+
+	pba_base = ioremap_nocache(phys_addr, nr_entries * PCI_MSIX_ENTRY_SIZE);
+
+	pending = pba_base[msix_irq / 64] & (1 << (msix_irq % 64));
+	iounmap(pba_base);
+	return !!pending;
+}
+
+static int msix_capability_init(struct pci_dev *dev, int nvec,
+			       const struct irq_affinity *affd)
+
+{
+	int msi_cap_offset;
+	u16 msi_ctrl;
+	int ret;
+	int start_irq;
+	int cpu;
+	int irq;
+	int i;
+	struct msi_data msi_data;
+
+	/* Ensure MSI-X is disabled while it is set up */
+	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_ENABLE, 0);
+
+	for (i = 0; i < nvec; i++) {
+		irq = alloc_irq_from_smp(&cpu);
+		pci_irq_register(dev, cpu, i);
+		arch_pci_build_msi_entry(&msi_data, start_irq, cpu);
+		msix_entry_setup(dev, i, msi_data.addr, msi_data.data, 0);
+	}
+	
+	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_MASKALL, 0);
+
+	return 0;
+}
+
+
+int pci_msix_vec_count(struct pci_dev *dev)
+{
+	u16 control;
+	u8 msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
+	if (msix_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msix_cap + PCI_MSIX_FLAGS, &control);
+	return msix_table_size(control);
+}
+
+int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec)
+{
+	int ret;
+	ret = pci_find_capability(dev, PCI_CAP_ID_MSIX);
+	if (ret)
+		return ret;
+
+	//ret = msi_capability_init(dev);
+	return ret;
+}
+
+static int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
+				  const struct irq_affinity *affd)
+{
+	int nvec;
+	int rc;
+
+	nvec = pci_msi_vec_count(dev);
+	if (nvec < 0)
+		return nvec;
+	if (nvec < minvec)
+		return -ENOSPC;
+
+	if (nvec > maxvec)
+		nvec = maxvec;
+
+	for (;;) {
+		//if (affd) {
+			//nvec = irq_calc_affinity_vectors(minvec, nvec, affd);
+			//if (nvec < minvec)
+			//	return -ENOSPC;
+		//}
+
+		rc = msi_capability_init(dev, nvec, affd);
+		if (rc == 0)
+			return nvec;
+
+		if (rc < 0)
+			return rc;
+		if (rc < minvec)
+			return -ENOSPC;
+
+		nvec = rc;
+	}
+}
+
+/* deprecated, don't use */
+int pci_enable_msi(struct pci_dev *dev)
+{
+	int rc = __pci_enable_msi_range(dev, 1, 1, NULL);
+	if (rc < 0)
+		return rc;
+	return 0;
+}
+
+
+static int __pci_enable_msix_range(struct pci_dev *dev,
+				   struct msix_entry *entries, int minvec,
+				   int maxvec, const struct irq_affinity *affd)
+{
+	int rc, nvec = maxvec;
+
+	if (maxvec < minvec)
+		return -ERANGE;
+
+	for (;;) {
+		if (affd) {
+			//nvec = irq_calc_affinity_vectors(minvec, nvec, affd);
+			if (nvec < minvec)
+				return -ENOSPC;
+		}
+
+		msix_capability_init(dev, nvec, affd);
+		//rc = __pci_enable_msix(dev, entries, nvec, affd);
+		//if (rc == 0)
+		//	return nvec;
+
+		if (rc < 0)
+			return rc;
+		if (rc < minvec)
+			return -ENOSPC;
+
+		nvec = rc;
+	}
+}
+
+/**
+ * pci_enable_msix_range - configure device's MSI-X capability structure
+ * @dev: pointer to the pci_dev data structure of MSI-X device function
+ * @entries: pointer to an array of MSI-X entries
+ * @minvec: minimum number of MSI-X irqs requested
+ * @maxvec: maximum number of MSI-X irqs requested
+ *
+ * Setup the MSI-X capability structure of device function with a maximum
+ * possible number of interrupts in the range between @minvec and @maxvec
+ * upon its software driver call to request for MSI-X mode enabled on its
+ * hardware device function. It returns a negative errno if an error occurs.
+ * If it succeeds, it returns the actual number of interrupts allocated and
+ * indicates the successful configuration of MSI-X capability structure
+ * with new allocated MSI-X interrupts.
+ **/
+int pci_enable_msix_range(struct pci_dev *dev, struct msix_entry *entries,
+		int minvec, int maxvec)
+{
+	return __pci_enable_msix_range(dev, entries, minvec, maxvec, NULL);
+}
+
+/**
+ * pci_alloc_irq_vectors_affinity - allocate multiple IRQs for a device
+ * @dev:		PCI device to operate on
+ * @min_vecs:		minimum number of vectors required (must be >= 1)
+ * @max_vecs:		maximum (desired) number of vectors
+ * @flags:		flags or quirks for the allocation
+ * @affd:		optional description of the affinity requirements
+ *
+ * Allocate up to @max_vecs interrupt vectors for @dev, using MSI-X or MSI
+ * vectors if available, and fall back to a single legacy vector
+ * if neither is available.  Return the number of vectors allocated,
+ * (which might be smaller than @max_vecs) if successful, or a negative
+ * error code on error. If less than @min_vecs interrupt vectors are
+ * available for @dev the function will fail with -ENOSPC.
+ *
+ * To get the Linux IRQ number used for a vector that can be passed to
+ * request_irq() use the pci_irq_vector() helper.
+ */
+
+/**
+ * pci_alloc_irq_vectors_affinity - allocate multiple IRQs for a device
+ * @dev:		PCI device to operate on
+ * @min_vecs:		minimum number of vectors required (must be >= 1)
+ * @max_vecs:		maximum (desired) number of vectors
+ * @flags:		flags or quirks for the allocation
+ * @affd:		optional description of the affinity requirements
+ *
+ * Allocate up to @max_vecs interrupt vectors for @dev, using MSI-X or MSI
+ * vectors if available, and fall back to a single legacy vector
+ * if neither is available.  Return the number of vectors allocated,
+ * (which might be smaller than @max_vecs) if successful, or a negative
+ * error code on error. If less than @min_vecs interrupt vectors are
+ * available for @dev the function will fail with -ENOSPC.
+ *
+ * To get the Linux IRQ number used for a vector that can be passed to
+ * request_irq() use the pci_irq_vector() helper.
+ */
+int pci_alloc_irq_vectors_affinity(struct pci_dev *dev, unsigned int min_vecs,
+				   unsigned int max_vecs, unsigned int flags,
+				   const struct irq_affinity *affd)
+{
+	static const struct irq_affinity msi_default_affd;
+	int vecs = -ENOSPC;
+
+	if (flags & PCI_IRQ_AFFINITY) {
+		if (!affd)
+			affd = &msi_default_affd;
+	} else {
+			affd = NULL;
+	}
+
+	if (flags & PCI_IRQ_MSIX) {
+		vecs = __pci_enable_msix_range(dev, NULL, min_vecs, max_vecs,
+				affd);
+		if (vecs > 0)
+			return vecs;
+	}
+
+	if (flags & PCI_IRQ_MSI) {
+		vecs = __pci_enable_msi_range(dev, min_vecs, max_vecs, affd);
+		if (vecs > 0)
+			return vecs;
+	}
+
+	/* use legacy irq if allowed */
+	if (flags & PCI_IRQ_LEGACY) {
+		//if (min_vecs == 1 && dev->irq) {
+			//pci_intx(dev, 1);
+		//	return 1;
+		//}
+	}
+
+	return vecs;
+}
+
 
 u16 pci_get_bar_type(struct pci_dev *pdev, int bar)
 {
@@ -141,34 +573,30 @@ u64 pci_get_bar_size(struct pci_dev *pdev, int bar)
 
 	pci_read_config_word(pdev, PCI_COMMAND, &ori_cmd_reg);
 	new_cmd_reg = ori_cmd_reg & (~0x3);
-	pci_write_config_word(pdev, PCI_COMMAND, &new_cmd_reg);
+	pci_write_config_word(pdev, PCI_COMMAND, new_cmd_reg);
 
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0 + bar * 4, &ori_bar_lo32);
-	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + bar * 4, &all_ones);
+	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + bar * 4, all_ones);
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0 + bar * 4, &size_lo32);
-	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + bar * 4, &ori_bar_lo32);
-
-	if (ori_bar_lo32 & BIT1) {
-		valid = 0;
-	}
+	pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + bar * 4, ori_bar_lo32);
 
 	if (ori_bar_lo32 & BIT2) {
 		pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0 + (bar + 1) * 4, &ori_bar_hi32);
-		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + (bar + 1) * 4, &all_ones);
+		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + (bar + 1) * 4, all_ones);
 		pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0 + (bar + 1) * 4, &size_hi32);
-		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + (bar + 1) * 4, &ori_bar_hi32);
+		pci_write_config_dword(pdev, PCI_BASE_ADDRESS_0 + (bar + 1) * 4, ori_bar_hi32);
 	}
 
-	pci_write_config_word(pdev, PCI_COMMAND, &ori_cmd_reg);
+	pci_write_config_word(pdev, PCI_COMMAND, ori_cmd_reg);
 
-	if (ori_bar_lo32 & BIT0)
+	if (ori_bar_lo32 & PCI_BASE_ADDRESS_SPACE_IO) {
 		size_lo32 &= (~0x3);
-	else
-		size_lo32 &= (~0xf);
-
-	/* IO type bar ignores upper 16 bits. */
-	if (ori_bar_lo32 & BIT0)
+		/* IO type bar ignores upper 16 bits. */
 		size_lo32 |= 0xffff0000;
+		valid = 0;
+	} else {
+		size_lo32 &= (~0xf);
+	}
 
 	size = size_lo32 | ((u64)size_hi32 << 32);
 	size &= ~(0xfULL);
@@ -201,21 +629,21 @@ u64 pci_get_oprombar_size(struct pci_dev *pdev)
 
 	pci_read_config_word(pdev, PCI_COMMAND, &ori_cmd_reg);
 	new_cmd_reg = ori_cmd_reg & (~0x3);
-	pci_write_config_word(pdev, PCI_COMMAND, &new_cmd_reg);
+	pci_write_config_word(pdev, PCI_COMMAND, new_cmd_reg);
 
 	if ((pdev->type & 0x1) == 0) {
 		pci_read_config_dword(pdev, PCI_ROM_ADDRESS, &ori_bar);
-		pci_write_config_dword(pdev, PCI_ROM_ADDRESS, &all_ones);
+		pci_write_config_dword(pdev, PCI_ROM_ADDRESS, all_ones);
 		pci_read_config_dword(pdev, PCI_ROM_ADDRESS, &size);
-		pci_write_config_dword(pdev, PCI_ROM_ADDRESS, &ori_bar);
+		pci_write_config_dword(pdev, PCI_ROM_ADDRESS, ori_bar);
 	} else {
 		pci_read_config_dword(pdev, PCI_ROM_ADDRESS1, &ori_bar);
-		pci_write_config_dword(pdev, PCI_ROM_ADDRESS1, &all_ones);
+		pci_write_config_dword(pdev, PCI_ROM_ADDRESS1, all_ones);
 		pci_read_config_dword(pdev, PCI_ROM_ADDRESS1, &size);
-		pci_write_config_dword(pdev, PCI_ROM_ADDRESS1, &ori_bar);
+		pci_write_config_dword(pdev, PCI_ROM_ADDRESS1, ori_bar);
 	}
 
-	pci_write_config_word(pdev, PCI_COMMAND, &ori_cmd_reg);
+	pci_write_config_word(pdev, PCI_COMMAND, ori_cmd_reg);
 	size &= ~(0x8ffULL);
 	size = ~size + 1;
 
@@ -296,6 +724,8 @@ void pci_device_print()
 			if (pdev->resource[i].start != 0) {
 				printk("    OPROM BAR:0x%x-0x%x\n", pdev->resource[i].start, pdev->resource[i].end);
 			}
+
+			pci_find_capability(pdev, 0);
 		} else {
 			for (i = 0; i < 2; i++) {
 				if (pdev->resource[i].start != 0) {
@@ -365,6 +795,7 @@ void pci_scan()
 					pdev->bus = b;
 					pdev->device = d;
 					pdev->fun = f;
+					INIT_LIST_HEAD(&pdev->irq_list);
 					//printk("%02d:%02d.%d vendor:%04x, device:%04x\n", b, d, f, vendor_id, device_id);
 					pci_device_init(pdev);
 					list_add_tail(&pdev->list, &pci_device_list);

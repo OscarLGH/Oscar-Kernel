@@ -3,6 +3,7 @@
 
 #include <types.h>
 #include <list.h>
+#include <irq.h>
 
 /* Copied from linux-kernel/include/uapi/linux/pci_regs.h */
 /*
@@ -321,6 +322,13 @@
 #define  PCI_MSIX_ENTRY_DATA		8
 #define  PCI_MSIX_ENTRY_VECTOR_CTRL	12
 #define   PCI_MSIX_ENTRY_CTRL_MASKBIT	1
+
+struct msi_x_table {
+	u32 addr_l;
+	u32 addr_h;
+	u32 data;
+	u32 vector_ctrl;
+};
 
 /* CompactPCI Hotswap Register */
 
@@ -1012,6 +1020,28 @@
 #define PCI_L1SS_CTL2		0x0c	/* Control 2 Register */
 
 
+#define PCI_IRQ_LEGACY		(1 << 0) /* Allow legacy interrupts */
+#define PCI_IRQ_MSI		(1 << 1) /* Allow MSI interrupts */
+#define PCI_IRQ_MSIX		(1 << 2) /* Allow MSI-X interrupts */
+#define PCI_IRQ_AFFINITY	(1 << 3) /* Auto-assign affinity */
+#define PCI_IRQ_ALL_TYPES \
+	(PCI_IRQ_LEGACY | PCI_IRQ_MSI | PCI_IRQ_MSIX)
+
+struct msi_entry {
+	
+};
+
+struct msix_entry {
+	u32 vector;
+	u16 entry;
+};
+
+struct pci_irq_desc {
+	u64 cpu;
+	u64 vector;
+	struct list_head list;
+};
+
 struct pci_dev {
 	u8 seg;
 	u8 bus;
@@ -1030,8 +1060,8 @@ struct pci_dev {
 	struct list_head list;
 	struct pci_dev *parent;
 
-	/* for legacy irq or msi. */
-	u64 irq;
+	/* irq list */
+	struct list_head irq_list;
 
 	struct {
 		u64 start;
@@ -1081,11 +1111,106 @@ struct pci_host_bridge {
 	u64 rc_mmio_base;
 
 	int (*pci_read_config)(struct pci_dev *pdev, int offset, void *value, int len);
-	int (*pci_write_config)(struct pci_dev *pdev, int offset, void *value, int len);
+	int (*pci_write_config)(struct pci_dev *pdev, int offset, u32 value, int len);
 	int (*pci_allocate_irq)(struct pci_dev *pdev);
 	int (*pci_free_irq)(struct pci_dev *pdev, int irq);
-	int (*pci_arm_msi)(struct pci_dev *pdev, int irq);
+	int (*pci_msi_entry_build)(struct msi_data *msi, int irq, int cpu);
 	int (*pci_pm_func)(struct pci_dev *pdev);
 };
+
+struct pci_host_bridge *host_bridge;
+
+static inline int pci_read_config_byte(struct pci_dev *pdev, int offset, void *value)
+{
+	return host_bridge->pci_read_config(pdev, offset, value, 1);
+}
+
+static inline int pci_read_config_word(struct pci_dev *pdev, int offset, void *value)
+{
+	return host_bridge->pci_read_config(pdev, offset, value, 2);
+}
+
+static inline int pci_read_config_dword(struct pci_dev *pdev, int offset, void *value)
+{
+	return host_bridge->pci_read_config(pdev, offset, value, 4);
+}
+
+static inline int pci_write_config_byte(struct pci_dev *pdev, int offset, u8 value)
+{
+	return host_bridge->pci_write_config(pdev, offset, value, 1);
+}
+
+static inline int pci_write_config_word(struct pci_dev *pdev, int offset, u16 value)
+{
+	return host_bridge->pci_write_config(pdev, offset, value, 2);
+}
+
+static inline int pci_write_config_dword(struct pci_dev *pdev, int offset, u32 value)
+{
+	return host_bridge->pci_write_config(pdev, offset, value, 4);
+}
+
+static inline int arch_pci_build_msi_entry(struct msi_data *msi, int irq, int cpu)
+{
+	return host_bridge->pci_msi_entry_build(msi, irq, cpu);
+}
+
+int pci_find_capability(struct pci_dev *dev, u8 id);
+
+static inline int pci_enable_device(struct pci_dev *pdev)
+{
+	u32 cmd_reg = 0;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd_reg);
+	cmd_reg |= (PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
+	pci_write_config_word(pdev, PCI_COMMAND, cmd_reg);
+
+	return 0;
+}
+
+static inline int pci_set_master(struct pci_dev *pdev)
+{
+	u32 cmd_reg = 0;
+
+	pci_read_config_word(pdev, PCI_COMMAND, &cmd_reg);
+	cmd_reg |= PCI_COMMAND_MASTER;
+	pci_write_config_word(pdev, PCI_COMMAND, cmd_reg);
+
+	return 0;
+}
+
+static inline int pci_msi_set_enable(struct pci_dev *dev, int enable)
+{
+	u16 control;
+	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
+	if (msi_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &control);
+	control &= ~PCI_MSI_FLAGS_ENABLE;
+	if (enable)
+		control |= PCI_MSI_FLAGS_ENABLE;
+	pci_write_config_word(dev, msi_cap + PCI_MSI_FLAGS, control);
+
+	return 0;
+}
+
+static inline int pci_msix_clear_and_set_ctrl(struct pci_dev *dev, u16 clear, u16 set)
+{
+	u16 ctrl;
+	u8 msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
+	
+	if (msix_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msix_cap + PCI_MSIX_FLAGS, &ctrl);
+	ctrl &= ~clear;
+	ctrl |= set;
+	pci_write_config_word(dev, msix_cap + PCI_MSIX_FLAGS, ctrl);
+
+	return 0;
+}
+
+
 
 #endif

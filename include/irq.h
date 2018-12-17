@@ -30,11 +30,26 @@ struct irq_desc {
 };
 
 
-int alloc_irq(int cpu);
+int alloc_irqs_cpu(int cpu, int nr_irq);
+int alloc_irqs(int *cpu, int nr_irq);
+
+
 int free_irq(int cpu, int irq);
+int alloc_irq_from_smp(int *cpu);
+
 int request_irq(int irq, irq_handler_t handler, unsigned long flags, char *name, void *dev);
 
 struct cpu;
 int request_irq_smp(struct cpu *cpu_ptr, int irq, irq_handler_t handler, unsigned long flags, char *name, void *dev);
+
+struct irq_affinity {
+	int	pre_vectors;
+	int	post_vectors;
+};
+
+struct msi_data {
+	u64 addr;
+	u64 data;
+};
 
 #endif
