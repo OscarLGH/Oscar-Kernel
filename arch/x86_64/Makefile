@@ -8,7 +8,7 @@ CFLAGS		= -c -fno-builtin -fno-stack-protector -fPIC -fno-pie -Werror -g -mno-re
 LDFLAGS		= -T Link.lds --nmagic
 
 # This Program
-OSCARSKERNEL	= kernel.bin
+OSCARSKERNEL	= bin/kernel.bin
 
 SRCSC		= $(shell find ../.. -name "*.c")
 SRCSA		= $(shell find ../.. -name "*.S")
