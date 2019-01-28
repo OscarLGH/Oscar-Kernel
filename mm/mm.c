@@ -48,8 +48,9 @@ void mm_enumate()
 {
 	u64 base = 0;
 	u64 length = 0;
+	int i;
 	struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
-	for (int i = 0; i < boot_parm->ardc_cnt; i++) {
+	for (i = 0; i < boot_parm->ardc_cnt; i++) {
 		if (1) {
 			struct zone *zone = bootmem_alloc(sizeof(*zone));
 			zone->page_size = 0x1000;

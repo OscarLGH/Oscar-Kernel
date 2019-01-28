@@ -16,9 +16,10 @@ void mm_enumate();
 
 void fb_test()
 {
+	int i,j;
 	u32 image_array[0x100000];
-	for (int i = 0; i < 200; i++) {
-		for (int j = 0; j < 200; j++) {
+	for (i = 0; i < 200; i++) {
+		for (j = 0; j < 200; j++) {
 			if ((i - 100) * (i - 100) + (j - 100) * (j - 100) <= 10000)
 				image_array[i + j * 200] = 0x0000ffff + 0x00010000 * j;
 			else

@@ -11,6 +11,7 @@
 
 void arch_numa_init()
 {
+	int i;
 	int table_len;
 	int node_bitmap[64] = {0};
 	struct node *node;
@@ -52,7 +53,7 @@ void arch_numa_init()
 		}
 
 		struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
-		for (int i = 0; i < boot_parm->ardc_cnt; i++) {
+		for (i = 0; i < boot_parm->ardc_cnt; i++) {
 			if (boot_parm->ardc_array[i].type == 1 || boot_parm->ardc_array[i].type == 2) {
 				struct zone *zone = bootmem_alloc(sizeof(*zone));
 				zone->page_size = 0x1000;

@@ -33,10 +33,10 @@ rm -rf tmp
 sudo losetup -d $free_loop
 
 qemu-system-x86_64 \
-	-enable-kvm \
-	-cpu host \
+	-cpu Broadwell \
 	-smp 4,sockets=1,cores=2,threads=2 \
 	-m 1G \
 	-bios OVMF.fd \
 	-hda vdisk.img \
-	-serial stdio
+	-serial stdio \
+	-gdb tcp::1234 -S
