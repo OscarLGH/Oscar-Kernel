@@ -110,7 +110,7 @@ exception_table:
 	movq %rax, %cr0
 .endm
 
-.macro EXCEPTION_COMMON handler=0 has_error_code=0
+.macro EXCEPTION_COMMON handler = 0 has_error_code = 0
 .if \has_error_code == 0
 	pushq $0xffffffffffffffff
 .endif
@@ -124,74 +124,73 @@ exception_table:
 .endm
 
 divide_error_exception:
-	EXCEPTION_COMMON handler=do_divide_error_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_divide_error_exception, has_error_code = 0
 
 debug_exception:
-	EXCEPTION_COMMON handler=do_debug_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_debug_exception, has_error_code = 0
 
 nmi_interrupt:
-	EXCEPTION_COMMON handler=do_nmi_interrupt, has_error_code=0
+	EXCEPTION_COMMON handler=do_nmi_interrupt, has_error_code = 0
 
 breakpoint_exception:
-	EXCEPTION_COMMON handler=do_breakpoint_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_breakpoint_exception, has_error_code = 0
 
 overflow_exception:
-	EXCEPTION_COMMON handler=do_overflow_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_overflow_exception, has_error_code = 0
 
 bound_range_exceeded_exception:
-	EXCEPTION_COMMON handler=do_bound_range_exceeded_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_bound_range_exceeded_exception, has_error_code = 0
 
 invalid_opcode_exception:
-	EXCEPTION_COMMON handler=do_invalid_opcode_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_invalid_opcode_exception, has_error_code = 0
 
 device_not_available_exception:
-	EXCEPTION_COMMON handler=do_device_not_available_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_device_not_available_exception, has_error_code = 0
 
 double_fault_exception:
-	EXCEPTION_COMMON handler=do_double_fault_exception, has_error_code=1
+	EXCEPTION_COMMON handler=do_double_fault_exception, has_error_code = 1
 
 coprocessor_segment_overrun:
-	EXCEPTION_COMMON handler=do_coprocessor_segment_overrun, has_error_code=0
+	EXCEPTION_COMMON handler=do_coprocessor_segment_overrun, has_error_code = 0
 
 invalid_tss_exception:
-	EXCEPTION_COMMON handler=do_invalid_tss_exception, has_error_code=1
+	EXCEPTION_COMMON handler=do_invalid_tss_exception, has_error_code = 1
 
 segment_not_present:
-	EXCEPTION_COMMON handler=do_segment_not_present, has_error_code=1
+	EXCEPTION_COMMON handler=do_segment_not_present, has_error_code = 1
 
 stack_fault_exception:
-	EXCEPTION_COMMON handler=do_stack_fault_exception,  has_error_code=1
+	EXCEPTION_COMMON handler=do_stack_fault_exception, has_error_code = 1
 
 general_protection_exception:
-	EXCEPTION_COMMON handler=do_general_protection_exception, has_error_code=1
+	EXCEPTION_COMMON handler=do_general_protection_exception, has_error_code = 1
 
 page_fault_exception:
-	EXCEPTION_COMMON handler=do_page_fault_exception, has_error_code=1
+	EXCEPTION_COMMON handler=do_page_fault_exception, has_error_code = 1
 
 exception_handler_15:
-	EXCEPTION_COMMON handler=do_reserved_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_reserved_exception, has_error_code = 0
 
 x87_fpu_floating_point_error:
-	EXCEPTION_COMMON handler=do_x87_fpu_floating_point_error,  has_error_code=0
+	EXCEPTION_COMMON handler=do_x87_fpu_floating_point_error, has_error_code = 0
 
 alignment_check_exception:
-	EXCEPTION_COMMON handler=do_alignment_check_exception,  has_error_code=1
+	EXCEPTION_COMMON handler=do_alignment_check_exception, has_error_code = 1
 
 machine_check_exception:
-	EXCEPTION_COMMON handler=do_machine_check_exception,  has_error_code=0
+	EXCEPTION_COMMON handler=do_machine_check_exception, has_error_code = 0
 
 simd_floatingn_point_exception:
-	EXCEPTION_COMMON handler=do_simd_floatingn_point_exception,  has_error_code=0
+	EXCEPTION_COMMON handler=do_simd_floatingn_point_exception, has_error_code = 0
 
 virtualization_exception:
-	EXCEPTION_COMMON handler=do_virtualization_exception,  has_error_code=0
+	EXCEPTION_COMMON handler=do_virtualization_exception, has_error_code = 0
 
 reserved_exception:
-	EXCEPTION_COMMON handler=do_reserved_exception, has_error_code=0
+	EXCEPTION_COMMON handler=do_reserved_exception, has_error_code = 0
 
 
-.macro IRQ_COMMON vector=0
-.align 8
+.macro IRQ_COMMON vector = 0
 	SAVE_CREGS
 	movq $\vector, %rdi
 	call intr_handler_common
@@ -201,10 +200,10 @@ reserved_exception:
 
 
 irq_vector:
-index=0
+index = 0
 .rept 0x100 - 0x20
 	IRQ_COMMON vector = index + 0x20
-	index=index+1
+	index = index + 1
 .endr
 irq_vector_end:
 	nop
@@ -213,9 +212,9 @@ irq_vector_end:
 .data
 PER_IRQ_SIZE = ((irq_vector_end - irq_vector) / 224)
 irq_table:
-index=0
+index = 0
 .rept 0x100 - 0x20
 	.quad irq_vector + index * PER_IRQ_SIZE
-	index=index+1
+	index = index + 1
 .endr
 

@@ -226,5 +226,20 @@ inline static void mp_init_all(u64 ap_startup_addr)
 	lapic_send_ipi(0, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF);
 }
 
+inline static int lapic_set_timer(u64 freq, u8 vector)
+{
+	u64 default_freq;
+	u32 buffer[4] = {0};
+	cpuid(0x15, 0, buffer);
+	default_freq = buffer[2];
+
+	lapic_reg_write32(APIC_REG_TIMER_DCR, 0xb);
+	
+	lapic_reg_write32(APIC_REG_LVT_TIMER, 0x20000 | vector);
+	lapic_reg_write32(APIC_REG_TIMER_ICR, default_freq * 1000000 / freq);
+	return 0;
+}
+
+
 
 #endif

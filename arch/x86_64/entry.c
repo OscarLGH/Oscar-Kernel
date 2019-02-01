@@ -512,6 +512,11 @@ void x86_cpu_init()
 
 void arch_numa_init();
 
+int timer_handler(int irq, void *data)
+{
+	printk("%s\n, vector = %d\n", __FUNCTION__, irq);	
+}
+
 void arch_init()
 {
 	u8 buffer[64] = {0};
@@ -545,9 +550,14 @@ void arch_init()
 		//lapic_send_ipi(2, 0xfc, APIC_ICR_ASSERT);
 		//lapic_send_ipi(4, 0xfc, APIC_ICR_ASSERT);
 		//lapic_send_ipi(6, 0xfc, APIC_ICR_ASSERT);
-		asm("ud2");
+		//asm("ud2");
+		//int irq = alloc_irqs_cpu(0, 1);
+		//request_irq_smp(get_cpu(), irq, timer_handler, 0, NULL, NULL);
+		//printk("irq = %d\n", irq);
+		//asm("int $0x20");
+		//asm("int $0x21");
 	}	
-
+	lapic_set_timer(1, 0xff);
 	while(1) {
 		asm("hlt");
 	};
