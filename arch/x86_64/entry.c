@@ -16,6 +16,7 @@
 #include <cpu.h>
 #include <stack.h>
 #include <irq.h>
+#include <task.h>
 
 void (*jmp_table_percpu[MAX_CPUS])() = {0};
 struct bootloader_parm_block *boot_parm = (void *)PHYS2VIRT(0x10000);
@@ -38,6 +39,7 @@ struct irq_chip irq_apic_chip = {
 void intr_handler_common(u64 vector)
 {
 	struct cpu *cpu = get_cpu();
+	cpu->status = CPU_STATUS_IRQ_CONTEXT;
 	struct irq_action *action_ptr;
 	printk("interrupt vector:%d on cpu %d\n", vector, cpu->id);
 
@@ -48,6 +50,8 @@ void intr_handler_common(u64 vector)
 		}
 		desc->chip->eoi();
 	}
+
+	cpu->status = CPU_STATUS_PROCESS_CONTEXT;
 }
 
 int unhandled_irq(int irq, void *data)
@@ -70,7 +74,7 @@ void setup_irq()
 		desc = &cpu->intr_desc.irq_desc[i];
 		desc->chip = &irq_apic_chip;
 		INIT_LIST_HEAD(&desc->irq_action_list);
-		request_irq_smp(cpu, i, unhandled_irq, 0, "unhandled irq", NULL);
+		//request_irq_smp(cpu, i, unhandled_irq, 0, "unhandled irq", NULL);
 	}
 }
 
@@ -269,14 +273,25 @@ void wakeup_all_processors()
 		mp_init_all(ap_load_addr);
 		return;
 	}
+	
+	list_for_each_entry(node, &node_list, list) {
+		list_for_each_entry(cpu, &node->cpu_list, list) {
+			if (cpu->id == 0)
+				continue;
+
+			printk("waking up cpu %d...\n", cpu->id);
+			mp_init_single(cpu->id, ap_load_addr);
+			while (cpu->status != 1);
+			printk(" [%d]", cpu->id);
+		}
+	}
+
 	printk("Online CPUs: [%d]", get_cpu()->id);
 	list_for_each_entry(node, &node_list, list) {
 		list_for_each_entry(cpu, &node->cpu_list, list) {
 			if (cpu->id == 0)
 				continue;
 
-			//printk("waking up cpu %d...\n", cpu->id);
-			mp_init_single(cpu->id, ap_load_addr);
 			while (cpu->status != 1);
 			printk(" [%d]", cpu->id);
 		}
@@ -492,10 +507,11 @@ extern void x86_pci_hostbridge_init();
 
 void x86_cpu_init()
 {
+	u64 rbp = 0;
 	struct cpu *cpu = get_cpu();
 	cpu->arch_data = bootmem_alloc(sizeof(struct x86_cpu));
-	cpu->kernel_stack = bootmem_alloc(0x200000);
-	load_sp((u64)cpu->kernel_stack);
+	cpu->kernel_stack = bootmem_alloc(0x200000) + 0x200000;
+	cpu->irq_stack = bootmem_alloc(0x200000) + 0x200000;
 
 	enable_cpu_features();
 	map_kernel_memory();
@@ -517,6 +533,16 @@ int timer_handler(int irq, void *data)
 	printk("%s\n, vector = %d\n", __FUNCTION__, irq);	
 }
 
+void test_task()
+{
+	struct task_struct *task = get_current_task();
+	struct cpu *cpu = get_cpu();
+	while (1) {
+		printk("task %d on cpu %x\n", task->id, cpu->id);
+	}
+}
+
+
 void arch_init()
 {
 	u8 buffer[64] = {0};
@@ -536,6 +562,7 @@ void arch_init()
 
 	if (is_bsp()) {
 		start_kernel();
+		task_init();
 		//vm_init_test();
 		x86_pci_hostbridge_init();
 		//instruction_test();
@@ -556,8 +583,20 @@ void arch_init()
 		//printk("irq = %d\n", irq);
 		//asm("int $0x20");
 		//asm("int $0x21");
-	}	
-	lapic_set_timer(1, 0xff);
+	}
+	
+	request_irq_smp(get_cpu(), 0x5, task_timer_tick, 0, "lapic-timer", NULL);
+	lapic_set_timer(1, 0x25);
+
+	if (is_bsp()) {
+		//create_task(test_task, 100, 0x1000, 1, -1);
+		//create_task(test_task, 100, 0x1000, 1, -1);
+		//create_task(test_task, 100, 0x1000, 1, -1);
+		//create_task(test_task, 100, 0x1000, 1, -1);
+		//create_task(test_task, 100, 0x1000, 1, -1);
+	}
+
+	create_task(test_task, 3, 0x10000, 1, -1);
 	while(1) {
 		asm("hlt");
 	};

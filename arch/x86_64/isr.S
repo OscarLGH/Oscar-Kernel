@@ -5,6 +5,7 @@
 .global exception_table
 .global irq_table
 
+
 .data
 exception_table:
 .quad divide_error_exception
@@ -192,8 +193,27 @@ reserved_exception:
 
 .macro IRQ_COMMON vector = 0
 	SAVE_CREGS
+
+	movabsq $save_tmp_stack, %rax
+	mov %rsp, %rdi
+	call *%rax
+	movabsq $get_irq_stack, %rax
+	call *%rax
+	mov %rax, %rsp
 	movq $\vector, %rdi
 	call intr_handler_common
+
+	movabsq $get_current_task_stack, %rax
+	call *%rax
+	test %rax, %rax
+	jz 1f
+	mov %rax, %rsp
+	jmp 2f
+1:
+	movabsq $get_tmp_stack, %rax
+	call *%rax
+	mov %rax, %rsp
+2:
 	RESTORE_CREGS
 	iretq
 .endm

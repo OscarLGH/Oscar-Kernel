@@ -4,6 +4,7 @@
 #include <types.h>
 #include <kernel.h>
 #include <list.h>
+#include <spinlock.h>
 
 #define MIGRATE_UNMOVABLE 0
 #define MIGRATE_RECLAIMABLE 1
@@ -44,7 +45,11 @@ struct bootmem {
 	u8 *bitmap;
 	u64 last_alloc_offset;
 	u64 last_alloc_pfn;
-	u64 spin_lock;
+	spin_lock_t spin_lock;
+};
+
+struct memory_space {
+	u64 *page_table_base;
 };
 
 extern struct list_head node_list;

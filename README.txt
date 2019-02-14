@@ -6,6 +6,7 @@ Support features:
 	branch "refactor":
 		running on x86 long-mode
 		SMP support
+		Process support with multi-core scheduling.
 		PCI driver with MSI interrupt
 		ACPI support
 		Simple virtual machine on Intel CPUs (VMX)
@@ -33,14 +34,14 @@ Guide:
 			sudo ./run_qemu.sh
 		3.after choosing resolution,the kernel starts to run.
 	Run on a real machine:
-		1.find a U disk, and format it with FAT32.
-		2.copy all files and directories in arch/x86_64/bin to U disk.The directory tree in U disk is as follows:
+		1.find a removable disk, and format it with FAT32.
+		2.copy all files and directories in arch/x86_64/bin to removable disk.The directory tree in removable disk is as follows:
 			-EFI
 			    -Boot
 			        bootx64.efi
 			kernel.bin
 		3.disable secure boot in BIOS configuration menu.
-		4.boot U disk from BIOS
+		4.boot removable disk from BIOS
 		5.after choosing resolution,the kernel starts to run.
 
 	Run on PXE:

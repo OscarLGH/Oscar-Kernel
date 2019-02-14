@@ -356,11 +356,12 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 #include <console.h>
 
 #include <in_out.h>
-u64 lock = 0;
+spin_lock_t lock = 0;
 int write_console(u32 chr);
 
 int printk(const char *fmt, ...)
 {
+	long flags;
 	va_list ap;
 	va_start(ap,fmt);
 	long long i,j;
@@ -369,7 +370,7 @@ int printk(const char *fmt, ...)
 	i = vsprintf(buf, fmt, ap);
 	va_end(ap);
 	buf[i] = 0;
-	spin_lock(&lock);
+	spin_lock_irqsave(&lock, flags);
 	for (j = 0; j < strlen(buf); j++) {
 
 		/* Sync write currently. */
@@ -381,7 +382,7 @@ int printk(const char *fmt, ...)
 		out8(0x3f8, buf[j]);
 		//uart_out
 	}
-	spin_unlock(&lock);
+	spin_unlock_irqrestore(&lock, flags);
 	return i;
 }
 

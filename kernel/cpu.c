@@ -3,12 +3,15 @@
 
 extern u64 arch_cpuid();
 
+u64 nr_cpus = 0;
+
 int register_cpu_local(struct node *node)
 {
 	struct cpu *cpu = bootmem_alloc(sizeof(*cpu));
 	if (cpu == NULL)
 		return -2;
 
+	cpu->index = nr_cpus++;
 	cpu->id = arch_cpuid();
 	list_add_tail(&cpu->list, &node->cpu_list);
 	return 0;
@@ -20,6 +23,7 @@ int register_cpu_remote(u64 id, struct node *node)
 	if (cpu == NULL)
 		return -2;
 
+	cpu->index = nr_cpus++;
 	cpu->id = id;
 	cpu->status = 0;
 	list_add_tail(&cpu->list, &node->cpu_list);
@@ -40,3 +44,23 @@ struct cpu *get_cpu()
 	}
 	return NULL;
 }
+
+u64 get_irq_stack()
+{
+	struct cpu *cpu = get_cpu();
+	return (u64)cpu->irq_stack;
+}
+
+void save_tmp_stack(u64 sp)
+{
+	struct cpu *cpu = get_cpu();
+	cpu->tmp_stack = sp;
+}
+
+u64 get_tmp_stack()
+{
+	struct cpu *cpu = get_cpu();
+	return cpu->tmp_stack;
+}
+
+

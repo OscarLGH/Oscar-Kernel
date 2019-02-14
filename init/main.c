@@ -9,6 +9,7 @@
 #include <string.h>
 #include <fb.h>
 #include <mm.h>
+#include <task.h>
 
 void boot_fb_init();
 void graphic_con_init();
@@ -32,6 +33,7 @@ void fb_test()
 }
 
 extern void arch_numa_init();
+
 int start_kernel()
 {
 	boot_fb_init();

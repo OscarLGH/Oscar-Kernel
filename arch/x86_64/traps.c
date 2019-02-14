@@ -15,7 +15,7 @@ void dump_regs(struct exception_stack_frame *stack)
 		stack->g_regs.rdx,
 		stack->g_regs.rsi,
 		stack->g_regs.rdi,
-		stack->g_regs.rsp,
+		stack->excep_stack.rsp,
 		stack->g_regs.rbp
 	);
 	printk("R08:%016x R09:%016x R10:%016x R11:%016x R12:%016x R13:%016x R14:%016x R15:%016x\n",
