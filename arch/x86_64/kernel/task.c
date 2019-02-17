@@ -13,7 +13,7 @@ void arch_cpu_halt()
 
 void arch_init_kstack(struct task_struct *task, void (*fptr)(void), u64 stack, bool kernel)
 {
-	struct irq_stack_frame *kstack = task->stack;
+	struct irq_stack_frame *kstack = (void *)task->sp;
 	memset(&kstack->g_regs, 0, sizeof(kstack->g_regs));
 	kstack->irq_stack.rip = (u64)fptr;
 	kstack->irq_stack.rsp = stack;
@@ -39,6 +39,6 @@ void switch_irq_stack(u64 stack)
 struct task_struct *
 switch_to(struct task_struct *prev, struct task_struct *next)
 {
-	switch_irq_stack((u64)next->stack);
+	switch_irq_stack((u64)next->sp);
 }
 

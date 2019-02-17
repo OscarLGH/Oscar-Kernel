@@ -53,10 +53,10 @@ exception_table:
 	pushq %r10
 	pushq %r9
 	pushq %r8
-	pushq %rdi
-	pushq %rsi
 	pushq %rbp
 	pushq %rsp
+	pushq %rdi
+	pushq %rsi
 	pushq %rdx
 	pushq %rcx
 	pushq %rbx
@@ -69,10 +69,10 @@ exception_table:
 	popq %rbx
 	popq %rcx
 	popq %rdx
-	popq %rbp
-	popq %rbp
 	popq %rsi
 	popq %rdi
+	popq %rbp
+	popq %rbp
 	popq %r8
 	popq %r9
 	popq %r10
@@ -197,6 +197,10 @@ reserved_exception:
 	movabsq $save_tmp_stack, %rax
 	mov %rsp, %rdi
 	call *%rax
+
+	movabsq $set_current_task_stack, %rax
+	call *%rax
+
 	movabsq $get_irq_stack, %rax
 	call *%rax
 	mov %rax, %rsp

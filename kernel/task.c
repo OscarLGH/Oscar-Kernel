@@ -23,6 +23,7 @@ void rq_init(struct rq * rq)
 	INIT_LIST_HEAD(&rq->task_list);
 	rq->idle = __create_task(idle_task, -1, 0x1000, 1, 0);
 	rq->current = rq->idle;
+	rq->spin_lock = 0;
 }
 
 void task_init()
@@ -42,6 +43,7 @@ __create_task(void (*fun)(void), int prio, int kstack_size, int kernel, int cpu)
 {
 	struct task_struct *task = bootmem_alloc(sizeof(*task));
 	task->stack = bootmem_alloc(kstack_size);
+	task->sp = (u64)task->stack + kstack_size;
 	task->prio = prio;
 	task->id = pid++;
 	task->counter = prio;
@@ -161,7 +163,7 @@ void schedule()
 		if (next == NULL)
 			next = rq->idle;
 
-		printk("next->id = %d\n", next->id);
+		//printk("next->id = %d\n", next->id);
 
 		context_switch(rq, prev, next, NULL);
 	}
@@ -182,12 +184,20 @@ u64 get_current_task_stack()
 	struct task_struct *task = get_current_task();
 	if (task == NULL)
 		return 0;
-	return (u64)task->stack;
+	return (u64)task->sp;
+}
+
+void set_current_task_stack(u64 sp)
+{
+	struct task_struct *task = get_current_task();
+	if (task == NULL)
+		return;
+	task->sp = sp;
 }
 
 int task_timer_tick(int irq, void *data)
 {
-	printk("%s on cpu %d\n", __FUNCTION__, get_cpu()->index);
+	//printk("%s on cpu %d\n", __FUNCTION__, get_cpu()->index);
 	struct cpu *cpu = get_cpu();
 	struct task_struct *current = rq_list[cpu->index]->current;
 

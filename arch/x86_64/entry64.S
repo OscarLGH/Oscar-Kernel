@@ -96,6 +96,8 @@ kernel_space_entry:
 	movabsq $(INIT_STACK_PHYS + KERNEL_OFFSET), %rsp
 	subq %rbx, %rsp
 
+	/* set rbp = -1 to end backtrace */
+	movabsq $0xffffffffffffffff, %rbp
 	callq arch_init
 	jmp kernel_space_entry
 

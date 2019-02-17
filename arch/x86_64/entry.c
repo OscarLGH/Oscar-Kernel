@@ -279,10 +279,10 @@ void wakeup_all_processors()
 			if (cpu->id == 0)
 				continue;
 
-			printk("waking up cpu %d...\n", cpu->id);
+			//printk("waking up cpu %d...\n", cpu->id);
 			mp_init_single(cpu->id, ap_load_addr);
 			while (cpu->status != 1);
-			printk(" [%d]", cpu->id);
+			//printk(" [%d]", cpu->id);
 		}
 	}
 
@@ -537,11 +537,14 @@ void test_task()
 {
 	struct task_struct *task = get_current_task();
 	struct cpu *cpu = get_cpu();
+	int i,j = 0;
 	while (1) {
-		printk("task %d on cpu %x\n", task->id, cpu->id);
+		printk("task %d on cpu %x begins...\n", task->id, cpu->id);
+		printk("iteration:%d\n", j++);
+		for (i = 0; i < 0x80000000; i++) {};
+		printk("task %d on cpu %x ends...\n", task->id, cpu->id);
 	}
 }
-
 
 void arch_init()
 {
@@ -564,7 +567,7 @@ void arch_init()
 		start_kernel();
 		task_init();
 		//vm_init_test();
-		x86_pci_hostbridge_init();
+		//x86_pci_hostbridge_init();
 		//instruction_test();
 	} else {
 
@@ -584,19 +587,10 @@ void arch_init()
 		//asm("int $0x20");
 		//asm("int $0x21");
 	}
-	
 	request_irq_smp(get_cpu(), 0x5, task_timer_tick, 0, "lapic-timer", NULL);
 	lapic_set_timer(1, 0x25);
-
-	if (is_bsp()) {
-		//create_task(test_task, 100, 0x1000, 1, -1);
-		//create_task(test_task, 100, 0x1000, 1, -1);
-		//create_task(test_task, 100, 0x1000, 1, -1);
-		//create_task(test_task, 100, 0x1000, 1, -1);
-		//create_task(test_task, 100, 0x1000, 1, -1);
-	}
-
 	create_task(test_task, 3, 0x10000, 1, -1);
+
 	while(1) {
 		asm("hlt");
 	};

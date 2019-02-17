@@ -5,6 +5,7 @@
 #include <kernel.h>
 #include <msr.h>
 #include <cpuid.h>
+#include <cr.h>
 
 /* Local APIC Macros: */
 
@@ -230,9 +231,15 @@ inline static int lapic_set_timer(u64 freq, u8 vector)
 {
 	u64 default_freq;
 	u32 buffer[4] = {0};
+	write_cr8(0);
 	cpuid(0x15, 0, buffer);
+	//printk("cpuid 0x15:eax = %x ebx = %x ecx = %x\n", buffer[0], buffer[1], buffer[2]);
+	//default_freq = buffer[1] / buffer[0];
+	//printk("default freq:%dHz\n", buffer[1] / buffer[0]);
+	cpuid(0x16, 0, buffer);
+	//printk("cpuid 0x16:eax = %x ebx = %x ecx = %x\n", buffer[0], buffer[1], buffer[2]);
+	//printk("bus freq:%dMHz\n", buffer[2]);
 	default_freq = buffer[2];
-
 	lapic_reg_write32(APIC_REG_TIMER_DCR, 0xb);
 	
 	lapic_reg_write32(APIC_REG_LVT_TIMER, 0x20000 | vector);
