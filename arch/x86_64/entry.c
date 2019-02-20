@@ -41,7 +41,7 @@ void intr_handler_common(u64 vector)
 	struct cpu *cpu = get_cpu();
 	cpu->status = CPU_STATUS_IRQ_CONTEXT;
 	struct irq_action *action_ptr;
-	printk("interrupt vector:%d on cpu %d\n", vector, cpu->id);
+	//printk("interrupt vector:%d on cpu %d\n", vector, cpu->id);
 
 	if (vector >= 32) {
 		struct irq_desc *desc = &cpu->intr_desc.irq_desc[vector - 32];
@@ -92,8 +92,10 @@ void set_kernel_segment()
 	struct cpu *cpu = get_cpu();
 	struct x86_cpu *x86_cpu = cpu->arch_data;
 	struct gdtr gdtr;
+	u64 rsp;
+	u64 rbp;
 	x86_cpu->gdt_base = bootmem_alloc(sizeof(struct segment_desc) * 256);
-
+	
 	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_NULL_INDEX,
 		0,
@@ -528,21 +530,15 @@ void x86_cpu_init()
 
 void arch_numa_init();
 
-int timer_handler(int irq, void *data)
-{
-	printk("%s\n, vector = %d\n", __FUNCTION__, irq);	
-}
-
 void test_task()
 {
 	struct task_struct *task = get_current_task();
 	struct cpu *cpu = get_cpu();
 	int i,j = 0;
+	printk("task %d on cpu %x begins...\n", task->id, cpu->id);
 	while (1) {
-		printk("task %d on cpu %x begins...\n", task->id, cpu->id);
-		printk("iteration:%d\n", j++);
-		for (i = 0; i < 0x80000000; i++) {};
-		printk("task %d on cpu %x ends...\n", task->id, cpu->id);
+		printk("cpu %d iteration:%d\n",cpu->id, j++);
+		for (i = 0; i < 0x8000000; i++) {};
 	}
 }
 
@@ -586,10 +582,14 @@ void arch_init()
 		//printk("irq = %d\n", irq);
 		//asm("int $0x20");
 		//asm("int $0x21");
+		//create_task(test_task, 3, 0x10000, 1, -1);
 	}
 	request_irq_smp(get_cpu(), 0x5, task_timer_tick, 0, "lapic-timer", NULL);
 	lapic_set_timer(1, 0x25);
+
+	//if (is_bsp()) {
 	create_task(test_task, 3, 0x10000, 1, -1);
+	//}
 
 	while(1) {
 		asm("hlt");

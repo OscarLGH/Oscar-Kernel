@@ -22,7 +22,7 @@ void rq_init(struct rq * rq)
 	rq->length = 0;
 	INIT_LIST_HEAD(&rq->task_list);
 	rq->idle = __create_task(idle_task, -1, 0x1000, 1, 0);
-	rq->current = rq->idle;
+	rq->current = NULL;
 	rq->spin_lock = 0;
 }
 
@@ -43,7 +43,7 @@ __create_task(void (*fun)(void), int prio, int kstack_size, int kernel, int cpu)
 {
 	struct task_struct *task = bootmem_alloc(sizeof(*task));
 	task->stack = bootmem_alloc(kstack_size);
-	task->sp = (u64)task->stack + kstack_size;
+	task->sp = (u64)task->stack + kstack_size - 0x200;
 	task->prio = prio;
 	task->id = pid++;
 	task->counter = prio;
@@ -160,8 +160,10 @@ void schedule()
 		
 		next = pick_next_task(rq, prev, NULL);
 
-		if (next == NULL)
+		if (next == NULL) {
+			printk("idle...\n");
 			next = rq->idle;
+		}
 
 		//printk("next->id = %d\n", next->id);
 
@@ -184,6 +186,7 @@ u64 get_current_task_stack()
 	struct task_struct *task = get_current_task();
 	if (task == NULL)
 		return 0;
+	
 	return (u64)task->sp;
 }
 
@@ -201,7 +204,7 @@ int task_timer_tick(int irq, void *data)
 	struct cpu *cpu = get_cpu();
 	struct task_struct *current = rq_list[cpu->index]->current;
 
-	if (current != rq_list[cpu->index]->idle && current->counter != 0) {
+	if (current != NULL && current != rq_list[cpu->index]->idle && current->counter != 0) {
 		current->counter--;
 	} else {
 		schedule();

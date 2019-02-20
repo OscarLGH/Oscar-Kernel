@@ -86,7 +86,8 @@ void *bootmem_alloc(u64 size)
 {
 	u64 paddr;
 	void *vaddr = NULL;
-	spin_lock(&bootmem.spin_lock);
+	long flags;
+	spin_lock_irqsave(&bootmem.spin_lock, flags);
 	if (size >= 0x1000) {
 		bootmem.last_alloc_offset = 0;
 		paddr = find_free_bitmap(size);
@@ -123,7 +124,7 @@ void *bootmem_alloc(u64 size)
 			}
 		}
 	}
-	spin_unlock(&bootmem.spin_lock);
+	spin_unlock_irqrestore(&bootmem.spin_lock, flags);
 	vaddr = (void *)PHYS2VIRT(paddr);
 	return vaddr;
 }

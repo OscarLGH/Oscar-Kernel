@@ -194,11 +194,12 @@ reserved_exception:
 .macro IRQ_COMMON vector = 0
 	SAVE_CREGS
 
-	movabsq $save_tmp_stack, %rax
-	mov %rsp, %rdi
-	call *%rax
+	//movabsq $save_tmp_stack, %rax
+	//mov %rsp, %rdi
+	//call *%rax
 
 	movabsq $set_current_task_stack, %rax
+	mov %rsp, %rdi
 	call *%rax
 
 	movabsq $get_irq_stack, %rax
@@ -214,9 +215,9 @@ reserved_exception:
 	mov %rax, %rsp
 	jmp 2f
 1:
-	movabsq $get_tmp_stack, %rax
-	call *%rax
-	mov %rax, %rsp
+	//movabsq $get_tmp_stack, %rax
+	//call *%rax
+	//mov %rax, %rsp
 2:
 	RESTORE_CREGS
 	iretq

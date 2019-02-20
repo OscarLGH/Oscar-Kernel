@@ -40,5 +40,6 @@ struct task_struct *
 switch_to(struct task_struct *prev, struct task_struct *next)
 {
 	switch_irq_stack((u64)next->sp);
+	struct irq_stack_frame *kstack = (void *)next->sp;
 }
 
