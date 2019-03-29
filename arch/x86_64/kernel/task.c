@@ -1,6 +1,7 @@
 #include <task.h>
 #include <stack.h>
 #include <cpu.h>
+#include <cr.h>
 #include <x86_cpu.h>
 #include <segment.h>
 #include <string.h>
@@ -26,6 +27,12 @@ void arch_init_kstack(struct task_struct *task, void (*fptr)(void), u64 stack, b
 		kstack->irq_stack.cs = SELECTOR_USER_CODE;
 		kstack->irq_stack.ss = SELECTOR_USER_DATA;
 	}
+}
+
+void arch_init_mm(struct task_struct *task)
+{
+	task->mm.pgd = kmalloc(0x1000, GFP_KERNEL);
+	memcpy((u64 *)task->mm.pgd, (u64 *)PHYS2VIRT(read_cr3()), 0x1000);
 }
 
 /* switch tss->rsp0 so when irq happens next time, irq info can be saved onto the nexttask->stack */ 

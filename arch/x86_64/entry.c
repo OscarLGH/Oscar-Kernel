@@ -68,7 +68,7 @@ void setup_irq()
 	struct irq_action *action;
 	struct cpu *cpu = get_cpu();
 	cpu->intr_desc.irq_nr = 256 - 32;
-	cpu->intr_desc.irq_desc = bootmem_alloc(sizeof(struct irq_desc) * cpu->intr_desc.irq_nr);
+	cpu->intr_desc.irq_desc = kmalloc(sizeof(struct irq_desc) * cpu->intr_desc.irq_nr, GFP_KERNEL);
 	cpu->intr_desc.irq_bitmap = bitmap_alloc(cpu->intr_desc.irq_nr);
 	for (i = 0; i < cpu->intr_desc.irq_nr; i++) {
 		desc = &cpu->intr_desc.irq_desc[i];
@@ -94,7 +94,7 @@ void set_kernel_segment()
 	struct gdtr gdtr;
 	u64 rsp;
 	u64 rbp;
-	x86_cpu->gdt_base = bootmem_alloc(sizeof(struct segment_desc) * 256);
+	x86_cpu->gdt_base = kmalloc(sizeof(struct segment_desc) * 256, GFP_KERNEL);
 	
 	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_NULL_INDEX,
@@ -149,7 +149,7 @@ void set_intr_desc()
 {
 	struct cpu *cpu = get_cpu();
 	struct x86_cpu *x86_cpu = cpu->arch_data;
-	x86_cpu->idt_base = bootmem_alloc(sizeof(struct gate_desc) * 256);
+	x86_cpu->idt_base = kmalloc(sizeof(struct gate_desc) * 256, GFP_KERNEL);
 	/* defined in isr.asm */
 	extern u64 exception_table[];
 	extern u64 irq_table[];
@@ -195,10 +195,10 @@ void set_tss_desc()
 {
 	struct cpu *cpu = get_cpu();
 	struct x86_cpu *x86_cpu = cpu->arch_data;
-	x86_cpu->tss = bootmem_alloc(sizeof(struct tss_desc));
+	x86_cpu->tss = kmalloc(sizeof(struct tss_desc), GFP_KERNEL);
 
 	memset(x86_cpu->tss, 0, sizeof(struct tss_desc));
-	x86_cpu->tss->rsp0 = (u64)bootmem_alloc(0x100000);
+	x86_cpu->tss->rsp0 = (u64)kmalloc(0x100000, GFP_KERNEL);
 	set_segment_descriptor(x86_cpu->gdt_base,
 		SELECTOR_TSS_INDEX,
 		(u64)x86_cpu->tss,
@@ -222,10 +222,10 @@ void map_kernel_memory()
 	u64 page_attr;
 
 	if (is_bsp()) {
-		pml4t = (u64 *)bootmem_alloc(0x1000);
+		pml4t = (u64 *)kmalloc(0x1000, GFP_KERNEL);
 		pml4t_phys = VIRT2PHYS(pml4t);
 		kernel_pt_phys = pml4t_phys;
-		pdpt = (u64 *)bootmem_alloc(0x1000);
+		pdpt = (u64 *)kmalloc(0x1000, GFP_KERNEL);
 		pdpt_phys = VIRT2PHYS(pdpt);
 		page_attr = PG_PML4E_PRESENT | PG_PML4E_READ_WRITE | PG_PML4E_SUPERVISOR | PG_PML4E_CACHE_WT;
 		pml4t[0] = 0;
@@ -439,7 +439,7 @@ void instruction_test()
 	printk("AVX512 ZMM_Hi256 XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
 	cpuid(0xd, 7, reg);
 	printk("AVX512 Hi16_ZMM XSAVE size %d, OFFSET:%d\n", reg[0], reg[1]);
-	struct xsave_area *xsave_area = bootmem_alloc(0x1000);
+	struct xsave_area *xsave_area = kmalloc(0x1000, GFP_KERNEL);
 	memset(xsave_area, 0, 0x1000);
 	//printk("SSE2 test:\n");
 	//asm("addpd %xmm1, %xmm2");
@@ -511,9 +511,9 @@ void x86_cpu_init()
 {
 	u64 rbp = 0;
 	struct cpu *cpu = get_cpu();
-	cpu->arch_data = bootmem_alloc(sizeof(struct x86_cpu));
-	cpu->kernel_stack = bootmem_alloc(0x200000) + 0x200000;
-	cpu->irq_stack = bootmem_alloc(0x200000) + 0x200000;
+	cpu->arch_data = kmalloc(sizeof(struct x86_cpu), GFP_KERNEL);
+	cpu->kernel_stack = kmalloc(0x200000, GFP_KERNEL) + 0x200000;
+	cpu->irq_stack = kmalloc(0x200000, GFP_KERNEL) + 0x200000;
 
 	enable_cpu_features();
 	map_kernel_memory();

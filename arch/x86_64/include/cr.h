@@ -16,9 +16,11 @@
 #define CR0_CD BIT30
 #define CR0_PG BIT31
 
-#define CR3_MASK ~(0xffffULL)
+#define CR3_MASK ~(0xfffULL)
 #define CR3_PWT BIT3
 #define CR3_PCD BIT4
+#define CR3_PCID_MASK 0xfff
+#define CR3_NOFLUSH BIT63
 
 #define CR4_VME BIT0
 #define CR4_PVI BIT1

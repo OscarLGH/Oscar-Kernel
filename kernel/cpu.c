@@ -7,7 +7,7 @@ u64 nr_cpus = 0;
 
 int register_cpu_local(struct node *node)
 {
-	struct cpu *cpu = bootmem_alloc(sizeof(*cpu));
+	struct cpu *cpu = kmalloc(sizeof(*cpu), GFP_KERNEL);
 	if (cpu == NULL)
 		return -2;
 
@@ -19,7 +19,7 @@ int register_cpu_local(struct node *node)
 
 int register_cpu_remote(u64 id, struct node *node)
 {
-	struct cpu *cpu = bootmem_alloc(sizeof(*cpu));
+	struct cpu *cpu = kmalloc(sizeof(*cpu), GFP_KERNEL);
 	if (cpu == NULL)
 		return -2;
 

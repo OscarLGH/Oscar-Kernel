@@ -54,7 +54,7 @@ int pci_find_capability(struct pci_dev *dev, u8 id)
 
 int pci_irq_register(struct pci_dev *dev, int cpu, u64 vector)
 {
-	struct pci_irq_desc *desc = bootmem_alloc(sizeof(*desc));
+	struct pci_irq_desc *desc = kmalloc(sizeof(*desc), GFP_KERNEL);
 	if (desc == NULL)
 		return -ENOSPC;
 	desc->cpu = cpu;
@@ -791,7 +791,7 @@ void pci_scan()
 				pci_read_config_word(&pdev_test, PCI_VENDOR_ID, &vendor_id);
 				pci_read_config_word(&pdev_test, PCI_DEVICE_ID, &device_id);
 				if (vendor_id != 0xffff && device_id != 0xffff) {
-					pdev = bootmem_alloc(sizeof(*pdev));
+					pdev = kmalloc(sizeof(*pdev), GFP_KERNEL);
 					pdev->bus = b;
 					pdev->device = d;
 					pdev->fun = f;

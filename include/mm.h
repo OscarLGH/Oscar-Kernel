@@ -48,17 +48,20 @@ struct bootmem {
 	spin_lock_t spin_lock;
 };
 
-struct memory_space {
-	u64 *page_table_base;
+struct mm_struct {
+	u64 *pgd;
 };
 
 extern struct list_head node_list;
 
+#define GFP_KERNEL 0
+
 struct page *allocate_page(u64 area);
 struct page *allocate_pages();
-void *bootmem_alloc(u64 size);
 void bootmem_free(void *vaddr);
 void bootmem_init();
+void *bootmem_alloc(u64 size);
+void *kmalloc(unsigned long size, int flags);
 void mm_node_init(struct node *node);
 void mm_node_register(struct node *node);
 struct node *mm_get_node_by_id(u64 id);
@@ -66,5 +69,9 @@ void mm_zone_register(struct node *node, struct zone *zone);
 void *ioremap(u64 phys_addr, u64 size);
 void *ioremap_nocache(u64 phys_addr, u64 size);
 void iounmap(void *virt_addr);
+
+struct task_struct;
+void switch_mm(struct mm_struct *prev, struct mm_struct *next,
+			struct task_struct *tsk);
 
 #endif

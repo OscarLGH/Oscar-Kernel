@@ -88,7 +88,7 @@ int request_irq(int irq, irq_handler_t handler, unsigned long flags, char *name,
 		}
 	}
 
-	action = bootmem_alloc(sizeof(*action));
+	action = kmalloc(sizeof(*action), GFP_KERNEL);
 	if (action == NULL)
 		return -1;
 
@@ -106,7 +106,7 @@ int request_irq_smp(struct cpu *cpu_ptr, int irq, irq_handler_t handler, unsigne
 {
 	struct irq_action *action;
 
-	action = bootmem_alloc(sizeof(*action));
+	action = kmalloc(sizeof(*action), GFP_KERNEL);
 	if (action == NULL)
 		return -1;
 

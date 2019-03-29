@@ -29,9 +29,9 @@ void rq_init(struct rq * rq)
 void task_init()
 {
 	int i;
-	rq_list = bootmem_alloc(nr_cpus * sizeof(*rq_list));
+	rq_list = kmalloc(nr_cpus * sizeof(*rq_list), GFP_KERNEL);
 	for (i = 0; i < nr_cpus; i++) {
-		rq_list[i] = bootmem_alloc(sizeof(struct rq));
+		rq_list[i] = kmalloc(sizeof(struct rq), GFP_KERNEL);
 		rq_init(rq_list[i]);
 	}
 	sq.length = 0;
@@ -41,14 +41,15 @@ void task_init()
 struct task_struct *
 __create_task(void (*fun)(void), int prio, int kstack_size, int kernel, int cpu)
 {
-	struct task_struct *task = bootmem_alloc(sizeof(*task));
-	task->stack = bootmem_alloc(kstack_size);
+	struct task_struct *task = kmalloc(sizeof(*task), GFP_KERNEL);
+	task->stack = kmalloc(kstack_size, GFP_KERNEL);
 	task->sp = (u64)task->stack + kstack_size - 0x200;
 	task->prio = prio;
 	task->id = pid++;
 	task->counter = prio;
 	task->cpu = cpu;
 	arch_init_kstack(task, fun, (u64)task->stack, kernel);
+	arch_init_mm(task);
 	return task;
 }
 
@@ -140,6 +141,8 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	       struct task_struct *next, struct rq_flags *rf)
 {
 	//mm switch
+	//switch_mm(&prev->mm, &next->mm, next);
+
 	rq->current = next;
 	switch_to(prev, next);
 }

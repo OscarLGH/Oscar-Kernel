@@ -52,7 +52,7 @@ void mm_enumate()
 	struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
 	for (i = 0; i < boot_parm->ardc_cnt; i++) {
 		if (1) {
-			struct zone *zone = bootmem_alloc(sizeof(*zone));
+			struct zone *zone = kmalloc(sizeof(*zone), GFP_KERNEL);
 			zone->page_size = 0x1000;
 			zone->start_pfn = boot_parm->ardc_array[i].base / zone->page_size;
 			zone->pfn_cnt = boot_parm->ardc_array[i].length / zone->page_size;
@@ -88,4 +88,9 @@ void mminfo_print()
 			printk("        [0x%016x - 0x%016x]\n", zone->start_pfn, zone->start_pfn + zone->pfn_cnt - 1);
 		}
 	}
+}
+
+void *kmalloc(unsigned long size, int flags)
+{
+	bootmem_alloc(size);
 }

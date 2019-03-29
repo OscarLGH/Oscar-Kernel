@@ -21,12 +21,12 @@ void arch_numa_init()
 	struct acpi_srat *srat_ptr = acpi_get_desc("SRAT");
 
 	if (srat_ptr == NULL) {
-		node = bootmem_alloc(sizeof(*node));
+		node = kmalloc(sizeof(*node), GFP_KERNEL);
 		mm_node_init(node);
 
 		struct acpi_madt *madt_ptr = acpi_get_desc("APIC");
 
-		node = (struct node *)bootmem_alloc(sizeof(*node));
+		node = (struct node *)kmalloc(sizeof(*node), GFP_KERNEL);
 		INIT_LIST_HEAD(&node->cpu_list);
 		INIT_LIST_HEAD(&node->zone_list);
 		node->socket_id = 0;
@@ -55,7 +55,7 @@ void arch_numa_init()
 		struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
 		for (i = 0; i < boot_parm->ardc_cnt; i++) {
 			if (boot_parm->ardc_array[i].type == 1 || boot_parm->ardc_array[i].type == 2) {
-				struct zone *zone = bootmem_alloc(sizeof(*zone));
+				struct zone *zone = kmalloc(sizeof(*zone), GFP_KERNEL);
 				zone->page_size = 0x1000;
 				zone->start_pfn = boot_parm->ardc_array[i].base;
 				zone->pfn_cnt = boot_parm->ardc_array[i].length;
@@ -76,7 +76,7 @@ void arch_numa_init()
 				srat_cpu_affinity_ptr = (struct acpi_srat_cpu_affinity *)table_ptr;
 				if (srat_cpu_affinity_ptr->flags & 0x1 != 0) {
 					if (node_bitmap[srat_cpu_affinity_ptr->proximity_domain_lo] == 0) {
-						node = (struct node *)bootmem_alloc(sizeof(*node));
+						node = (struct node *)kmalloc(sizeof(*node), GFP_KERNEL);
 						mm_node_init(node);
 						node->socket_id = srat_cpu_affinity_ptr->proximity_domain_lo;
 						mm_node_register(node);
@@ -96,12 +96,12 @@ void arch_numa_init()
 				srat_mem_affinity_ptr = (struct acpi_srat_mem_affinity *)table_ptr;
 				if (srat_mem_affinity_ptr->length != 0) {
 					if (node_bitmap[srat_mem_affinity_ptr->proximity_domain] == 0) {
-						node = (struct node *)bootmem_alloc(sizeof(*node));
+						node = (struct node *)kmalloc(sizeof(*node), GFP_KERNEL);
 						mm_node_init(node);
 						node->socket_id = srat_mem_affinity_ptr->proximity_domain;
 						mm_node_register(node);
 
-						zone = bootmem_alloc(sizeof(*zone));
+						zone = kmalloc(sizeof(*zone), GFP_KERNEL);
 						zone->start_pfn = srat_mem_affinity_ptr->base_address;
 						zone->pfn_cnt = srat_mem_affinity_ptr->length;
 						mm_zone_register(node, zone);
@@ -109,7 +109,7 @@ void arch_numa_init()
 					} else {
 						node = mm_get_node_by_id(srat_mem_affinity_ptr->proximity_domain);
 						if (node != NULL) {
-							zone = bootmem_alloc(sizeof(*zone));
+							zone = kmalloc(sizeof(*zone), GFP_KERNEL);
 							zone->start_pfn = srat_mem_affinity_ptr->base_address;
 							zone->pfn_cnt = srat_mem_affinity_ptr->length;
 							mm_zone_register(node, zone);

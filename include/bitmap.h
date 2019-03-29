@@ -18,8 +18,8 @@ static inline void bitmap_init(struct bitmap *bitmap, u64 size)
 
 static inline struct bitmap *bitmap_alloc(u64 size)
 {
-	struct bitmap *bitmap = bootmem_alloc(sizeof(*bitmap));
-	bitmap->bitmap_data = bootmem_alloc(size / 8);
+	struct bitmap *bitmap = kmalloc(sizeof(*bitmap), GFP_KERNEL);
+	bitmap->bitmap_data = kmalloc(size / 8, GFP_KERNEL);
 	bitmap->size = size;
 	if (bitmap == NULL || bitmap->bitmap_data == NULL)
 		return NULL;

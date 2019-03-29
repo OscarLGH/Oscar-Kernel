@@ -42,13 +42,13 @@ int vmx_disable()
 struct vmx_vcpu *vmx_preinit()
 {
 	int ret;
-	struct vmx_vcpu *vcpu_ptr = bootmem_alloc(sizeof(*vcpu_ptr));
+	struct vmx_vcpu *vcpu_ptr = kmalloc(sizeof(*vcpu_ptr), GFP_KERNEL);
 	memset(vcpu_ptr, 0, sizeof(*vcpu_ptr));
 	INIT_LIST_HEAD(&vcpu_ptr->guest_memory_list);
-	vcpu_ptr->vmxon_region = bootmem_alloc(0x1000);
+	vcpu_ptr->vmxon_region = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu_ptr->vmxon_region, 0, 0x1000);
 	vcpu_ptr->vmxon_region_phys = VIRT2PHYS(vcpu_ptr->vmxon_region);
-	vcpu_ptr->vmcs = bootmem_alloc(0x1000);
+	vcpu_ptr->vmcs = kmalloc(0x1000, GFP_KERNEL);
 	vcpu_ptr->vmcs_phys = VIRT2PHYS(vcpu_ptr->vmcs);
 	memset(vcpu_ptr->vmcs, 0, 0x1000);
 
@@ -67,23 +67,23 @@ struct vmx_vcpu *vmx_preinit()
 
 int vmx_init(struct vmx_vcpu * vcpu)
 {
-	vcpu->vapic_page = bootmem_alloc(0x1000);
+	vcpu->vapic_page = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->vapic_page, 0, 0x1000);
-	vcpu->io_bitmap_a = bootmem_alloc(0x1000);
+	vcpu->io_bitmap_a = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->io_bitmap_a, 0, 0x1000);
-	vcpu->io_bitmap_b = bootmem_alloc(0x1000);
+	vcpu->io_bitmap_b = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->io_bitmap_b, 0, 0x1000);
-	vcpu->msr_bitmap = bootmem_alloc(0x1000);
+	vcpu->msr_bitmap = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->msr_bitmap, 0, 0x1000);
-	vcpu->eptp_base = bootmem_alloc(0x1000);
+	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->eptp_base, 0, 0x1000);
-	vcpu->host_state.fp_regs = bootmem_alloc(0x1000);
+	vcpu->host_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->host_state.fp_regs, 0, 0x1000);
-	vcpu->host_state.msr = bootmem_alloc(0x1000);
+	vcpu->host_state.msr = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->host_state.msr, 0, 0x1000);
-	vcpu->guest_state.fp_regs = bootmem_alloc(0x1000);
+	vcpu->guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.fp_regs, 0, 0x1000);
-	vcpu->guest_state.msr = bootmem_alloc(0x1000);
+	vcpu->guest_state.msr = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.msr, 0, 0x1000);
 
 	return 0;
@@ -397,7 +397,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 
 	pml4e = pml4t[index1];
 	if (pml4e == 0) {
-		virt = bootmem_alloc(0x1000);
+		virt = kmalloc(0x1000, GFP_KERNEL);
 		memset(virt, 0, 0x1000);
 		pml4t[index1] = VIRT2PHYS(virt) | pml4e_attr;
 	}
@@ -411,7 +411,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 	}
 
 	if (pdpte == 0) {
-		virt = bootmem_alloc(0x1000);
+		virt = kmalloc(0x1000, GFP_KERNEL);
 		memset(virt, 0, 0x1000);
 		pdpt[index2] = VIRT2PHYS(virt) | pdpte_attr;
 	}
@@ -427,7 +427,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 	}
 
 	if (pde == 0) {
-		virt = bootmem_alloc(0x1000);
+		virt = kmalloc(0x1000, GFP_KERNEL);
 		memset(virt, 0, 0x1000);
 		pdt[index3] = VIRT2PHYS(virt) | pde_attr;
 	}
@@ -471,10 +471,10 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 {
 	u64 hpa;
 	u64 *virt;
-	struct guest_memory_zone *zone = bootmem_alloc(sizeof(*zone));
+	struct guest_memory_zone *zone = kmalloc(sizeof(*zone), GFP_KERNEL);
 	memset(zone, 0, sizeof(*zone));
 	size = roundup(size, 0x1000);
-	virt = bootmem_alloc(size);
+	virt = kmalloc(size, GFP_KERNEL);
 	hpa = VIRT2PHYS(virt);
 	zone->hpa = hpa;
 	zone->page_nr = size / 0x1000;
