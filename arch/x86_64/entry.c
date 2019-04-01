@@ -223,6 +223,7 @@ void map_kernel_memory()
 
 	if (is_bsp()) {
 		pml4t = (u64 *)kmalloc(0x1000, GFP_KERNEL);
+		memset(pml4t, 0, 0x1000);
 		pml4t_phys = VIRT2PHYS(pml4t);
 		kernel_pt_phys = pml4t_phys;
 		pdpt = (u64 *)kmalloc(0x1000, GFP_KERNEL);
@@ -534,8 +535,11 @@ void test_task()
 {
 	struct task_struct *task = get_current_task();
 	struct cpu *cpu = get_cpu();
+	u64 *addr = (u64 *)0x0;
 	int i,j = 0;
 	printk("task %d on cpu %x begins...\n", task->id, cpu->id);
+	*addr = task->id;
+	printk("task %d addr %x value %x\n", task->id, addr, *addr);
 	while (1) {
 		printk("cpu %d iteration:%d\n",cpu->id, j++);
 		for (i = 0; i < 0x8000000; i++) {};

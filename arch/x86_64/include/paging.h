@@ -6,7 +6,7 @@
 /* Page attributes for paging */
 #define PG_PML4E_PRESENT (1 << 0)
 #define PG_PML4E_READ_WRITE (1 << 1)
-#define PG_PML4E_READ_ONLY (0　<< 1)
+#define PG_PML4E_READ_ONLY (0 << 1)
 #define PG_PML4E_USER (1 << 2)
 #define PG_PML4E_SUPERVISOR (0 << 2)
 #define PG_PML4E_CACHE_WT (1 << 3)
@@ -16,7 +16,7 @@
 
 #define PG_PDPTE_PRESENT (1 << 0)
 #define PG_PDPTE_READ_WRITE (1 << 1)
-#define PG_PDPTE_READ_ONLY (0　<< 1)
+#define PG_PDPTE_READ_ONLY (0 << 1)
 #define PG_PDPTE_USER (1 << 2)
 #define PG_PDPTE_SUPERVISOR (0 << 2)
 #define PG_PDPTE_CACHE_WT (1 << 3)
@@ -28,11 +28,11 @@
 #define PG_PDPTE_1GB_PAT (1 << 12)
 #define PG_PDPTE_1GB_OFFSET(x) ((x) & 0xffffffffc0000000)
 #define PG_PDPTE_1BG_PROTECTION_KEY(x) ((x & 0xf) << 59)
-#define PG_PDPTE_EXECUTE_DISABLE (1 << 63)
+#define PG_PDPTE_EXECUTE_DISABLE (1ULL << 63)
 
 #define PG_PDE_PRESENT (1 << 0)
 #define PG_PDE_READ_WRITE (1 << 1)
-#define PG_PDE_READ_ONLY (0　<< 1)
+#define PG_PDE_READ_ONLY (0 << 1)
 #define PG_PDE_USER (1 << 2)
 #define PG_PDE_SUPERVISOR (0 << 2)
 #define PG_PDE_CACHE_WT (1 << 3)
@@ -44,11 +44,12 @@
 #define PG_PDE_2MB_PAT (1 << 12)
 #define PG_PDE_2MB_OFFSET(x) ((x) & 0xffffffffffe00000)
 #define PG_PDE_2MB_PROTECTION_KEY(x) ((x & 0xf) << 59)
-#define PG_PDE_EXECUTE_DISABLE (1 << 63)
+#define PG_PDE_EXECUTE_DISABLE (1ULL << 63)
+
 
 #define PG_PT_PRESENT (1 << 0)
 #define PG_PT_READ_WRITE (1 << 1)
-#define PG_PT_READ_ONLY (0　<< 1)
+#define PG_PT_READ_ONLY (0 << 1)
 #define PG_PT_USER (1 << 2)
 #define PG_PT_SUPERVISOR (0 << 2)
 #define PG_PT_CACHE_WT (1 << 3)
@@ -59,7 +60,7 @@
 #define PG_PT_GLOBAL (1 << 8)
 #define PG_PT_4KB_OFFSET(x) ((x) & 0xfffffffffffff000)
 #define PG_PT_PROTECTION_KEY(x) ((x & 0xf) << 59)
-#define PG_PT_EXECUTE_DISABLE (1 << 63)
+#define PG_PT_EXECUTE_DISABLE (1ULL << 63)
 
 #define PG_FAULT_PRESENT (1 << 0)
 #define PG_FAULT_WR (1 << 1)
@@ -68,6 +69,13 @@
 #define PG_FAULT_ID (1 << 4)
 #define PG_FAULT_PK (1 << 5)
 #define PG_FAULT_SGX (1 << 15)
+
+#define PML4T_INDEX(x) (((x) >> (12 + 9 + 9 + 9)) & 0x1ff)
+#define PDPT_INDEX(x) (((x) >> (12 + 9 + 9)) & 0x1ff)
+#define PD_INDEX(x) (((x) >> (12 + 9)) & 0x1ff)
+#define PT_INDEX(x) (((x) >> (12)) & 0x1ff)
+
+#define PT_ENTRY_ADDR(x) ((x) & (~0xfff))
 
 static inline void write_pg(u64 *table, u64 index, u64 value)
 {

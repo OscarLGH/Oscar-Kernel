@@ -74,4 +74,6 @@ struct task_struct;
 void switch_mm(struct mm_struct *prev, struct mm_struct *next,
 			struct task_struct *tsk);
 
+int page_fault_mm(u64 addr, u64 err_code, int cpl);
+
 #endif

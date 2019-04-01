@@ -262,15 +262,22 @@ void do_general_protection_exception(struct exception_stack_frame *stack)
 void do_page_fault_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	int ret;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
-		printk("Exception:#PF on cpu %d.\n", cpu->id);
-		dump_regs(stack);
-		back_trace(stack);
-		asm("hlt");
+		ret = page_fault_mm(read_cr2(), stack->excep_stack.error_code, stack->excep_stack.cs & 0x3);
+		if (ret != 0)
+			goto out_exit;
+		return;
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+out_exit:
+	printk("Exception:#PF on cpu %d.\n", cpu->id);
+	dump_regs(stack);
+	back_trace(stack);
+	asm("hlt");
 }
 
 void do_x87_fpu_floating_point_error(struct exception_stack_frame *stack)

@@ -141,7 +141,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	       struct task_struct *next, struct rq_flags *rf)
 {
 	//mm switch
-	//switch_mm(&prev->mm, &next->mm, next);
+	switch_mm(&prev->mm, &next->mm, next);
 
 	rq->current = next;
 	switch_to(prev, next);
