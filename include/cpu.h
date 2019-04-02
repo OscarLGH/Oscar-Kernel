@@ -39,6 +39,7 @@ struct cpu {
 #define CPU_STATUS_IDLE 1
 #define CPU_STATUS_PROCESS_CONTEXT 2
 #define CPU_STATUS_IRQ_CONTEXT 3
+#define CPU_STATUS_EXCEPTION_CONTEXT 4
 
 
 int register_cpu_local(struct node *node);

@@ -86,12 +86,31 @@ int alloc_new_page(u64 addr, int page_size, int cpl, bool rd_only, bool xd)
 	return 0;
 }
 
+
+int address_check(u64 addr, int cpl)
+{
+	if (cpl != 0) {
+		if (VIRT2PHYS(addr) > addr) {
+			return -1;
+		}
+	}
+
+	if (addr == 0xffffffff00000000)
+		return -EINVAL;
+
+	return 0;
+}
+
 int page_fault_mm(u64 addr, u64 err_code, int cpl)
 {
 	int ret;
+	struct task_struct *task_ptr = get_current_task();
 	/* Checking addr */
-	if (0) {
-		return -EINVAL;
+	ret = address_check(addr, cpl);
+	if (ret) {
+		printk("task %d killed.\n", task_ptr->id);
+		task_exit(task_ptr);
+		return ret;
 	}
 
 	ret = alloc_new_page(addr, 0x1000, cpl, 0, 0);

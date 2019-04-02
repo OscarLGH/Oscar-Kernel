@@ -66,6 +66,8 @@ void back_trace(struct exception_stack_frame *stack)
 void do_divide_error_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#DE on cpu %d.\n", cpu->id);
@@ -75,11 +77,15 @@ void do_divide_error_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_debug_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#DB on cpu %d.\n", cpu->id);
@@ -89,11 +95,15 @@ void do_debug_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_nmi_interrupt(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:NMI on cpu %d.\n", cpu->id);
@@ -103,11 +113,15 @@ void do_nmi_interrupt(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_breakpoint_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#BP on cpu %d.\n", cpu->id);
@@ -117,11 +131,15 @@ void do_breakpoint_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_overflow_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#OF on cpu %d.\n", cpu->id);
@@ -131,11 +149,15 @@ void do_overflow_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_bound_range_exceeded_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#BR on cpu %d.\n", cpu->id);
@@ -145,11 +167,15 @@ void do_bound_range_exceeded_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_invalid_opcode_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#UD on cpu %d.\n", cpu->id);
@@ -159,11 +185,15 @@ void do_invalid_opcode_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_device_not_available_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#NM on cpu %d.\n", cpu->id);
@@ -173,11 +203,15 @@ void do_device_not_available_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_double_fault_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#DF on cpu %d.\n", cpu->id);
@@ -187,11 +221,15 @@ void do_double_fault_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_coprocessor_segment_overrun(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:Coprocessor Segment Overrun on cpu %d.\n", cpu->id);
@@ -201,11 +239,15 @@ void do_coprocessor_segment_overrun(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_invalid_tss_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#TS on cpu %d.\n", cpu->id);
@@ -215,11 +257,15 @@ void do_invalid_tss_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_segment_not_present(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#NP on cpu %d.\n", cpu->id);
@@ -229,11 +275,15 @@ void do_segment_not_present(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_stack_fault_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#SS on cpu %d.\n", cpu->id);
@@ -243,11 +293,15 @@ void do_stack_fault_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_general_protection_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#GP on cpu %d.\n", cpu->id);
@@ -257,32 +311,41 @@ void do_general_protection_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_page_fault_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 	int ret;
 
+	ret = page_fault_mm(read_cr2(), stack->excep_stack.error_code, stack->excep_stack.cs & 0x3);
 	if ((stack->excep_stack.cs & 0x3) == 0) {
-		ret = page_fault_mm(read_cr2(), stack->excep_stack.error_code, stack->excep_stack.cs & 0x3);
 		if (ret != 0)
-			goto out_exit;
-		return;
+			goto err_exit;
+		else
+			goto exit;
 	} else {
 		/* TODO: send signal to process. */
 	}
 
-out_exit:
+err_exit:
 	printk("Exception:#PF on cpu %d.\n", cpu->id);
 	dump_regs(stack);
 	back_trace(stack);
 	asm("hlt");
+exit:
+	cpu->status = cpu_status;
 }
 
 void do_x87_fpu_floating_point_error(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#MF on cpu %d.\n", cpu->id);
@@ -292,10 +355,14 @@ void do_x87_fpu_floating_point_error(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 void do_alignment_check_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#AC on cpu %d.\n", cpu->id);
@@ -305,10 +372,14 @@ void do_alignment_check_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 void do_machine_check_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#MC on cpu %d.\n", cpu->id);
@@ -318,10 +389,14 @@ void do_machine_check_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 void do_simd_floatingn_point_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#XM on cpu %d.\n", cpu->id);
@@ -331,10 +406,14 @@ void do_simd_floatingn_point_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 void do_virtualization_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#VE on cpu %d.\n", cpu->id);
@@ -344,11 +423,15 @@ void do_virtualization_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 
 void do_reserved_exception(struct exception_stack_frame *stack)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
+	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		printk("Exception:#reserved.\n");
@@ -358,5 +441,7 @@ void do_reserved_exception(struct exception_stack_frame *stack)
 	} else {
 		/* TODO: send signal to process. */
 	}
+
+	cpu->status = cpu_status;
 }
 

@@ -29,6 +29,22 @@ void arch_init_kstack(struct task_struct *task, void (*fptr)(void), u64 stack, b
 	}
 }
 
+void arch_start_task(struct task_struct *task)
+{
+	struct irq_stack_frame *kstack = (void *)task->sp;
+	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.ss):);
+	asm("push %rax");
+	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.rsp):);
+	asm("push %rax");
+	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.rflags):);
+	asm("push %rax");
+	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.cs):);
+	asm("push %rax");
+	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.rip):);
+	asm("push %rax");
+	asm("iretq");
+}
+
 void arch_init_mm(struct task_struct *task)
 {
 	task->mm.pgd = kmalloc(0x1000, GFP_KERNEL);
@@ -46,7 +62,13 @@ void switch_irq_stack(u64 stack)
 struct task_struct *
 switch_to(struct task_struct *prev, struct task_struct *next)
 {
+	struct cpu *cpu = get_cpu();
+
 	switch_irq_stack((u64)next->sp);
-	struct irq_stack_frame *kstack = (void *)next->sp;
+	/* new task starts on iret since we want irq handler to finish cleaning work.*/
+	/* Otherwise, new task starts immediately */
+	if (cpu->status != CPU_STATUS_IRQ_CONTEXT) {
+		arch_start_task(next);
+	}
 }
 

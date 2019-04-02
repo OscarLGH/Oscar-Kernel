@@ -120,7 +120,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 repick:
 	max_counter = 0;
 	list_for_each_entry(task_ptr, &rq->task_list, list) {
-		if (task_ptr->counter >= max_counter) {
+		if (task_ptr->state == TASK_STATE_RUNNING && task_ptr->counter >= max_counter) {
 			max_counter = task_ptr->counter;
 			cand_task = task_ptr;
 		}
@@ -128,7 +128,9 @@ repick:
 
 	if (!list_empty(&rq->task_list) && cand_task && cand_task->counter == 0) {
 		list_for_each_entry(task_ptr, &rq->task_list, list) {
-			task_ptr->counter = task_ptr->prio;
+			if (task_ptr->state == TASK_STATE_RUNNING) {
+				task_ptr->counter = task_ptr->prio;
+			}
 		}
 		goto repick;
 	}
@@ -147,6 +149,12 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	switch_to(prev, next);
 }
 
+int task_exit(struct task_struct *task)
+{
+	task->state = TASK_STATE_KILLED;
+	schedule();
+}
+
 void schedule()
 {
 	struct task_struct *prev, *next;
@@ -154,24 +162,14 @@ void schedule()
 	struct rq * rq = rq_list[cpu->index];
 	prev = rq->current;
 
-	if (cpu->status == CPU_STATUS_PROCESS_CONTEXT) {
-	/*schedule() is called directly by process */
-		printk("TODO:Process context schedule...\n");
-	} else {
-	/*schedule() is called in irq handler */
+	next = pick_next_task(rq, prev, NULL);
 
-		
-		next = pick_next_task(rq, prev, NULL);
-
-		if (next == NULL) {
-			printk("idle...\n");
-			next = rq->idle;
-		}
-
-		//printk("next->id = %d\n", next->id);
-
-		context_switch(rq, prev, next, NULL);
+	if (next == NULL) {
+		printk("idle...\n");
+		next = rq->idle;
 	}
+
+	context_switch(rq, prev, next, NULL);
 }
 
 struct task_struct *get_current_task()

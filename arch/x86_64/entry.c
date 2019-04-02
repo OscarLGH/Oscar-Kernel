@@ -39,6 +39,7 @@ struct irq_chip irq_apic_chip = {
 void intr_handler_common(u64 vector)
 {
 	struct cpu *cpu = get_cpu();
+	u64 cpu_status = cpu->status;
 	cpu->status = CPU_STATUS_IRQ_CONTEXT;
 	struct irq_action *action_ptr;
 	//printk("interrupt vector:%d on cpu %d\n", vector, cpu->id);
@@ -51,7 +52,7 @@ void intr_handler_common(u64 vector)
 		desc->chip->eoi();
 	}
 
-	cpu->status = CPU_STATUS_PROCESS_CONTEXT;
+	cpu->status = cpu_status;
 }
 
 int unhandled_irq(int irq, void *data)
@@ -540,6 +541,9 @@ void test_task()
 	printk("task %d on cpu %x begins...\n", task->id, cpu->id);
 	*addr = task->id;
 	printk("task %d addr %x value %x\n", task->id, addr, *addr);
+	addr = (u64 *)0xffffffff00000000;
+	*addr = task->id;
+	printk("task invalid access.\n");
 	while (1) {
 		printk("cpu %d iteration:%d\n",cpu->id, j++);
 		for (i = 0; i < 0x8000000; i++) {};

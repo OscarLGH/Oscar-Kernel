@@ -55,6 +55,10 @@ u64 get_current_task_stack();
 void set_current_task_stack(u64 sp);
 void arch_init_kstack(struct task_struct *task, void (*fptr)(void), u64 stack, bool kernel);
 void arch_init_mm(struct task_struct *task);
+void schedule();
+int task_exit(struct task_struct *task);
+
+
 
 struct task_struct *
 __create_task(void (*fun)(void), int prio, int kstack_size, int kernel, int cpu);
