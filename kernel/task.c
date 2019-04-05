@@ -165,7 +165,6 @@ void schedule()
 	next = pick_next_task(rq, prev, NULL);
 
 	if (next == NULL) {
-		printk("idle...\n");
 		next = rq->idle;
 	}
 

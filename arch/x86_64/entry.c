@@ -541,9 +541,13 @@ void test_task()
 	printk("task %d on cpu %x begins...\n", task->id, cpu->id);
 	*addr = task->id;
 	printk("task %d addr %x value %x\n", task->id, addr, *addr);
-	addr = (u64 *)0xffffffff00000000;
-	*addr = task->id;
-	printk("task invalid access.\n");
+
+	if (task->id == 7) {
+		addr = (u64 *)0xffffffff00000000;
+		*addr = task->id;
+		printk("invalid access...\n");
+	}
+	schedule();
 	while (1) {
 		printk("cpu %d iteration:%d\n",cpu->id, j++);
 		for (i = 0; i < 0x8000000; i++) {};
@@ -596,6 +600,7 @@ void arch_init()
 	lapic_set_timer(1, 0x25);
 
 	//if (is_bsp()) {
+	create_task(test_task, 3, 0x10000, 1, -1);
 	create_task(test_task, 3, 0x10000, 1, -1);
 	//}
 

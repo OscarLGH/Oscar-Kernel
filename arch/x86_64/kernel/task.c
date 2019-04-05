@@ -29,19 +29,61 @@ void arch_init_kstack(struct task_struct *task, void (*fptr)(void), u64 stack, b
 	}
 }
 
-void arch_start_task(struct task_struct *task)
+void __switch_to(struct task_struct *prev, struct task_struct *next)
 {
-	struct irq_stack_frame *kstack = (void *)task->sp;
-	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.ss):);
+	struct irq_stack_frame *kstack_prev = (void *)prev->sp;
+	void *prev_ret_addr = __builtin_return_address(0);
+	struct irq_stack_frame *kstack_next = (void *)next->sp;
+	
+	/* simulate an interrupt */
+	asm("mov %ss, %ax");
 	asm("push %rax");
-	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.rsp):);
+	asm("mov %rbp, %rax");
+	asm("add $0x8, %rax");
 	asm("push %rax");
-	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.rflags):);
+	asm("pushf");
+	asm("mov %cs, %ax");
 	asm("push %rax");
-	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.cs):);
+	asm("mov %0, %%rax" ::"r"(prev_ret_addr):);
 	asm("push %rax");
-	asm("mov %0, %%rax" ::"r"(kstack->irq_stack.rip):);
-	asm("push %rax");
+
+	asm("pushq %r15 \n\t"
+		"pushq %r14 \n\t"
+		"pushq %r13 \n\t"
+		"pushq %r12 \n\t"
+		"pushq %r11 \n\t"
+		"pushq %r10 \n\t"
+		"pushq %r9 \n\t"
+		"pushq %r8 \n\t"
+		"pushq %rbp \n\t"
+		"pushq %rsp \n\t"
+		"pushq %rdi \n\t"
+		"pushq %rsi \n\t"
+		"pushq %rdx \n\t"
+		"pushq %rcx \n\t"
+		"pushq %rbx \n\t"
+		"pushq %rax \n\t");
+
+	asm("mov %%rsp, %0"::"m"(prev->sp):);
+	
+	asm("mov %0, %%rsp" ::"m"(next->sp):);
+	asm("popq %rax \n\t"
+		"popq %rbx \n\t"
+		"popq %rcx \n\t"
+		"popq %rdx \n\t"
+		"popq %rsi \n\t"
+		"popq %rdi \n\t"
+		"popq %rbp \n\t"
+		"popq %rbp \n\t"
+		"popq %r8 \n\t"
+		"popq %r9 \n\t"
+		"popq %r10 \n\t"
+		"popq %r11 \n\t"
+		"popq %r12 \n\t"
+		"popq %r13 \n\t"
+		"popq %r14 \n\t"
+		"popq %r15 \n\t"
+		);
 	asm("iretq");
 }
 
@@ -68,7 +110,7 @@ switch_to(struct task_struct *prev, struct task_struct *next)
 	/* new task starts on iret since we want irq handler to finish cleaning work.*/
 	/* Otherwise, new task starts immediately */
 	if (cpu->status != CPU_STATUS_IRQ_CONTEXT) {
-		arch_start_task(next);
+		__switch_to(prev, next);
 	}
 }
 
