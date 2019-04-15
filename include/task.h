@@ -15,6 +15,7 @@ struct task_struct {
 	int counter;
 	int reschedule;
 	int signal;
+	int ret_value;
 
 	spin_lock_t spin_lock;
 	struct mm_struct mm;

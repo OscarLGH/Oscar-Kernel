@@ -407,6 +407,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 
 	if (page_size == 0x40000000) {
 		pdpt[index2] = hpa | attribute | EPT_PDPTE_1GB_PAGE;
+		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(vcpu->eptp_base), 0);
 		return 0;
 	}
 
@@ -423,6 +424,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 
 	if (page_size == 0x200000) {
 		pdt[index3] = hpa | attribute | EPT_PDE_2MB_PAGE;
+		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(vcpu->eptp_base), 0);
 		return 0;
 	}
 
@@ -437,6 +439,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 
 	if (page_size == 0x1000) {
 		pt[index4] = hpa | attribute;
+		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(vcpu->eptp_base), 0);
 		return 0;
 	}
 	

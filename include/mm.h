@@ -62,6 +62,7 @@ void bootmem_free(void *vaddr);
 void bootmem_init();
 void *bootmem_alloc(u64 size);
 void *kmalloc(unsigned long size, int flags);
+void kfree(void *addr);
 void mm_node_init(struct node *node);
 void mm_node_register(struct node *node);
 struct node *mm_get_node_by_id(u64 id);

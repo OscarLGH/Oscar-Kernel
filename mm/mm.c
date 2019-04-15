@@ -94,3 +94,8 @@ void *kmalloc(unsigned long size, int flags)
 {
 	bootmem_alloc(size);
 }
+
+void kfree(void *addr)
+{
+	
+}

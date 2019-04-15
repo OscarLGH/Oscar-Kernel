@@ -91,7 +91,7 @@ int address_check(u64 addr, int cpl)
 {
 	if (cpl != 0) {
 		if (VIRT2PHYS(addr) > addr) {
-			return -1;
+			return -EINVAL;
 		}
 	}
 

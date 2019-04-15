@@ -4,6 +4,26 @@
 /* Most macros are copied from linux-kernel. */
 
 /*
+ * Address types:
+ *
+ *  gva - guest virtual address
+ *  gpa - guest physical address
+ *  gfn - guest frame number
+ *  hva - host virtual address
+ *  hpa - host physical address
+ *  hfn - host frame number
+ */
+
+#include <types.h>
+typedef unsigned long  gva_t;
+typedef u64            gpa_t;
+typedef u64            gfn_t;
+
+typedef unsigned long  hva_t;
+typedef u64            hpa_t;
+typedef u64            hfn_t;
+
+/*
  * vmx.h: VMX Architecture related definitions
  * Copyright (c) 2004, Intel Corporation.
  *
@@ -739,6 +759,31 @@ static inline void vmcs_write(u64 field, u64 value)
 		::"rdi"(field), "rsi"(value)
 		);
 }
+
+static inline void invvpid(unsigned long ext, u16 vpid, gva_t gva)
+{
+	struct {
+		u64 vpid : 16;
+		u64 rsvd : 48;
+		u64 gva;
+	} operand = { vpid, 0, gva };
+	bool error;
+
+	asm volatile ("invvpid %1, %0"
+		      :: "r"(ext), "m"(operand));
+}
+
+static inline void invept(unsigned long ext, u64 eptp, gpa_t gpa)
+{
+	struct {
+		u64 eptp, gpa;
+	} operand = {eptp, gpa};
+	bool error;
+
+	asm volatile ("invept %1, %0"
+		      :: "r"(ext), "m"(operand));
+}
+
 
 int vm_launch(void *host_reg, void *guest_reg);
 int vm_resume(void *host_reg, void *guest_reg);
