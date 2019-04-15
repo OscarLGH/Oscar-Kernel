@@ -549,7 +549,7 @@ void test_task()
 	}
 	schedule();
 	while (1) {
-		printk("cpu %d iteration:%d\n",cpu->id, j++);
+		printk("task %d cpu %d iteration:%d\n",task->id, cpu->id, j++);
 		for (i = 0; i < 0x8000000; i++) {};
 	}
 }

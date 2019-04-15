@@ -1,6 +1,7 @@
 #include <kernel.h>
 #include <task.h>
 #include <cpu.h>
+#include <string.h>
 
 struct rq **rq_list = NULL;
 struct sq sq;
@@ -42,13 +43,15 @@ struct task_struct *
 __create_task(void (*fun)(void), int prio, int kstack_size, int kernel, int cpu)
 {
 	struct task_struct *task = kmalloc(sizeof(*task), GFP_KERNEL);
+	memset(task, 0, sizeof(*task));
 	task->stack = kmalloc(kstack_size, GFP_KERNEL);
 	task->sp = (u64)task->stack + kstack_size - 0x200;
 	task->prio = prio;
 	task->id = pid++;
 	task->counter = prio;
 	task->cpu = cpu;
-	arch_init_kstack(task, fun, (u64)task->stack, kernel);
+	task->state = TASK_STATE_RUNNING;
+	arch_init_kstack(task, fun, task->sp + 0xa8, kernel);
 	arch_init_mm(task);
 	return task;
 }
@@ -146,6 +149,7 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	switch_mm(&prev->mm, &next->mm, next);
 
 	rq->current = next;
+	//printk("prev->id %d prev->sp = %x next->id %d next->sp = %x\n", prev->id, prev->sp, next->id, next->sp);
 	switch_to(prev, next);
 }
 
@@ -159,7 +163,7 @@ void schedule()
 {
 	struct task_struct *prev, *next;
 	struct cpu *cpu = get_cpu();
-	struct rq * rq = rq_list[cpu->index];
+	struct rq *rq = rq_list[cpu->index];
 	prev = rq->current;
 
 	next = pick_next_task(rq, prev, NULL);
@@ -200,7 +204,6 @@ void set_current_task_stack(u64 sp)
 
 int task_timer_tick(int irq, void *data)
 {
-	//printk("%s on cpu %d\n", __FUNCTION__, get_cpu()->index);
 	struct cpu *cpu = get_cpu();
 	struct task_struct *current = rq_list[cpu->index]->current;
 
