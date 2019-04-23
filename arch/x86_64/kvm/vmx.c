@@ -39,6 +39,7 @@ int vmx_disable()
 	return 0;
 }
 
+u64 vcpu_cnt = 0;
 struct vmx_vcpu *vmx_preinit()
 {
 	int ret;
@@ -51,6 +52,7 @@ struct vmx_vcpu *vmx_preinit()
 	vcpu_ptr->vmcs = kmalloc(0x1000, GFP_KERNEL);
 	vcpu_ptr->vmcs_phys = VIRT2PHYS(vcpu_ptr->vmcs);
 	memset(vcpu_ptr->vmcs, 0, 0x1000);
+	vcpu_ptr->virtual_processor_id = ++vcpu_cnt;
 
 	ret = vmx_enable();
 	if (ret) {
@@ -108,6 +110,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	u32 vm_exit_allow1_mask;
 	u32 vm_exit_allow0_mask;
 
+	vmcs_write(VIRTUAL_PROCESSOR_ID, vcpu->virtual_processor_id);
 	vmcs_write(IO_BITMAP_A, VIRT2PHYS(vcpu->io_bitmap_a));
 	vmcs_write(IO_BITMAP_B, VIRT2PHYS(vcpu->io_bitmap_b));
 	vmcs_write(MSR_BITMAP, VIRT2PHYS(vcpu->msr_bitmap));
@@ -162,6 +165,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 
 	cpu_based_vm_exec_ctrl2 = SECONDARY_EXEC_UNRESTRICTED_GUEST
 		| SECONDARY_EXEC_ENABLE_EPT
+		| SECONDARY_EXEC_ENABLE_VPID
 		| SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES
 		| SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY
 		| SECONDARY_EXEC_APIC_REGISTER_VIRT
@@ -533,7 +537,10 @@ int vmx_handle_exception(struct vmx_vcpu *vcpu)
 
 int vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:External interrupt\n");
+	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
+	printk("VM-Exit:External interrupt (%d)\n", interruption_info & 0xff);
+	asm("int $0x25");
+	asm("sti");
 	return 0;
 }
 
@@ -1003,7 +1010,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	u32 instruction_error = vmcs_read(VM_INSTRUCTION_ERROR);
 	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
 	vcpu->guest_state.gr_regs.rsp = vmcs_read(GUEST_RSP);
-	printk("vm_exit reason:%d\n", exit_reason);
+	//printk("vm_exit reason:%d\n", exit_reason);
 	printk("Guest RIP:%x\n", vcpu->guest_state.rip);
 	if (exit_reason & 0x80000000) {
 		printk("vm entry failed.\n");
@@ -1253,13 +1260,13 @@ int vmx_run(struct vmx_vcpu *vcpu)
 
 	while (1) {
 		if (vcpu->state == 0) {
-			printk("VM LAUNCH.\n");
+			//printk("VM LAUNCH.\n");
 			ret0 = vm_launch(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
 			if (ret0 == 0) {
 				vcpu->state = 1;
 			}
 		} else {
-			printk("VM RESUME.\n");
+			//printk("VM RESUME.\n");
 			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
 		}
 		if (ret0 == 0) {

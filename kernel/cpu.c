@@ -45,6 +45,21 @@ struct cpu *get_cpu()
 	return NULL;
 }
 
+struct cpu *get_cpu_by_index(int index)
+{
+	struct node *node_ptr;
+	struct cpu *cpu_ptr;
+
+	list_for_each_entry(node_ptr, &node_list, list) {
+		list_for_each_entry(cpu_ptr, &node_ptr->cpu_list, list) {
+			if (cpu_ptr->index == index)
+				return cpu_ptr;
+		}
+	}
+	return NULL;
+}
+
+
 u64 get_irq_stack()
 {
 	struct cpu *cpu = get_cpu();

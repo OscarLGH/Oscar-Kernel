@@ -664,6 +664,7 @@ struct guest_memory_zone {
 
 struct vmx_vcpu {
 	u64 state;
+	u64 virtual_processor_id;
 	struct vmcs *vmxon_region;
 	u64 vmxon_region_phys;
 	struct vmcs *vmcs;

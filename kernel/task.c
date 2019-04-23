@@ -61,10 +61,13 @@ static int cpu_min_load()
 	int i;
 	int min_cpu_idx = 0;
 	int min_len = 0xffffffff;
+	struct cpu *cpu;
 	for (i = 0; i < nr_cpus; i++) {
-		if (rq_list[i]->length < min_len) {
-			min_len = rq_list[i]->length;
-			min_cpu_idx = i;
+		if (get_cpu_by_index(i)->status != CPU_STATUS_OFFLINE) {
+			if (rq_list[i]->length < min_len) {
+				min_len = rq_list[i]->length;
+				min_cpu_idx = i;
+			}
 		}
 	}
 
@@ -156,6 +159,8 @@ context_switch(struct rq *rq, struct task_struct *prev,
 int task_exit(struct task_struct *task)
 {
 	task->state = TASK_STATE_KILLED;
+	/*TODO: free all resources...*/
+
 	schedule();
 }
 

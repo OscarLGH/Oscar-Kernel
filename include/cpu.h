@@ -45,6 +45,7 @@ struct cpu {
 int register_cpu_local(struct node *node);
 int register_cpu_remote(u64 id, struct node *node);
 struct cpu *get_cpu();
+struct cpu *get_cpu_by_index(int index);
 u64 get_irq_stack();
 void save_tmp_stack(u64 sp);
 u64 get_tmp_stack();

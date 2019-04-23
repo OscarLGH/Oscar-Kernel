@@ -93,13 +93,6 @@ guest_entry_64:
 
 	movabsq $0xffff800001000000, %rsp
 
-	vmcall
-
-	movw $(desc_data64 - gdt), %ax
-	movw %ax, %ds
-	movw $(desc_null - gdt), %ax
-	lldt %ax
-
 	movq %cr4, %rax
 	bts $9, %rax
 	bts $18, %rax
@@ -114,55 +107,11 @@ guest_entry_64:
 	movq %cr4, %rax
 	bts $18, %rax
 	movq %rax, %cr4
-
-	vmcall
 	
-	movw $(desc_ldt64 - gdt), %ax
-	lldt %ax
-	
-
 	movl $0x7, %eax
 	movl $0, %edx
 	movl $0, %ecx
 	xsetbv
-
-	mov $0x180000, %rbx
-	movabsq $0x55aaaa5512345678, %rax
-	movq %rax, 0x0(%rbx)
-	movabsq $0x55aaaa5522345678, %rax
-	movq %rax, 0x8(%rbx)
-	movabsq $0x55aaaa5532345678, %rax
-	movq %rax, 0x10(%rbx)
-	movabsq $0x55aaaa5542345678, %rax
-	movq %rax, 0x18(%rbx)
-
-	vmovapd (%rbx), %ymm0
-	vmovapd (%rbx), %ymm1
-	vmovapd (%rbx), %ymm2
-	vmovapd (%rbx), %ymm3
-	vmovapd (%rbx), %ymm4
-	vmovapd (%rbx), %ymm5
-
-	//vaddpd %ymm0, %ymm1, %ymm2
-	//vaddpd %ymm1, %ymm2, %ymm3
-
-	movabsq $0x55aaaa5500000000, %rax
-	movabsq $0x55aaaa5500000001, %rbx
-	movabsq $0x55aaaa5500000002, %rcx
-	movabsq $0x55aaaa5500000003, %rdx
-	movabsq $0x55aaaa5500000004, %rsi
-	movabsq $0x55aaaa5500000005, %rdi
-	movq %rsp, %rbp
-	addq $0x8000, %rbp
-	movabsq $0x55aaaa5500000008, %r8
-	movabsq $0x55aaaa5500000009, %r9
-	movabsq $0x55aaaa5500000010, %r10
-	movabsq $0x55aaaa5500000011, %r11
-	movabsq $0x55aaaa5500000012, %r12
-	movabsq $0x55aaaa5500000013, %r13
-	movabsq $0x55aaaa5500000014, %r14
-	movabsq $0x55aaaa5500000015, %r15
-
 	vmcall
 
 	hlt	

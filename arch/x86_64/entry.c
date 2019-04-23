@@ -285,7 +285,7 @@ void wakeup_all_processors()
 
 			//printk("waking up cpu %d...\n", cpu->id);
 			mp_init_single(cpu->id, ap_load_addr);
-			while (cpu->status != 1);
+			while (cpu->status != CPU_STATUS_IDLE);
 			//printk(" [%d]", cpu->id);
 		}
 	}
@@ -296,7 +296,7 @@ void wakeup_all_processors()
 			if (cpu->id == 0)
 				continue;
 
-			while (cpu->status != 1);
+			while (cpu->status != CPU_STATUS_IDLE);
 			printk(" [%d]", cpu->id);
 		}
 	}
@@ -525,9 +525,9 @@ void x86_cpu_init()
 	set_intr_desc();
 	setup_irq();
 	lapic_enable();
-
+	cpu->status = CPU_STATUS_IDLE;
 	asm("sti");
-	cpu->status = 1;
+
 }
 
 void arch_numa_init();
@@ -582,7 +582,7 @@ void arch_init()
 	}
 	
 	if (is_bsp()) {
-		wakeup_all_processors();
+		//wakeup_all_processors();
 		//lapic_send_ipi(0xff, 0xfe, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfc, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xfc, APIC_ICR_ASSERT);
@@ -596,12 +596,18 @@ void arch_init()
 		//asm("int $0x21");
 		//create_task(test_task, 3, 0x10000, 1, -1);
 	}
+
+	//create_task(test_task, 3, 0x10000, 1, -1);
+	//create_task(test_task, 3, 0x10000, 1, -1);
+	create_task(vm_init_test, 3, 0x10000, 1, -1);
 	request_irq_smp(get_cpu(), 0x5, task_timer_tick, 0, "lapic-timer", NULL);
 	lapic_set_timer(1, 0x25);
 
 	//if (is_bsp()) {
-	create_task(test_task, 3, 0x10000, 1, -1);
-	create_task(test_task, 3, 0x10000, 1, -1);
+	//create_task(test_task, 3, 0x10000, 1, -1);
+	//create_task(test_task, 3, 0x10000, 1, -1);
+	
+	//vm_init_test();
 	//}
 
 	while(1) {
