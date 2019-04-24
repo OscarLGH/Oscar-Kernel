@@ -229,21 +229,30 @@ inline static void mp_init_all(u64 ap_startup_addr)
 
 inline static int lapic_set_timer(u64 freq, u8 vector)
 {
-	u64 default_freq;
-	u32 buffer[4] = {0};
+	u64 tsc_freq, crystal_freq;
+	u32 buffer1[4] = {0};
+	//u32 buffer2[4] = {0};
 	write_cr8(0);
-	cpuid(0x15, 0, buffer);
-	//printk("cpuid 0x15:eax = %x ebx = %x ecx = %x\n", buffer[0], buffer[1], buffer[2]);
+	cpuid(0x15, 0, buffer1);
+	//printk("cpuid 0x15:eax = %x ebx = %x ecx = %x\n", buffer1[0], buffer1[1], buffer1[2]);
 	//default_freq = buffer[1] / buffer[0];
 	//printk("default freq:%dHz\n", buffer[1] / buffer[0]);
-	cpuid(0x16, 0, buffer);
-	//printk("cpuid 0x16:eax = %x ebx = %x ecx = %x\n", buffer[0], buffer[1], buffer[2]);
+	//cpuid(0x16, 0, buffer2);
+	//printk("cpuid 0x16:eax = %x ebx = %x ecx = %x\n", buffer2[0], buffer2[1], buffer2[2]);
 	//printk("bus freq:%dMHz\n", buffer[2]);
-	default_freq = buffer[2];
+
+	/* some cpu doesn't report crystal freq by cpuid */
+	if (buffer1[2] == 0)
+		buffer1[2] = 24000000;
+
+	crystal_freq = buffer1[2];
+	tsc_freq = buffer1[2] * buffer1[1] / buffer1[0];
+	
 	lapic_reg_write32(APIC_REG_TIMER_DCR, 0xb);
 	
 	lapic_reg_write32(APIC_REG_LVT_TIMER, 0x20000 | vector);
-	lapic_reg_write32(APIC_REG_TIMER_ICR, default_freq * 1000000 / freq);
+	lapic_reg_write32(APIC_REG_TIMER_ICR, crystal_freq / freq);
+
 	return 0;
 }
 

@@ -4,6 +4,7 @@
  */
 .global exception_table
 .global irq_table
+.global soft_irq_call
 
 
 .data
@@ -194,9 +195,9 @@ reserved_exception:
 .macro IRQ_COMMON vector = 0
 	SAVE_CREGS
 
-	//movabsq $save_tmp_stack, %rax
-	//mov %rsp, %rdi
-	//call *%rax
+	movabsq $save_tmp_stack, %rax
+	mov %rsp, %rdi
+	call *%rax
 
 	movabsq $set_current_task_stack, %rax
 	mov %rsp, %rdi
@@ -215,14 +216,33 @@ reserved_exception:
 	mov %rax, %rsp
 	jmp 2f
 1:
-	//movabsq $get_tmp_stack, %rax
-	//call *%rax
-	//mov %rax, %rsp
+	movabsq $get_tmp_stack, %rax
+	call *%rax
+	mov %rax, %rsp
 2:
 	RESTORE_CREGS
 	iretq
 .endm
 
+soft_irq_call:
+	subq $32, %rdi
+	movq %rdi, %rax
+	movq $14, %r10
+	mulq %r10
+	movabsq $soft_irq_table, %rbx
+	addq %rbx, %rax
+	jmpq *%rax
+
+soft_irq_table:
+index = 32
+.rept 0x100 - 0x20
+	int $(index)
+	movabsq $soft_irq_end, %rax
+	jmpq *%rax
+	index = index + 1
+.endr
+soft_irq_end:
+	ret
 
 irq_vector:
 index = 0
@@ -233,7 +253,6 @@ index = 0
 irq_vector_end:
 	nop
 
-
 .data
 PER_IRQ_SIZE = ((irq_vector_end - irq_vector) / 224)
 irq_table:
@@ -242,4 +261,3 @@ index = 0
 	.quad irq_vector + index * PER_IRQ_SIZE
 	index = index + 1
 .endr
-

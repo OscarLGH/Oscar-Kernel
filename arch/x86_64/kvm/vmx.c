@@ -140,7 +140,11 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 
 	pin_based_vm_exec_ctrl =  PIN_BASED_ALWAYSON_WITHOUT_TRUE_MSR
 		| PIN_BASED_EXT_INTR_MASK
-		| PIN_BASED_POSTED_INTR;
+		| PIN_BASED_POSTED_INTR
+		| PIN_BASED_VMX_PREEMPTION_TIMER
+		;
+
+	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, 24000000 * 10);
 	if ((pin_based_vm_exec_ctrl | pin_based_allow1_mask) != pin_based_allow1_mask) {
 		printk("Warning:setting pin_based_vm_exec_control:%x unsupported.\n", 
 			(pin_based_vm_exec_ctrl & pin_based_allow1_mask) ^ pin_based_vm_exec_ctrl);
@@ -150,9 +154,11 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrl);
 	cpu_based_vm_exec_ctrl = CPU_BASED_FIXED_ONES
 		| CPU_BASED_ACTIVATE_SECONDARY_CONTROLS
-		| CPU_BASED_USE_IO_BITMAPS
+		//| CPU_BASED_USE_IO_BITMAPS
 		| CPU_BASED_USE_MSR_BITMAPS
 		| CPU_BASED_TPR_SHADOW
+		| CPU_BASED_UNCOND_IO_EXITING
+		//| CPU_BASED_CR3_LOAD_EXITING
 		//| CPU_BASED_MONITOR_TRAP_FLAG
 		;
 	if ((cpu_based_vm_exec_ctrl | cpu_based_allow1_mask) != cpu_based_allow1_mask) {
@@ -194,6 +200,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		| VM_EXIT_LOAD_IA32_EFER
 		| VM_EXIT_ACK_INTR_ON_EXIT
 		| VM_EXIT_HOST_ADDR_SPACE_SIZE
+		//| VM_EXIT_SAVE_VMX_PREEMPTION_TIMER
 		;
 	if ((vm_exit_ctrl | vm_exit_allow1_mask) != vm_exit_allow1_mask) {
 		printk("Warning:setting vm_exit_controls:%x unsupported.\n", 
@@ -203,6 +210,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	}
 	vmcs_write(VM_EXIT_CONTROLS, vm_exit_ctrl);
 
+	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
 	vmcs_write(EXCEPTION_BITMAP, 0xffffffff);
@@ -538,8 +546,9 @@ int vmx_handle_exception(struct vmx_vcpu *vcpu)
 int vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
 {
 	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
-	printk("VM-Exit:External interrupt (%d)\n", interruption_info & 0xff);
-	asm("int $0x25");
+	u8 vector = interruption_info & 0xff;
+	printk("VM-Exit:External interrupt (%d)\n", vector);
+	soft_irq_call(vector);
 	asm("sti");
 	return 0;
 }
@@ -717,9 +726,12 @@ int vmx_handle_vmcall(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:VMCALL.\n");
 	//dump_guest_state(vcpu);
-	printk("LDTR limit:%x\n", vmcs_read(GUEST_LDTR_LIMIT));
-	printk("LDTR AR BYTES:%x\n", vmcs_read(GUEST_LDTR_AR_BYTES));
+	//printk("LDTR limit:%x\n", vmcs_read(GUEST_LDTR_LIMIT));
+	//printk("LDTR AR BYTES:%x\n", vmcs_read(GUEST_LDTR_AR_BYTES));
 	//vmcs_write(GUEST_LDTR_AR_BYTES, 0x10000);
+	//u64 pin_based_vm_exec_ctrl = vmcs_read(PIN_BASED_VM_EXEC_CONTROL);
+	//pin_based_vm_exec_ctrl |= PIN_BASED_VMX_PREEMPTION_TIMER;
+	//vmcs_write(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrl);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -811,6 +823,7 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 	u64 cr = exit_qualification & 0xf;
 	u64 reg = (exit_qualification >> 8) & 0xf;
 	u64 val = 0;
+	printk("VM-Exit:CR%d access.\n", cr);
 	switch(reg) {
 		case 0:
 			val = vcpu->guest_state.gr_regs.rax;
@@ -865,6 +878,13 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 	if (cr == 0) {
 		vcpu->guest_state.cr0_read_shadow = val;
 		vmcs_write(CR0_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
+		if ((val & CR0_PG) && (vmcs_read(GUEST_IA32_EFER) & BIT8)) {
+			vmx_enter_longmode(vcpu);
+		}
+	}
+
+	if (cr == 3) {
+		vmcs_write(GUEST_CR3, val);
 	}
 
 	if (cr == 4) {
@@ -872,7 +892,6 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 		vmcs_write(CR4_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
 	}
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	vmx_enter_longmode(vcpu);
 	return 0;
 }
 
@@ -1002,6 +1021,13 @@ int vmx_handle_xrstors(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
+int vmx_handle_preemption_timer(struct vmx_vcpu *vcpu)
+{
+	printk("VM-Exit:Guest timeout.\n");
+	return 0;
+}
+
+
 
 int vm_exit_handler(struct vmx_vcpu *vcpu)
 {
@@ -1011,7 +1037,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
 	vcpu->guest_state.gr_regs.rsp = vmcs_read(GUEST_RSP);
 	//printk("vm_exit reason:%d\n", exit_reason);
-	printk("Guest RIP:%x\n", vcpu->guest_state.rip);
+	//printk("Guest RIP:%x\n", vcpu->guest_state.rip);
 	if (exit_reason & 0x80000000) {
 		printk("vm entry failed.\n");
 		vmx_handle_vm_entry_failed(vcpu);
@@ -1084,6 +1110,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_DR_ACCESS:
 			break;
 		case EXIT_REASON_IO_INSTRUCTION:
+			ret = vmx_handle_io(vcpu);
 			break;
 		case EXIT_REASON_MSR_READ:
 			ret = vmx_handle_rdmsr(vcpu);
@@ -1130,6 +1157,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 			ret = vmx_handle_rdtscp(vcpu);
 			break;
 		case EXIT_REASON_PREEMPTION_TIMER:
+			ret = vmx_handle_preemption_timer(vcpu);
 			break;
 		case EXIT_REASON_INVVPID:
 			break;

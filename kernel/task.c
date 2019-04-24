@@ -149,11 +149,15 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	       struct task_struct *next, struct rq_flags *rf)
 {
 	//mm switch
+	if (next == prev)
+		return rq;
+
 	switch_mm(&prev->mm, &next->mm, next);
 
 	rq->current = next;
 	//printk("prev->id %d prev->sp = %x next->id %d next->sp = %x\n", prev->id, prev->sp, next->id, next->sp);
 	switch_to(prev, next);
+	return rq;
 }
 
 int task_exit(struct task_struct *task)

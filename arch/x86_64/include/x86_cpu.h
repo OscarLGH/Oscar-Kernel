@@ -39,4 +39,5 @@ struct x86_cpu {
 	u64 spin_lock;
 };
 
+void soft_irq_call(u8 vector);
 #endif
