@@ -4,6 +4,7 @@
 #include <in_out.h>
 #include <lapic.h>
 #include <irq.h>
+#include <init.h>
 
 struct pci_host_bridge x86_host_bridge;
 extern struct pci_host_bridge *host_bridge;
@@ -79,7 +80,7 @@ int x86_pci_msi_entry_build(struct msi_data *msi, int irq, int cpu)
 	return 0;
 }
 
-int x86_pci_hostbridge_init()
+void x86_pci_hostbridge_init()
 {
 	struct acpi_mcfg *mcfg = acpi_get_desc("MCFG");
 	if (mcfg == NULL) {
@@ -102,5 +103,6 @@ int x86_pci_hostbridge_init()
 
 	host_bridge = &x86_host_bridge;
 	pci_scan();
-	return 0;
 }
+
+subsys_init(x86_pci_hostbridge_init);

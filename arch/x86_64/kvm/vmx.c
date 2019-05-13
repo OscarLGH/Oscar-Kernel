@@ -144,7 +144,8 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		| PIN_BASED_VMX_PREEMPTION_TIMER
 		;
 
-	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, 24000000 * 10);
+	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, 2100000000 / 128);
+	printk("VMX_MISC:0x%x\n", rdmsr(MSR_IA32_VMX_MISC));
 	if ((pin_based_vm_exec_ctrl | pin_based_allow1_mask) != pin_based_allow1_mask) {
 		printk("Warning:setting pin_based_vm_exec_control:%x unsupported.\n", 
 			(pin_based_vm_exec_ctrl & pin_based_allow1_mask) ^ pin_based_vm_exec_ctrl);
@@ -200,7 +201,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		| VM_EXIT_LOAD_IA32_EFER
 		| VM_EXIT_ACK_INTR_ON_EXIT
 		| VM_EXIT_HOST_ADDR_SPACE_SIZE
-		//| VM_EXIT_SAVE_VMX_PREEMPTION_TIMER
+		| VM_EXIT_SAVE_VMX_PREEMPTION_TIMER
 		;
 	if ((vm_exit_ctrl | vm_exit_allow1_mask) != vm_exit_allow1_mask) {
 		printk("Warning:setting vm_exit_controls:%x unsupported.\n", 
@@ -1024,6 +1025,7 @@ int vmx_handle_xrstors(struct vmx_vcpu *vcpu)
 int vmx_handle_preemption_timer(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:Guest timeout.\n");
+	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, 2100000000 / 128);
 	return 0;
 }
 
