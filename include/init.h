@@ -10,7 +10,7 @@
 #define device_init_call	__attribute__((__section__(".initcall7.init")))
 #define late_init_call		__attribute__((__section__(".initcall8.init")))
 
-typedef void(*init_call_t)(void);
+typedef void (*init_call_t)(void);
 
 #define core_init(x) static init_call_t module_init_call##x core_init_call = x;
 #define postcore_init(x) static init_call_t module_init_call##x postcore_init_call = x;

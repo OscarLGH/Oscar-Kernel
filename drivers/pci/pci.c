@@ -1,6 +1,7 @@
 #include <pci.h>
 #include <kernel.h>
 #include <mm.h>
+#include <init.h>
 
 struct list_head pci_device_list;
 struct list_head pci_driver_list;
@@ -666,7 +667,7 @@ void pci_device_init(struct pci_dev *pdev)
 	pci_read_config_byte(pdev, PCI_CLASS_PROG, &class_code[1]);
 	pci_read_config_byte(pdev, PCI_CLASS_REVISION, &class_code[2]);
 	pdev->class = (class_code[0] << 16) | (class_code[1] << 8) | (class_code[2]);
-	pdev->viddid = (vid << 16) | (did);
+	pdev->viddid = (did << 16) | (vid);
 	pdev->type = type;
 	if ((pdev->type & 0x1) == 0) {
 		for (i = 0; i < 6; i++) {
@@ -801,10 +802,12 @@ void pci_scan()
 					list_add_tail(&pdev->list, &pci_device_list);
 				}
 			}
-	pci_device_print();
+	//pci_device_print();
 }
 
 int pci_scan_alloc_resource()
 {
 	
 }
+
+subsys_init(pci_scan);

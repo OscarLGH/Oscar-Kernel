@@ -1069,6 +1069,8 @@ struct pci_dev {
 		u64 flags;
 		u64 reserved;
 	} resource[7];
+
+	void *private_data;
 };
 
 struct pci_device_id {
@@ -1080,7 +1082,7 @@ struct pci_device_id {
 #define PCI_DEVICE ((a),(b)) (((a)<<16)|(b))
 struct pci_driver {
 	char *name;
-	struct pci_device_id id_array[64];
+	struct pci_device_id *id_array;
 	int (*pci_probe)(struct pci_dev *pdev, struct pci_device_id *pent);
 	void (*pci_remove)(struct pci_dev *pdev);
 	struct list_head list;
@@ -1210,6 +1212,13 @@ static inline int pci_msix_clear_and_set_ctrl(struct pci_dev *dev, u16 clear, u1
 
 	return 0;
 }
+
+int pci_register_driver(struct pci_driver *driver);
+void pci_unregister_driver(struct pci_driver *driver);
+u64 pci_get_bar_base(struct pci_dev *pdev, int bar);
+u64 pci_get_bar_size(struct pci_dev *pdev, int bar);
+
+u64 pci_get_oprombar_size(struct pci_dev *pdev);
 
 
 

@@ -8,7 +8,7 @@
 
 struct pci_host_bridge x86_host_bridge;
 extern struct pci_host_bridge *host_bridge;
-extern void pci_scan();
+extern void pci_scan(void);
 
 #define X86_PCI_PIO_ADDR(b,d,f,o) \
 	(0x80000000 | ((b) << 16) | ((d) << 11) | ((f) << 8) | ((o) & ~(0x3)))
@@ -102,7 +102,6 @@ void x86_pci_hostbridge_init()
 	}
 
 	host_bridge = &x86_host_bridge;
-	pci_scan();
 }
 
-subsys_init(x86_pci_hostbridge_init);
+arch_init(x86_pci_hostbridge_init);
