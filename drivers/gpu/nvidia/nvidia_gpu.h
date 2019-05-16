@@ -13,7 +13,7 @@ enum nvkm_memory_target {
 	NVKM_MEM_TARGET_NCOH, /* non-coherent system memory */
 };
 
-struct nv_inst_obj {
+struct nvkm_gpuobj {
 	struct nvidia_gpu *gpu;
 	u64 inst_mem_addr;
 	u64 size;
@@ -84,15 +84,48 @@ struct nvkm_memory {
 #define PDE_2_ADDR(a) (((a) & 0xfffffffe) << 8)
 
 struct nvkm_mmu {
-	int (*map_page) (struct nv_inst_obj *pgd, u64 virt, u64 phys, u64 page_size);
-	int (*unmap) (struct nv_inst_obj *pgd, u64 virt, u64 phys, u64 len);
+	int (*map_page) (struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 page_size);
+	int (*unmap) (struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 len);
 	int (*flush) ();
-	int (*mmu_walk) (struct nv_inst_obj *pgd, u64 virt, u64 *pt);
+	int (*mmu_walk) (struct nvkm_gpuobj *pgd, u64 virt, u64 *pt);
+};
+
+struct fifo_chan {
+	u64 id;
+	struct nvkm_gpuobj *inst;
+	struct nvkm_gpuobj *pgd;
+	struct nvkm_gpuobj *push;
+	void *user;
+	u64 addr;
+	u64 size;
+
+	struct list_head list;
 };
 
 struct gp_fifo {
-	struct nv_inst_obj *ramfc;
-	struct nv_inst_obj *pgd;
+	struct nvidia_gpu *gpu;
+
+	struct {
+		int runl;
+		int pbid;
+	} engine[16];
+	int engine_nr;
+
+	struct {
+		int next;
+		struct list_head cgrp;
+		struct list_head chan;
+		struct nvkm_gpuobj *mem[2];
+		u32 engm;
+	} runlist[16];
+	int runlist_nr;
+
+	struct nvkm_gpuobj *user_mem;
+	void *user;
+
+	struct list_head chan_list;
+	u64 (*pbdma_nr)(struct nvidia_gpu *gpu);
+	u64 (*pbdma_init)(struct nvidia_gpu *gpu);
 	
 };
 
@@ -104,15 +137,15 @@ struct nv_chipset {
 };
 
 struct fb {
-	struct nv_inst_obj *fb;
+	struct nvkm_gpuobj *fb;
 };
 
 struct bar_vm {
 	u64 bar_no;
 	u64 bar_base;
 	u64 bar_size;
-	struct nv_inst_obj *inst_mem;
-	struct nv_inst_obj *pgd;
+	struct nvkm_gpuobj *inst_mem;
+	struct nvkm_gpuobj *pgd;
 };
 
 struct nvidia_gpu {
@@ -125,6 +158,8 @@ struct nvidia_gpu {
 	struct nvkm_mmu mmu;
 	struct fb fb;
 	struct bar_vm bar[2];
+
+	struct gp_fifo fifo;
 };
 
 static inline u32 nvkm_rd32(struct nvidia_gpu *gpu, u64 offset)
@@ -137,7 +172,7 @@ static inline void nvkm_wr32(struct nvidia_gpu *gpu, u64 offset, u32 value)
 	gpu->mmio_virt[offset / 4] = value;
 }
 
-static inline u32 instmem_rd32(struct nvidia_gpu *gpu, u64 offset)
+static inline u32 nvkm_memory_rd32(struct nvidia_gpu *gpu, u64 offset)
 {
 	u64 base = offset & 0xffffff00000ULL;
 	u64 addr = offset & 0x000000fffffULL;
@@ -151,7 +186,7 @@ static inline u32 instmem_rd32(struct nvidia_gpu *gpu, u64 offset)
 	return data;
 }
 
-static inline void instmem_wr32(struct nvidia_gpu *gpu, u64 offset, u32 data)
+static inline void nvkm_memory_wr32(struct nvidia_gpu *gpu, u64 offset, u32 data)
 {
 	u64 base = offset & 0xffffff00000ULL;
 	u64 addr = offset & 0x000000fffffULL;
@@ -162,7 +197,7 @@ static inline void instmem_wr32(struct nvidia_gpu *gpu, u64 offset, u32 data)
 	nvkm_wr32(gpu, 0x700000 + addr, data);
 }
 
-static inline u64 instmem_allocate(struct nvidia_gpu *gpu, u64 len)
+static inline u64 nvkm_memory_new(struct nvidia_gpu *gpu, u64 len)
 {
 	u32 pages_allocate = len > 0x1000 ? len / 0x1000 : 1;
 	int ret = bitmap_allocate_bits(gpu->memory.alloc_bitmap, pages_allocate);
@@ -179,10 +214,10 @@ static inline void instmem_free(struct nvidia_gpu *gpu, u64 offset)
 	//TODO
 }
 
-static inline struct nv_inst_obj *nv_instobj_alloc(struct nvidia_gpu *gpu, u64 size)
+static inline struct nvkm_gpuobj *nvkm_gpuobj_new(struct nvidia_gpu *gpu, u64 size)
 {
-	u64 addr = instmem_allocate(gpu, size);
-	struct nv_inst_obj *obj;
+	u64 addr = nvkm_memory_new(gpu, size);
+	struct nvkm_gpuobj *obj;
 	if (addr == -1) {
 		return NULL;
 	}
@@ -195,27 +230,27 @@ static inline struct nv_inst_obj *nv_instobj_alloc(struct nvidia_gpu *gpu, u64 s
 	return obj;
 }
 
-static inline void nv_instobj_free(struct nv_inst_obj *obj)
+static inline void nvkm_gpuobj_free(struct nvkm_gpuobj *obj)
 {
 	instmem_free(obj->gpu, obj->inst_mem_addr);
 	kfree(obj);
 }
 
-static inline int nv_instobj_rd32(struct nv_inst_obj *obj, u64 offset, u32 *value)
+static inline int nvkm_gpuobj_rd32(struct nvkm_gpuobj *obj, u64 offset, u32 *value)
 {
 	if (offset > obj->inst_mem_addr + obj->size) {
 		return -1;
 	}
-	*value = instmem_rd32(obj->gpu, obj->inst_mem_addr + offset);
+	*value = nvkm_memory_rd32(obj->gpu, obj->inst_mem_addr + offset);
 	return 0;
 }
 
-static inline int nv_instobj_wr32(struct nv_inst_obj *obj, u64 offset, u32 value)
+static inline int nvkm_gpuobj_wr32(struct nvkm_gpuobj *obj, u64 offset, u32 value)
 {
 	if (offset > obj->inst_mem_addr + obj->size) {
 		return -1;
 	}
-	instmem_wr32(obj->gpu, obj->inst_mem_addr + offset, value);
+	nvkm_memory_wr32(obj->gpu, obj->inst_mem_addr + offset, value);
 	return 0;
 }
 
