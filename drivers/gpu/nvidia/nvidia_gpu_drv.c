@@ -70,7 +70,7 @@ int nvidia_mmu_map_page(struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 priv, u
 	ret = nvkm_gpuobj_rd32(pgd, pd_index * 8 + 4, &pde1);
 	if (pde1 == 0) {
 		pt = nvkm_gpuobj_new(gpu, 0x8000);
-		nvkm_gpuobj_wr32(pgd, pd_index * 8 + 4, (pt->inst_mem_addr >> 8) | NV_SPT_PRESENT);
+		nvkm_gpuobj_wr32(pgd, pd_index * 8 + 4, (pt->vram_paddr >> 8) | NV_SPT_PRESENT);
 		nvkm_gpuobj_rd32(pgd, pd_index * 8 + 4, &pde1);
 	}
 
@@ -108,8 +108,10 @@ int nvidia_gpu_memory_init(struct nvidia_gpu *gpu)
 	u64 ram_size = gpu->chipset->vram_probe(gpu);
 	gpu->memory.alloc_bitmap = bitmap_alloc(ram_size / 0x1000);
 
-	gpu->fb.fb = nvkm_gpuobj_new(gpu, 0x1000000);
+	/*TODO: 0x800000 0x1000000 cause crash. find out why */
+	gpu->fb.fb = nvkm_gpuobj_new(gpu, 0xa00000);
 
+	//nvkm_gpuobj_new(gpu, 0x10000000);
 	/*
 	for (i = 0; i < 0x1000000; i += 4) {
 		nvkm_gpuobj_wr32(gpu->fb.fb, i, 0xf00ff0);
@@ -123,67 +125,115 @@ int nvidia_gpu_bar_init(struct nvidia_gpu *gpu)
 {
 	int i;
 	struct pci_dev *pdev = gpu->pdev;
-	gpu->bar[0].bar_base = pci_get_bar_base(pdev, 1);
-	gpu->bar[0].bar_size = pci_get_bar_size(pdev, 1);
-	gpu->bar[1].bar_base = pci_get_bar_base(pdev, 3);
-	gpu->bar[1].bar_size = pci_get_bar_size(pdev, 3);
-	printk("bar1 base:0x%x, size = 0x%x\n", gpu->bar[0].bar_base, gpu->bar[0].bar_size);
-	printk("bar3 base:0x%x, size = 0x%x\n", gpu->bar[1].bar_base, gpu->bar[1].bar_size);
-	gpu->bar[0].inst_mem = nvkm_gpuobj_new(gpu, 0x1000);
-	gpu->bar[0].pgd = nvkm_gpuobj_new(gpu, 0x2000 * 8);
+	gpu->bar[1].bar_base = pci_get_bar_base(pdev, 1);
+	gpu->bar[1].bar_size = pci_get_bar_size(pdev, 1);
+	gpu->bar[1].alloc_bitmap = bitmap_alloc(gpu->bar[1].bar_size / 0x1000);
+	gpu->bar[3].bar_base = pci_get_bar_base(pdev, 3);
+	gpu->bar[3].bar_size = pci_get_bar_size(pdev, 3);
+	gpu->bar[3].alloc_bitmap = bitmap_alloc(gpu->bar[3].bar_size / 0x1000);
+	printk("bar1 base:0x%x, size = 0x%x\n", gpu->bar[1].bar_base, gpu->bar[1].bar_size);
+	printk("bar3 base:0x%x, size = 0x%x\n", gpu->bar[3].bar_base, gpu->bar[3].bar_size);
+	gpu->bar[1].inst_mem = nvkm_gpuobj_new(gpu, 0x1000);
+	gpu->bar[1].pgd = nvkm_gpuobj_new(gpu, 0x2000 * 8);
 	for (i = 0; i < 0x2000 * 8; i += 4)
-		nvkm_gpuobj_wr32(gpu->bar[0].pgd, i, 0);
+		nvkm_gpuobj_wr32(gpu->bar[1].pgd, i, 0);
 
-	nvkm_gpuobj_wr32(gpu->bar[0].inst_mem, 0x200, gpu->bar[0].pgd->inst_mem_addr);
-	nvkm_gpuobj_wr32(gpu->bar[0].inst_mem, 0x204, gpu->bar[0].pgd->inst_mem_addr >> 32);
-	nvkm_gpuobj_wr32(gpu->bar[0].inst_mem, 0x208, gpu->bar[0].bar_size - 1);
-	nvkm_gpuobj_wr32(gpu->bar[0].inst_mem, 0x20c, (gpu->bar[0].bar_size - 1) >> 32);
+	nvkm_gpuobj_wr32(gpu->bar[1].inst_mem, 0x200, gpu->bar[1].pgd->vram_paddr);
+	nvkm_gpuobj_wr32(gpu->bar[1].inst_mem, 0x204, gpu->bar[1].pgd->vram_paddr >> 32);
+	nvkm_gpuobj_wr32(gpu->bar[1].inst_mem, 0x208, gpu->bar[1].bar_size - 1);
+	nvkm_gpuobj_wr32(gpu->bar[1].inst_mem, 0x20c, (gpu->bar[1].bar_size - 1) >> 32);
 
-	for (i = 0; i < 0x4000000; i += 0x1000)
-		nvidia_mmu_map_page(gpu->bar[0].pgd, i, i, 0, 0, 0x1000);
+	/* allocate vma on bar1 for framebuffer. */
+	gpu->fb.fb->bar_addr = nvkm_vma_new(gpu, 1, gpu->fb.fb->size);
+	gpu->fb.fb->mapped_ptr = ioremap(gpu->fb.fb->bar_addr, gpu->fb.fb->size);
+
+	nvkm_map_area(gpu->bar[1].pgd, 
+		gpu->fb.fb->bar_addr,
+		gpu->fb.fb->vram_paddr,
+		gpu->fb.fb->size,
+		0,
+		NV_VM_TARGET_VRAM
+	);
 
 	printk("switch to vmm bar...\n");
 
-	nvkm_wr32(gpu, 0x001704, 0x80000000 | (gpu->bar[0].inst_mem->inst_mem_addr >> 12));
+	nvkm_mask(gpu, 0x200, 0x00000100, 0x00000000);
+	nvkm_mask(gpu, 0x200, 0x00000100, 0x00000100);
+
+	nvkm_wr32(gpu, 0x001704, 0x80000000 | (gpu->bar[1].inst_mem->vram_paddr >> 12));
 }
 
-int nvidia_fifo_channel_new(struct nvidia_gpu *gpu, struct fifo_chan **chan)
+#define PUSH_BUFFER_SIZE 0x12000
+#define IB_OFFSET 0x10000
+#define IB_SIZE PUSH_BUFFER_SIZE-IB_OFFSET
+
+int nv_chan_nr = 0;
+int nvidia_fifo_channel_new(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_ptr)
 {
 	int i;
-	struct fifo_chan *chan_ptr;
+	struct nvkm_fifo_chan *chan;
+	u64 user_mem;
 
-	u64 user_mem = 0;
-	u64 ib_vma_addr = 0;
 	u64 ib_length = 0;
+	u64 ib_vma_addr = 0;
 
-	chan_ptr = *chan = kmalloc(sizeof(struct gp_fifo), GFP_KERNEL);
-	chan_ptr->inst = nvkm_gpuobj_new(gpu, 0x1000);
-	chan_ptr->addr = PHYS2VIRT(gpu->bar[0].bar_base + 0);
+	chan = *chan_ptr = kmalloc(sizeof(struct gp_fifo), GFP_KERNEL);
+	chan->gpu = gpu;
 
-	chan_ptr->pgd = nvkm_gpuobj_new(gpu, 0x10000);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x0200, chan_ptr->pgd->inst_mem_addr);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x0204, chan_ptr->pgd->inst_mem_addr >> 32);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x0208, 0xffffffff);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x020c, 0x000000ff);
+	/* instance memory */
+	chan->inst = nvkm_gpuobj_new(gpu, 0x1000);
+	chan->runl = 0;
+	chan->id = nv_chan_nr++;
 
-	for (i = 0; i < 0x4000000; i += 0x1000)
-		nvidia_mmu_map_page(chan_ptr->pgd, i, i, 0, 0, 0x1000);
+	chan->pgd = nvkm_gpuobj_new(gpu, 0x10000);
+	nvkm_gpuobj_wr32(chan->inst, 0x0200, gpu->bar[1].pgd->vram_paddr);
+	nvkm_gpuobj_wr32(chan->inst, 0x0204, gpu->bar[1].pgd->vram_paddr >> 32);
+	nvkm_gpuobj_wr32(chan->inst, 0x0208, 0xffffffff);
+	nvkm_gpuobj_wr32(chan->inst, 0x020c, 0x000000ff);
 
+	chan->push.size = PUSH_BUFFER_SIZE;
+	chan->push.push_vaddr = kmalloc(chan->push.size, GFP_KERNEL);
+	chan->push.push_paddr = VIRT2PHYS(chan->push.push_vaddr);
+	memset(chan->push.push_vaddr, 0, PUSH_BUFFER_SIZE);
+
+	/* determine address of this channel's user registers */
+	chan->addr = gpu->fifo.user_mem->bar_addr + 0x200 * chan->id;
+	chan->user = ioremap(gpu->bar[1].bar_base + chan->addr, 0x200);
+	/* allocate vma from bar1 vm space */
+	chan->push.push_vma_bar1 = nvkm_vma_new(gpu, 1, chan->push.size);
+
+	/* map push buffer in bar1 vm space */
+	nvkm_map_area(gpu->bar[1].pgd,
+		chan->push.push_vma_bar1,
+		chan->push.push_paddr,
+		chan->push.size,
+		0,
+		NV_VM_TARGET_SYSRAM_SNOOP
+	);
+
+	/* Clear channel control registers. */
+	for (i = 0; i < 0x200; i += 4) {
+		nvkm_gpuobj_wr32(gpu->fifo.user_mem, chan->id * 0x200 + i, 0);
+	}
+
+	user_mem = chan->id * 0x200 + gpu->fifo.user_mem->vram_paddr;
+	ib_length = order_base_2(IB_SIZE / 8);
+	ib_vma_addr = chan->push.push_vma_bar1 + IB_OFFSET;
 	/*RAMFC*/
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x08, user_mem);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x0c, user_mem >> 32);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x10, 0x0000face);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x30, 0xfffff902);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x48, ib_vma_addr);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x4c, (ib_vma_addr >> 32) | (ib_length << 16));
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x84, 0x20400000);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x94, 0x30000001);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0x9c, 0x00000100);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0xac, 0x0000001f);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0xe8, chan_ptr->id);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0xb8, 0xf8000000);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0xf8, 0x10003080);
-	nvkm_gpuobj_wr32(chan_ptr->inst, 0xfc, 0x10000010);
+	nvkm_gpuobj_wr32(chan->inst, 0x08, user_mem);
+	nvkm_gpuobj_wr32(chan->inst, 0x0c, user_mem >> 32);
+	nvkm_gpuobj_wr32(chan->inst, 0x10, 0x0000face);
+	nvkm_gpuobj_wr32(chan->inst, 0x30, 0xfffff902);
+	nvkm_gpuobj_wr32(chan->inst, 0x48, ib_vma_addr);
+	nvkm_gpuobj_wr32(chan->inst, 0x4c, (ib_vma_addr >> 32) | (ib_length << 16));
+	nvkm_gpuobj_wr32(chan->inst, 0x84, 0x20400000);
+	nvkm_gpuobj_wr32(chan->inst, 0x94, 0x30000001);
+	nvkm_gpuobj_wr32(chan->inst, 0x9c, 0x00000100);
+	nvkm_gpuobj_wr32(chan->inst, 0xac, 0x0000001f);
+	nvkm_gpuobj_wr32(chan->inst, 0xe8, chan->id);
+	nvkm_gpuobj_wr32(chan->inst, 0xb8, 0xf8000000);
+	nvkm_gpuobj_wr32(chan->inst, 0xf8, 0x10003080);
+	nvkm_gpuobj_wr32(chan->inst, 0xfc, 0x10000010);
 
 	return 0;
 	
@@ -192,54 +242,248 @@ int nvidia_fifo_channel_new(struct nvidia_gpu *gpu, struct fifo_chan **chan)
 int nvidia_fifo_runlist_init(struct nvidia_gpu *gpu)
 {
 	int i;
-	u64 pbdma_cnt;
-	pbdma_cnt = nvkm_rd32(gpu, 0x002004) & 0xff;
-	u64 runlist_cnt = 1;
+	u64 pbdma_nr;
+	pbdma_nr = nvkm_rd32(gpu, 0x002004) & 0xff;
+	u64 runlist_nr = 1;
 	u64 user_virt = 0;
 
+	printk("nvidia gpu:pbdma:%d\n", pbdma_nr);
 	/* Enable PBDMAs */
-	nvkm_wr32(gpu, 0x00204, (1 << pbdma_cnt) - 1);
+	nvkm_wr32(gpu, 0x00204, 0xffffffff);
 
 	/* PBDMA[n] */
-	for (i = 0; i < pbdma_cnt; i++) {
-		//nvkm_mask(gpu, 0x04013c + (i * 0x2000), 0x10000100, 0x00000000);
+	for (i = 0; i < pbdma_nr; i++) {
+		nvkm_mask(gpu, 0x04013c + (i * 0x2000), 0x10000100, 0x00000000);
 		nvkm_wr32(gpu, 0x040108 + (i * 0x2000), 0xffffffff);
-		nvkm_wr32(gpu, 0x04010c + (i * 0x2000), 0xffffffff);
+		nvkm_wr32(gpu, 0x04010c + (i * 0x2000), 0xfffffeff);
 	}
 
 	/* PBDMA[n].HCE */
-	for (i = 0; i < pbdma_cnt; i++) {
+	for (i = 0; i < pbdma_nr; i++) {
 		nvkm_wr32(gpu, 0x040148 + (i * 0x2000), 0xffffffff);
 		nvkm_wr32(gpu, 0x04014c + (i * 0x2000), 0xffffffff);
 	}
 
-	for (i = 0; i < runlist_cnt; i++) {
+	for (i = 0; i < runlist_nr; i++) {
 		gpu->fifo.runlist[i].mem[0] = nvkm_gpuobj_new(gpu, 0x8000);
 		gpu->fifo.runlist[i].mem[1] = nvkm_gpuobj_new(gpu, 0x8000);
 	}
 
-	gpu->fifo.user_mem = nvkm_gpuobj_new(gpu, 0x200 * 4);
+	gpu->fifo.user_mem = nvkm_gpuobj_new(gpu, 0x1000);
 
-	nvidia_mmu_map_page(gpu->bar[0].pgd, user_virt, gpu->fifo.user_mem->inst_mem_addr, 0, 0, 0x1000);
+	/* Map Chan->User to bar1.*/
+	gpu->fifo.user_mem->bar_addr = nvkm_vma_new(gpu, 1, 0x1000);
+	nvkm_map_area(gpu->bar[1].pgd,
+		gpu->fifo.user_mem->bar_addr,
+		gpu->fifo.user_mem->vram_paddr,
+		gpu->fifo.user_mem->size,
+		0,
+		NVKM_MEM_TARGET_INST
+	);
+	gpu->fifo.user_mem->mapped_ptr = ioremap(gpu->bar[1].bar_base + gpu->fifo.user_mem->bar_addr, gpu->fifo.user_mem->size);
+	nvkm_wr32(gpu, 0x002254, 0x10000000 | (gpu->fifo.user_mem->bar_addr >> 12));
 
-	nvkm_wr32(gpu, 0x002254, 0x1000000 | (user_virt >> 12));
 	nvkm_wr32(gpu, 0x002100, 0xffffffff);
-	nvkm_wr32(gpu, 0x002140, 0xffffffff);
+	nvkm_wr32(gpu, 0x002140, 0x7fffffff);
 }
 
-int nvidia_fifo_runlist_commit(struct nvidia_gpu *gpu, u64 runl)
+static int nvidia_fifo_runlist_commit(struct nvidia_gpu *gpu, u64 runl)
 {
 	int i = 0;
 	int cnt = 1;
-	int target = 3;
+	int target = 0;
 	struct nvkm_gpuobj *mem = gpu->fifo.runlist[runl].mem[gpu->fifo.runlist[runl].next];
-	gpu->fifo.runlist[runl].next ^= 1;
+	gpu->fifo.runlist[runl].next = !gpu->fifo.runlist[runl].next;
 
+	/* for each channel */
 	nvkm_gpuobj_wr32(mem, i * 8 + 0x0, 0);
 	nvkm_gpuobj_wr32(mem, i * 8 + 0x4, 0);
 
-	nvkm_wr32(gpu, 0x002270, (mem->inst_mem_addr >> 12) | (target << 28));
-	nvkm_wr32(gpu, 0x002274, (runl << 28) | cnt);
+	nvkm_wr32(gpu, 0x002270, (mem->vram_paddr >> 12) | (target << 28));
+	nvkm_wr32(gpu, 0x002274, (runl << 20) | cnt);
+
+	while (nvkm_rd32(gpu, 0x002284 + runl * 8) & 0x00100000);
+	return 0;
+}
+
+int nvidia_fifo_gpfifo_init(struct nvidia_gpu *gpu, struct nvkm_fifo_chan *chan)
+{
+	u64 addr = chan->inst->vram_paddr >> 12;
+	u32 coff = chan->id * 8;
+
+	nvkm_mask(gpu, 0x800004 + coff, 0x000f0000,  chan->runl << 16);
+	nvkm_wr32(gpu, 0x800000 + coff, 0x80000000 | addr);
+
+	/* Enable trigger. */
+	nvkm_mask(gpu, 0x800004 + coff, 0x00000400, 0x00000400);
+	nvidia_fifo_runlist_commit(gpu, chan->runl);
+	nvkm_mask(gpu, 0x800004 + coff, 0x00000400, 0x00000400);
+
+	return 0;
+}
+
+int nv_dma_wait(struct nvkm_fifo_chan *chan, int slots, u32 size);
+
+int RING_SPACE(struct nvkm_fifo_chan *chan, int size)
+{
+	int ret = nv_dma_wait(chan, 1, size);
+	if (ret)
+		return ret;
+
+	chan->ib_status_host.free -= size;
+	return 0;
+}
+
+void OUT_RING(struct nvkm_fifo_chan *chan, u32 data)
+{
+	u32 *ptr = chan->push.push_vaddr;
+	ptr[chan->ib_status_host.current++] = data;
+}
+
+u64 READ_GET(struct nvkm_fifo_chan *chan, u64 prev_get, u64 timeout)
+{
+	u64 val;
+	val = chan->user[chan->user_get_low] | ((u64)chan->user[chan->user_get_high] << 32);
+
+	if (val != prev_get) {
+	}
+
+	//if (timeout == 0) {
+	//	return -1;
+	//}
+
+	return (val - chan->push.push_vma_bar1) >> 2;
+}
+
+void FIRE_RING(struct nvkm_fifo_chan *chan)
+{
+	u32 *push_buffer_ptr = chan->push.push_vaddr;
+	u64 ib_entry, delta, length, offset;
+
+	if (chan->ib_status_host.current == chan->ib_status_host.ib_base)
+		return;
+
+	ib_entry = chan->ib_status_host.ib_put * 2 + chan->ib_status_host.ib_base;
+	delta = chan->ib_status_host.put << 2;
+	length = (chan->ib_status_host.current - chan->ib_status_host.put) << 2;
+	offset = chan->push.push_vma_bar1 + delta;
+
+	push_buffer_ptr[ib_entry++] = offset;
+	push_buffer_ptr[ib_entry++] = (offset >> 32) | (length << 8);
+
+	chan->ib_status_host.ib_put = (chan->ib_status_host.ib_put + 1) & chan->ib_status_host.ib_max;
+
+	offset = push_buffer_ptr[0];
+
+	chan->user[0x8c / 4] = chan->ib_status_host.ib_put;
+
+	chan->ib_status_host.ib_free--;
+	chan->ib_status_host.put = chan->ib_status_host.current;
+}
+
+int nv_dma_wait(struct nvkm_fifo_chan *chan, int slots, u32 size)
+{
+	u64 prev_get;
+	u64 cnt;
+	s64 get = 0;
+
+	while (chan->ib_status_host.ib_free < size + 1) {
+		get = chan->user[0x88 / 4];
+		if (get != prev_get) {
+			prev_get = get;
+			cnt = 0;
+		}
+
+		if ((++cnt & 0xff) == 0) {
+			/* timeout */
+		}
+
+		chan->ib_status_host.ib_free = get - chan->ib_status_host.ib_put;
+		if (chan->ib_status_host.ib_free <= 0) {
+			chan->ib_status_host.ib_free += chan->ib_status_host.ib_max;
+		}
+	}
+
+	prev_get = 0;
+	cnt = 0;
+	get = 0;
+
+	while (chan->ib_status_host.free < size) {
+		get = READ_GET(chan, prev_get, 0);
+		/* timeout */
+
+		if (get <= chan->ib_status_host.current) {
+			chan->ib_status_host.free = chan->ib_status_host.max - chan->ib_status_host.current;
+
+			if (chan->ib_status_host.free >= size)
+				break;
+
+			FIRE_RING(chan);
+
+			do {
+				get = READ_GET(chan, prev_get, 0);
+			} while (get == 0);
+			chan->ib_status_host.current = 0;
+			chan->ib_status_host.put = 0;
+		}
+
+		chan->ib_status_host.free = get - chan->ib_status_host.current - 1;
+	}
+
+	return 0;
+}
+
+int nvidia_memory_copy(struct nvkm_fifo_chan *chan, u64 src, u64 dst, u64 len)
+{
+	RING_SPACE(chan, 2);
+	BEGIN_NVC0(chan, 4, 0x0000, 1);
+	OUT_RING(chan, 0x0000c0b5);
+
+	RING_SPACE(chan, 10);
+	BEGIN_NVC0(chan, 4, 0x0400, 8);
+	OUT_RING(chan, src >> 32);
+	OUT_RING(chan, src);
+	OUT_RING(chan, dst >> 32);
+	OUT_RING(chan, dst);
+
+	OUT_RING(chan, 0x1000);
+	OUT_RING(chan, 0x1000);
+	OUT_RING(chan, 0x1000);
+	OUT_RING(chan, len / 0x1000);
+	BEGIN_IMC0(chan, 4, 0x0300, 0x0386);
+	FIRE_RING(chan);
+	return 0;
+}
+
+int nvidia_ib_init(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_p)
+{
+	struct nvkm_fifo_chan *chan;
+	int i;
+
+	nvidia_fifo_channel_new(gpu, chan_p);
+	chan = *chan_p;
+	nvidia_fifo_gpfifo_init(gpu, chan);
+
+	chan->user_put = 0x40;
+	chan->user_get_low = 0x40;
+	chan->user_get_high = 0x60;
+	chan->ib_status_host.ib_base = 0x10000 / 4;
+	chan->ib_status_host.ib_max = (0x2000 / 8) - 1;
+	chan->ib_status_host.ib_put = 0;
+	chan->ib_status_host.ib_free = chan->ib_status_host.ib_max - chan->ib_status_host.ib_put;
+	chan->ib_status_host.max = chan->ib_status_host.ib_base;
+
+	chan->ib_status_host.put = 0;
+	chan->ib_status_host.current = chan->ib_status_host.put;
+	chan->ib_status_host.free = chan->ib_status_host.max - chan->ib_status_host.current;
+
+	RING_SPACE(chan, 128 / 4);
+	for (i = 0; i < 128 / 4; i++) {
+		OUT_RING(chan, 0);
+	}
+
+	nvidia_memory_copy(chan, 0, 0x400000, 0x400000);
+	return 0;
 }
 
 int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
@@ -249,6 +493,7 @@ int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	u32 *mmio_virt;
 	u32 boot0, strap;
 	struct nvidia_gpu *gpu = kmalloc(sizeof(*gpu), GFP_KERNEL);
+	memset(gpu, 0, sizeof(*gpu));
 	gpu->pdev = pdev;
 	pci_read_config_word(pdev, PCI_COMMAND, &pci_command_reg);
 	pci_command_reg |= (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
@@ -260,6 +505,13 @@ int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	nvidia_gpu_chip_probe(gpu);
 	nvidia_gpu_memory_init(gpu);
 	nvidia_gpu_bar_init(gpu);
+	nvidia_fifo_runlist_init(gpu);
+
+	nvkm_wr32(gpu, 0x200, 0xffffffff);
+
+	struct nvkm_fifo_chan *chan;
+	nvidia_ib_init(gpu, &chan);
+	return 0;
 }
 
 void nvidia_gpu_remove(struct pci_dev *pdev)

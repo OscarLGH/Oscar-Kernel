@@ -3,6 +3,8 @@
 #include <mm.h>
 #include <init.h>
 #include <bitmap.h>
+#include <string.h>
+#include <math.h>
 
 struct nvidia_gpu;
 
@@ -15,9 +17,10 @@ enum nvkm_memory_target {
 
 struct nvkm_gpuobj {
 	struct nvidia_gpu *gpu;
-	u64 inst_mem_addr;
-	u64 size;
+	u64 vram_paddr;
+	u64 bar_addr;
 	u64 *mapped_ptr;
+	u64 size;
 };
 
 struct nvkm_memory {
@@ -90,17 +93,47 @@ struct nvkm_mmu {
 	int (*mmu_walk) (struct nvkm_gpuobj *pgd, u64 virt, u64 *pt);
 };
 
-struct fifo_chan {
+struct nvkm_fifo_chan {
+	struct nvidia_gpu *gpu;
+	//const struct nvkm_fifo_chan_func *func;
+	//struct nvkm_fifo *fifo;
+	u64 engines;
+	//struct nvkm_object object;
 	u64 id;
-	struct nvkm_gpuobj *inst;
-	struct nvkm_gpuobj *pgd;
-	struct nvkm_gpuobj *push;
-	void *user;
-	u64 addr;
-	u64 size;
+	u64 runl;
 
-	struct list_head list;
+	struct list_head head;
+	struct nvkm_gpuobj *inst;
+	struct push_buffer {
+		u64 push_paddr;
+		u32 *push_vaddr;
+		u64 push_vma_bar1;
+		u64 size;
+	} push;
+	//struct nvkm_vmm *vmm;
+	struct nvkm_gpuobj *pgd;
+	volatile u32 *user;
+	u64 addr;
+	u32 size;
+
+	struct {
+		u32 max;
+		u32 free;
+		u32 current;
+		u32 put;
+		u32 ib_base;
+		u32 ib_max;
+		u32 ib_free;
+		u32 ib_put;
+	} ib_status_host;
+
+	u32 user_get_high;
+	u32 user_get_low;
+	u32 user_put;
+
+	//struct nvkm_fifo_engn engn[NVKM_SUBDEV_NR];
 };
+
 
 struct gp_fifo {
 	struct nvidia_gpu *gpu;
@@ -144,6 +177,7 @@ struct bar_vm {
 	u64 bar_no;
 	u64 bar_base;
 	u64 bar_size;
+	struct bitmap *alloc_bitmap;
 	struct nvkm_gpuobj *inst_mem;
 	struct nvkm_gpuobj *pgd;
 };
@@ -157,7 +191,7 @@ struct nvidia_gpu {
 	struct nvkm_memory memory;
 	struct nvkm_mmu mmu;
 	struct fb fb;
-	struct bar_vm bar[2];
+	struct bar_vm bar[6];
 
 	struct gp_fifo fifo;
 };
@@ -171,6 +205,14 @@ static inline void nvkm_wr32(struct nvidia_gpu *gpu, u64 offset, u32 value)
 {
 	gpu->mmio_virt[offset / 4] = value;
 }
+
+#define nvkm_mask(d,a,m,v) ({                                                  \
+	struct nvidia_gpu *_device = (d);                                     \
+	u32 _addr = (a), _temp = nvkm_rd32(_device, _addr);                    \
+	nvkm_wr32(_device, _addr, (_temp & ~(m)) | (v));                       \
+	_temp;                                                                 \
+})
+
 
 static inline u32 nvkm_memory_rd32(struct nvidia_gpu *gpu, u64 offset)
 {
@@ -199,15 +241,44 @@ static inline void nvkm_memory_wr32(struct nvidia_gpu *gpu, u64 offset, u32 data
 
 static inline u64 nvkm_memory_new(struct nvidia_gpu *gpu, u64 len)
 {
-	u32 pages_allocate = len > 0x1000 ? len / 0x1000 : 1;
+	u32 pages_allocate = (len % 0x1000) ? (len / 0x1000 + 1) : (len / 0x1000);
 	int ret = bitmap_allocate_bits(gpu->memory.alloc_bitmap, pages_allocate);
 	if (ret == -1) {
 		printk("instmem allocate failed.\n");
 		return -1;
 	}
-
+	//printk("vram = %x\n", ret * 0x1000);
 	return ret * 0x1000;
 }
+
+static inline u64 nvkm_vma_new(struct nvidia_gpu *gpu, u64 bar, u64 len)
+{
+	u32 pages_allocate = (len % 0x1000) ? (len / 0x1000  + 1) : (len / 0x1000);
+	int ret = bitmap_allocate_bits(gpu->bar[bar].alloc_bitmap, pages_allocate);
+	if (ret == -1) {
+		printk("vma allocate failed.\n");
+		return -1;
+	}
+	//printk("vma = %x\n", ret * 0x1000);
+	return ret * 0x1000;
+}
+
+#define NV_VM_TARGET_VRAM 0x0
+#define NV_VM_TARGET_SYSRAM_SNOOP 0x5
+#define NV_VM_TARGET_SYSRAM_NOSNOOP 0x7
+
+int nvidia_mmu_map_page(struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 priv, u64 type, u64 page_size);
+
+static inline int nvkm_map_area(struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 len, u64 attr, u64 type)
+{
+	int i;
+	for (i = 0; i < (len / 0x1000); i++) {
+		nvidia_mmu_map_page(pgd, virt + i * 0x1000, phys + i * 0x1000, attr, type, 0x1000);
+	}
+
+	return 0;
+}
+
 
 static inline void instmem_free(struct nvidia_gpu *gpu, u64 offset)
 {
@@ -217,41 +288,60 @@ static inline void instmem_free(struct nvidia_gpu *gpu, u64 offset)
 static inline struct nvkm_gpuobj *nvkm_gpuobj_new(struct nvidia_gpu *gpu, u64 size)
 {
 	u64 addr = nvkm_memory_new(gpu, size);
+	int i;
 	struct nvkm_gpuobj *obj;
 	if (addr == -1) {
 		return NULL;
 	}
 	obj = kmalloc(sizeof(*obj), GFP_KERNEL);
 	obj->gpu = gpu;
-	obj->inst_mem_addr = addr;
+	obj->vram_paddr = addr;
 	obj->size = size;
 	obj->mapped_ptr = NULL;
+
+	//for (i = 0; i < size; i += 4) {
+	//	nvkm_memory_wr32(gpu, addr + i, 0x0);
+	//}
 
 	return obj;
 }
 
 static inline void nvkm_gpuobj_free(struct nvkm_gpuobj *obj)
 {
-	instmem_free(obj->gpu, obj->inst_mem_addr);
+	instmem_free(obj->gpu, obj->vram_paddr);
 	kfree(obj);
 }
 
 static inline int nvkm_gpuobj_rd32(struct nvkm_gpuobj *obj, u64 offset, u32 *value)
 {
-	if (offset > obj->inst_mem_addr + obj->size) {
+	if (offset > obj->vram_paddr + obj->size) {
 		return -1;
 	}
-	*value = nvkm_memory_rd32(obj->gpu, obj->inst_mem_addr + offset);
+	*value = nvkm_memory_rd32(obj->gpu, obj->vram_paddr + offset);
 	return 0;
 }
 
 static inline int nvkm_gpuobj_wr32(struct nvkm_gpuobj *obj, u64 offset, u32 value)
 {
-	if (offset > obj->inst_mem_addr + obj->size) {
+	if (offset > obj->vram_paddr + obj->size) {
 		return -1;
 	}
-	nvkm_memory_wr32(obj->gpu, obj->inst_mem_addr + offset, value);
+	nvkm_memory_wr32(obj->gpu, obj->vram_paddr + offset, value);
 	return 0;
+}
+
+void OUT_RING(struct nvkm_fifo_chan *chan, u32 data);
+
+static inline void
+BEGIN_NVC0(struct nvkm_fifo_chan *chan, u32 sub_chan, u32 mthd, u16 size)
+{
+	OUT_RING(chan, 0x20000000 | (size << 16) | (sub_chan << 13) | (mthd >> 2));
+}
+
+static inline void
+BEGIN_IMC0(struct nvkm_fifo_chan *chan, u32 sub_chan, u32 mthd, u16 data)
+{
+	OUT_RING(chan, 0x80000000 | (data << 16) | (sub_chan << 13) | (mthd >> 2));
 }
 
 
