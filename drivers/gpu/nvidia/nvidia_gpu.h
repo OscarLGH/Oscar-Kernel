@@ -5,6 +5,7 @@
 #include <bitmap.h>
 #include <string.h>
 #include <math.h>
+#include <fb.h>
 
 struct nvidia_gpu;
 
@@ -194,6 +195,7 @@ struct nvidia_gpu {
 	struct bar_vm bar[6];
 
 	struct gp_fifo fifo;
+	struct nvkm_fifo_chan *memcpy_chan;
 };
 
 static inline u32 nvkm_rd32(struct nvidia_gpu *gpu, u64 offset)
@@ -241,7 +243,7 @@ static inline void nvkm_memory_wr32(struct nvidia_gpu *gpu, u64 offset, u32 data
 
 static inline u64 nvkm_memory_new(struct nvidia_gpu *gpu, u64 len)
 {
-	u32 pages_allocate = (len % 0x1000) ? (len / 0x1000 + 1) : (len / 0x1000);
+	u32 pages_allocate = round_up(len, 0x1000) / 0x1000;
 	int ret = bitmap_allocate_bits(gpu->memory.alloc_bitmap, pages_allocate);
 	if (ret == -1) {
 		printk("instmem allocate failed.\n");
@@ -253,7 +255,7 @@ static inline u64 nvkm_memory_new(struct nvidia_gpu *gpu, u64 len)
 
 static inline u64 nvkm_vma_new(struct nvidia_gpu *gpu, u64 bar, u64 len)
 {
-	u32 pages_allocate = (len % 0x1000) ? (len / 0x1000  + 1) : (len / 0x1000);
+	u32 pages_allocate = round_up(len, 0x1000) / 0x1000;
 	int ret = bitmap_allocate_bits(gpu->bar[bar].alloc_bitmap, pages_allocate);
 	if (ret == -1) {
 		printk("vma allocate failed.\n");
@@ -272,7 +274,7 @@ int nvidia_mmu_map_page(struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 priv, u
 static inline int nvkm_map_area(struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 len, u64 attr, u64 type)
 {
 	int i;
-	for (i = 0; i < (len / 0x1000); i++) {
+	for (i = 0; i < round_up(len, 0x1000) / 0x1000; i++) {
 		nvidia_mmu_map_page(pgd, virt + i * 0x1000, phys + i * 0x1000, attr, type, 0x1000);
 	}
 
@@ -285,7 +287,7 @@ static inline void instmem_free(struct nvidia_gpu *gpu, u64 offset)
 	//TODO
 }
 
-static inline struct nvkm_gpuobj *nvkm_gpuobj_new(struct nvidia_gpu *gpu, u64 size)
+static inline struct nvkm_gpuobj *nvkm_gpuobj_new(struct nvidia_gpu *gpu, u64 size, bool zero)
 {
 	u64 addr = nvkm_memory_new(gpu, size);
 	int i;
@@ -299,9 +301,10 @@ static inline struct nvkm_gpuobj *nvkm_gpuobj_new(struct nvidia_gpu *gpu, u64 si
 	obj->size = size;
 	obj->mapped_ptr = NULL;
 
-	//for (i = 0; i < size; i += 4) {
-	//	nvkm_memory_wr32(gpu, addr + i, 0x0);
-	//}
+	if (zero) {
+		for (i = 0; i < size; i += 4)
+			nvkm_memory_wr32(gpu, addr + i, 0x0);
+	}
 
 	return obj;
 }

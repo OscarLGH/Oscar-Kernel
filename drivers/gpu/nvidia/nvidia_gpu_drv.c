@@ -69,7 +69,7 @@ int nvidia_mmu_map_page(struct nvkm_gpuobj *pgd, u64 virt, u64 phys, u64 priv, u
 	ret = nvkm_gpuobj_rd32(pgd, pd_index * 8 + 0, &pde0);
 	ret = nvkm_gpuobj_rd32(pgd, pd_index * 8 + 4, &pde1);
 	if (pde1 == 0) {
-		pt = nvkm_gpuobj_new(gpu, 0x8000);
+		pt = nvkm_gpuobj_new(gpu, 0x8000, 1);
 		nvkm_gpuobj_wr32(pgd, pd_index * 8 + 4, (pt->vram_paddr >> 8) | NV_SPT_PRESENT);
 		nvkm_gpuobj_rd32(pgd, pd_index * 8 + 4, &pde1);
 	}
@@ -109,7 +109,7 @@ int nvidia_gpu_memory_init(struct nvidia_gpu *gpu)
 	gpu->memory.alloc_bitmap = bitmap_alloc(ram_size / 0x1000);
 
 	/*TODO: 0x800000 0x1000000 cause crash. find out why */
-	gpu->fb.fb = nvkm_gpuobj_new(gpu, 0xa00000);
+	gpu->fb.fb = nvkm_gpuobj_new(gpu, 0x2000000, 0);
 
 	//nvkm_gpuobj_new(gpu, 0x10000000);
 	/*
@@ -133,8 +133,8 @@ int nvidia_gpu_bar_init(struct nvidia_gpu *gpu)
 	gpu->bar[3].alloc_bitmap = bitmap_alloc(gpu->bar[3].bar_size / 0x1000);
 	printk("bar1 base:0x%x, size = 0x%x\n", gpu->bar[1].bar_base, gpu->bar[1].bar_size);
 	printk("bar3 base:0x%x, size = 0x%x\n", gpu->bar[3].bar_base, gpu->bar[3].bar_size);
-	gpu->bar[1].inst_mem = nvkm_gpuobj_new(gpu, 0x1000);
-	gpu->bar[1].pgd = nvkm_gpuobj_new(gpu, 0x2000 * 8);
+	gpu->bar[1].inst_mem = nvkm_gpuobj_new(gpu, 0x1000, 1);
+	gpu->bar[1].pgd = nvkm_gpuobj_new(gpu, 0x2000 * 8, 1);
 	for (i = 0; i < 0x2000 * 8; i += 4)
 		nvkm_gpuobj_wr32(gpu->bar[1].pgd, i, 0);
 
@@ -181,11 +181,11 @@ int nvidia_fifo_channel_new(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan
 	chan->gpu = gpu;
 
 	/* instance memory */
-	chan->inst = nvkm_gpuobj_new(gpu, 0x1000);
+	chan->inst = nvkm_gpuobj_new(gpu, 0x1000, 1);
 	chan->runl = 0;
 	chan->id = nv_chan_nr++;
 
-	chan->pgd = nvkm_gpuobj_new(gpu, 0x10000);
+	//chan->pgd = nvkm_gpuobj_new(gpu, 0x10000);
 	nvkm_gpuobj_wr32(chan->inst, 0x0200, gpu->bar[1].pgd->vram_paddr);
 	nvkm_gpuobj_wr32(chan->inst, 0x0204, gpu->bar[1].pgd->vram_paddr >> 32);
 	nvkm_gpuobj_wr32(chan->inst, 0x0208, 0xffffffff);
@@ -265,14 +265,14 @@ int nvidia_fifo_runlist_init(struct nvidia_gpu *gpu)
 	}
 
 	for (i = 0; i < runlist_nr; i++) {
-		gpu->fifo.runlist[i].mem[0] = nvkm_gpuobj_new(gpu, 0x8000);
-		gpu->fifo.runlist[i].mem[1] = nvkm_gpuobj_new(gpu, 0x8000);
+		gpu->fifo.runlist[i].mem[0] = nvkm_gpuobj_new(gpu, 0x8000, 0);
+		gpu->fifo.runlist[i].mem[1] = nvkm_gpuobj_new(gpu, 0x8000, 0);
 	}
 
-	gpu->fifo.user_mem = nvkm_gpuobj_new(gpu, 0x1000);
+	gpu->fifo.user_mem = nvkm_gpuobj_new(gpu, 0x200 * 16, 1);
 
 	/* Map Chan->User to bar1.*/
-	gpu->fifo.user_mem->bar_addr = nvkm_vma_new(gpu, 1, 0x1000);
+	gpu->fifo.user_mem->bar_addr = nvkm_vma_new(gpu, 1, 0x200 * 16);
 	nvkm_map_area(gpu->bar[1].pgd,
 		gpu->fifo.user_mem->bar_addr,
 		gpu->fifo.user_mem->vram_paddr,
@@ -481,9 +481,25 @@ int nvidia_ib_init(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_p)
 	for (i = 0; i < 128 / 4; i++) {
 		OUT_RING(chan, 0);
 	}
-
-	nvidia_memory_copy(chan, 0, 0x400000, 0x400000);
 	return 0;
+}
+
+void nvidia_fb_copyarea(struct fb_info *info, const struct fb_copyarea *region)
+{
+	struct nvidia_gpu *gpu = (struct nvidia_gpu *)info->dev;
+	struct nvkm_fifo_chan *chan = gpu->memcpy_chan;
+	u64 src = (region->sy * info->var.xres_virtual + region->sx) * (info->var.bits_per_pixel / 8);
+	u64 dst = (region->dy * info->var.xres_virtual + region->dx) * (info->var.bits_per_pixel / 8);
+	u64 len = round_up(region->height * info->var.xres_virtual * (info->var.bits_per_pixel / 8), 0x1000);
+	nvidia_memory_copy(chan, src, dst, len);
+}
+
+void register_nvidia_fb(struct nvidia_gpu *gpu)
+{
+	extern struct fb_info boot_fb;
+	extern struct fb_ops bootfb_ops;
+	boot_fb.dev = (struct device *)gpu;
+	bootfb_ops.fb_copyarea = nvidia_fb_copyarea;
 }
 
 int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
@@ -509,8 +525,8 @@ int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 
 	nvkm_wr32(gpu, 0x200, 0xffffffff);
 
-	struct nvkm_fifo_chan *chan;
-	nvidia_ib_init(gpu, &chan);
+	nvidia_ib_init(gpu, &gpu->memcpy_chan);
+	register_nvidia_fb(gpu);
 	return 0;
 }
 
