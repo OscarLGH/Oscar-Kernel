@@ -340,17 +340,22 @@ void OUT_RING(struct nvkm_fifo_chan *chan, u32 data)
 	ptr[chan->ib_status_host.current++] = data;
 }
 
-u64 READ_GET(struct nvkm_fifo_chan *chan, u64 prev_get, u64 timeout)
+s64 READ_GET(struct nvkm_fifo_chan *chan, u64 *prev_get, u64 timeout)
 {
 	u64 val;
 	val = chan->user[chan->user_get_low] | ((u64)chan->user[chan->user_get_high] << 32);
 
-	if (val != prev_get) {
+	if (val != *prev_get) {
+		*prev_get = val;
 	}
 
 	//if (timeout == 0) {
 	//	return -1;
 	//}
+
+	if (val < chan->push.push_vma_bar1 || 
+		val > chan->push.push_vma_bar1 + (chan->ib_status_host.max << 2))
+		return -1;
 
 	return (val - chan->push.push_vma_bar1) >> 2;
 }
@@ -360,7 +365,7 @@ void FIRE_RING(struct nvkm_fifo_chan *chan)
 	u32 *push_buffer_ptr = chan->push.push_vaddr;
 	u64 ib_entry, delta, length, offset;
 
-	if (chan->ib_status_host.current == chan->ib_status_host.ib_base)
+	if (chan->ib_status_host.current == chan->ib_status_host.put)
 		return;
 
 	ib_entry = chan->ib_status_host.ib_put * 2 + chan->ib_status_host.ib_base;
@@ -373,6 +378,8 @@ void FIRE_RING(struct nvkm_fifo_chan *chan)
 
 	chan->ib_status_host.ib_put = (chan->ib_status_host.ib_put + 1) & chan->ib_status_host.ib_max;
 
+	//mb()
+
 	offset = push_buffer_ptr[0];
 
 	chan->user[0x8c / 4] = chan->ib_status_host.ib_put;
@@ -381,10 +388,15 @@ void FIRE_RING(struct nvkm_fifo_chan *chan)
 	chan->ib_status_host.put = chan->ib_status_host.current;
 }
 
+void WIND_RING(struct nvkm_fifo_chan *chan)
+{
+	chan->ib_status_host.current = chan->ib_status_host.put;
+}
+
 int nv_dma_wait(struct nvkm_fifo_chan *chan, int slots, u32 size)
 {
-	u64 prev_get;
-	u64 cnt;
+	u64 prev_get = 0;
+	u64 cnt = 0;
 	s64 get = 0;
 
 	while (chan->ib_status_host.ib_free < size + 1) {
@@ -409,7 +421,7 @@ int nv_dma_wait(struct nvkm_fifo_chan *chan, int slots, u32 size)
 	get = 0;
 
 	while (chan->ib_status_host.free < size) {
-		get = READ_GET(chan, prev_get, 0);
+		get = READ_GET(chan, &prev_get, 0);
 		/* timeout */
 
 		if (get <= chan->ib_status_host.current) {
@@ -421,7 +433,7 @@ int nv_dma_wait(struct nvkm_fifo_chan *chan, int slots, u32 size)
 			FIRE_RING(chan);
 
 			do {
-				get = READ_GET(chan, prev_get, 0);
+				get = READ_GET(chan, &prev_get, 0);
 			} while (get == 0);
 			chan->ib_status_host.current = 0;
 			chan->ib_status_host.put = 0;
@@ -455,6 +467,42 @@ int nvidia_memory_copy(struct nvkm_fifo_chan *chan, u64 src, u64 dst, u64 len)
 	return 0;
 }
 
+int nvidia_fence_emit32(struct nvkm_fifo_chan *chan)
+{
+	RING_SPACE(chan, 6);
+	BEGIN_NVC0(chan, 0, NV84_SUBCHAN_SEMAPHORE_ADDRESS_HIGH, 5);
+	OUT_RING(chan, chan->fence->bar_addr << 32);
+	OUT_RING(chan, chan->fence->bar_addr);
+	OUT_RING(chan, chan->fence_sequence);
+	OUT_RING(chan, NV84_SUBCHAN_SEMAPHORE_TRIGGER_WRITE_LONG);
+	OUT_RING(chan, 0x00000000);
+	FIRE_RING(chan);
+	return 0;
+}
+
+int nvidia_fence_sync32(struct nvkm_fifo_chan *chan)
+{
+	RING_SPACE(chan, 6);
+	BEGIN_NVC0(chan, 0, NV84_SUBCHAN_SEMAPHORE_ADDRESS_HIGH, 5);
+	OUT_RING(chan, chan->fence->bar_addr << 32);
+	OUT_RING(chan, chan->fence->bar_addr);
+	OUT_RING(chan, chan->fence_sequence);
+	OUT_RING(chan, NV84_SUBCHAN_SEMAPHORE_TRIGGER_ACQUIRE_GEQUAL |
+			NVC0_SUBCHAN_SEMAPHORE_TRIGGER_YIELD);
+	OUT_RING(chan, 0x00000000);
+	FIRE_RING(chan);
+	return 0;
+}
+
+int nvidia_fence_wait(struct nvkm_fifo_chan *chan)
+{
+	u32 val;
+	do {
+		nvkm_gpuobj_rd32(chan->fence, 0, &val);
+	} while (val != chan->fence_sequence);
+	return 0;
+}
+
 int nvidia_ib_init(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_p)
 {
 	struct nvkm_fifo_chan *chan;
@@ -481,6 +529,11 @@ int nvidia_ib_init(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_p)
 	for (i = 0; i < 128 / 4; i++) {
 		OUT_RING(chan, 0);
 	}
+
+	chan->fence_sequence = 0x12345678;
+	chan->fence = nvkm_gpuobj_new(gpu, 0x1000, 1);
+	chan->fence->bar_addr = nvkm_vma_new(gpu, 1, chan->fence->size);
+	nvkm_map_area(gpu->bar[1].pgd, chan->fence->bar_addr, chan->fence->vram_paddr, chan->fence->size, 0, 0);
 	return 0;
 }
 
@@ -488,18 +541,28 @@ void nvidia_fb_copyarea(struct fb_info *info, const struct fb_copyarea *region)
 {
 	struct nvidia_gpu *gpu = (struct nvidia_gpu *)info->dev;
 	struct nvkm_fifo_chan *chan = gpu->memcpy_chan;
+	u64 base = gpu->fb.fb->bar_addr;
 	u64 src = (region->sy * info->var.xres_virtual + region->sx) * (info->var.bits_per_pixel / 8);
 	u64 dst = (region->dy * info->var.xres_virtual + region->dx) * (info->var.bits_per_pixel / 8);
-	u64 len = round_up(region->height * info->var.xres_virtual * (info->var.bits_per_pixel / 8), 0x1000);
-	nvidia_memory_copy(chan, src, dst, len);
+	u64 len = region->height * info->var.xres_virtual * (info->var.bits_per_pixel / 8);
+	nvidia_memory_copy(chan, base + src, base + dst, len);
+	nvidia_fence_emit32(chan);
+	nvidia_fence_wait(chan);
 }
 
 void register_nvidia_fb(struct nvidia_gpu *gpu)
 {
+	int i = 0;
 	extern struct fb_info boot_fb;
 	extern struct fb_ops bootfb_ops;
 	boot_fb.dev = (struct device *)gpu;
 	bootfb_ops.fb_copyarea = nvidia_fb_copyarea;
+
+	while (1) {
+		for (i = 0x400000; i < 0x400000 + 0x1000; i += 4)
+			nvkm_gpuobj_wr32(gpu->fb.fb, i, 0xffff00ff);
+		nvidia_memory_copy(gpu->memcpy_chan, 0, 0x400000, 0x400000);
+	}
 }
 
 int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)

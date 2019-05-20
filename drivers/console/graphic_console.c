@@ -22,7 +22,7 @@ int fbcon_scroll(struct console *con, int direction)
 		copyarea_active_fb(&cp_area);
 
 		fi_area.dx = 0;
-		fi_area.dy = rounddown(con->height - con->font_height, 16);
+		fi_area.dy = rounddown(con->height - con->font_height, 16) - 1;
 		fi_area.width = con->width;
 		fi_area.height = con->font_height;
 		fi_area.color = 0;

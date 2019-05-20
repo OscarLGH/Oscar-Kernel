@@ -1315,6 +1315,10 @@ void vm_init_test()
 	u8 buf[4];
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
 
+	while (1) {
+		printk("===========\n");
+	}
+
 	struct vmx_vcpu *vcpu = vmx_preinit();
 	vmx_init(vcpu);
 	vmx_set_ctrl_state(vcpu);
