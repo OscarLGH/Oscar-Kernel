@@ -165,7 +165,7 @@ int nvidia_gpu_bar_init(struct nvidia_gpu *gpu)
 
 #define PUSH_BUFFER_SIZE 0x12000
 #define IB_OFFSET 0x10000
-#define IB_SIZE PUSH_BUFFER_SIZE-IB_OFFSET
+#define IB_SIZE (PUSH_BUFFER_SIZE - IB_OFFSET)
 
 int nv_chan_nr = 0;
 int nvidia_fifo_channel_new(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_ptr)
@@ -343,7 +343,7 @@ void OUT_RING(struct nvkm_fifo_chan *chan, u32 data)
 s64 READ_GET(struct nvkm_fifo_chan *chan, u64 *prev_get, u64 timeout)
 {
 	u64 val;
-	val = chan->user[chan->user_get_low] | ((u64)chan->user[chan->user_get_high] << 32);
+	val = chan->user[chan->user_get_low / 4] | ((u64)chan->user[chan->user_get_high / 4] << 32);
 
 	if (val != *prev_get) {
 		*prev_get = val;
@@ -513,10 +513,10 @@ int nvidia_ib_init(struct nvidia_gpu *gpu, struct nvkm_fifo_chan **chan_p)
 	nvidia_fifo_gpfifo_init(gpu, chan);
 
 	chan->user_put = 0x40;
-	chan->user_get_low = 0x40;
+	chan->user_get_low = 0x44;
 	chan->user_get_high = 0x60;
-	chan->ib_status_host.ib_base = 0x10000 / 4;
-	chan->ib_status_host.ib_max = (0x2000 / 8) - 1;
+	chan->ib_status_host.ib_base = IB_OFFSET / 4;
+	chan->ib_status_host.ib_max = (IB_SIZE / 8) - 1;
 	chan->ib_status_host.ib_put = 0;
 	chan->ib_status_host.ib_free = chan->ib_status_host.ib_max - chan->ib_status_host.ib_put;
 	chan->ib_status_host.max = chan->ib_status_host.ib_base;
@@ -557,12 +557,6 @@ void register_nvidia_fb(struct nvidia_gpu *gpu)
 	extern struct fb_ops bootfb_ops;
 	boot_fb.dev = (struct device *)gpu;
 	bootfb_ops.fb_copyarea = nvidia_fb_copyarea;
-
-	while (1) {
-		for (i = 0x400000; i < 0x400000 + 0x1000; i += 4)
-			nvkm_gpuobj_wr32(gpu->fb.fb, i, 0xffff00ff);
-		nvidia_memory_copy(gpu->memcpy_chan, 0, 0x400000, 0x400000);
-	}
 }
 
 int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)

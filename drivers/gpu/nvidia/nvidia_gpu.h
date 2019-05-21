@@ -124,7 +124,7 @@ struct nvkm_fifo_chan {
 		u32 put;
 		u32 ib_base;
 		u32 ib_max;
-		u32 ib_free;
+		s32 ib_free;
 		u32 ib_put;
 	} ib_status_host;
 
