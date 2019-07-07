@@ -1197,6 +1197,26 @@ static inline int pci_msi_set_enable(struct pci_dev *dev, int enable)
 	return 0;
 }
 
+static inline int pci_msi_multiple_enable(struct pci_dev *dev, int nvec)
+{
+	u16 control;
+	u8 order = 0;
+	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
+	if (msi_cap == 0)
+		return -ENODEV;
+
+	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &control);
+	while (nvec) {
+		order++;
+		nvec >>= 1;
+	}
+	order--;
+	control |= (order << 4);
+	pci_write_config_word(dev, msi_cap + PCI_MSI_FLAGS, control);
+
+	return 0;
+}
+
 static inline int pci_msix_clear_and_set_ctrl(struct pci_dev *dev, u16 clear, u16 set)
 {
 	u16 ctrl;
@@ -1219,6 +1239,9 @@ u64 pci_get_bar_base(struct pci_dev *pdev, int bar);
 u64 pci_get_bar_size(struct pci_dev *pdev, int bar);
 
 u64 pci_get_oprombar_size(struct pci_dev *pdev);
+int pci_enable_msi(struct pci_dev *dev);
+int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec);
+
 
 
 

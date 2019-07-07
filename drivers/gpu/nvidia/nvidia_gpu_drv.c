@@ -48,6 +48,25 @@ u64 vram_probe_gp100(struct nvidia_gpu *gpu)
 	return size << 20;
 }
 
+void mc_init_gp100(struct nvidia_gpu *gpu)
+{
+	nvkm_wr32(gpu, 0x200, 0xffffffff);
+}
+
+void intr_init_gp100(struct nvidia_gpu *gpu, u32 mask)
+{
+	int i;
+	for (i = 0; i < 2; i++) {
+		nvkm_wr32(gpu, 0x180 + (i * 0x4), ~mask);
+		nvkm_wr32(gpu, 0x160 + (i * 0x4), mask);
+	}
+}
+
+void msi_rearm_gp100(struct nvidia_gpu *gpu)
+{
+	nvkm_wr32(gpu, 0x88000 + 0x704, 0x00000000);
+}
+
 
 int nvidia_tlb_flush(struct nvidia_gpu *gpu, u64 pt_addr)
 {
@@ -249,19 +268,19 @@ int nvidia_fifo_runlist_init(struct nvidia_gpu *gpu)
 
 	printk("nvidia gpu:pbdma:%d\n", pbdma_nr);
 	/* Enable PBDMAs */
-	nvkm_wr32(gpu, 0x00204, 0xffffffff);
+	nvkm_wr32(gpu, 0x00204, (1 << pbdma_nr) - 1);
 
 	/* PBDMA[n] */
 	for (i = 0; i < pbdma_nr; i++) {
 		nvkm_mask(gpu, 0x04013c + (i * 0x2000), 0x10000100, 0x00000000);
-		nvkm_wr32(gpu, 0x040108 + (i * 0x2000), 0xffffffff);
-		nvkm_wr32(gpu, 0x04010c + (i * 0x2000), 0xfffffeff);
+		nvkm_wr32(gpu, 0x040108 + (i * 0x2000), 0xffffffff); /* INTR */
+		nvkm_wr32(gpu, 0x04010c + (i * 0x2000), 0xfffffeff); /* INTREN */
 	}
 
 	/* PBDMA[n].HCE */
 	for (i = 0; i < pbdma_nr; i++) {
-		nvkm_wr32(gpu, 0x040148 + (i * 0x2000), 0xffffffff);
-		nvkm_wr32(gpu, 0x04014c + (i * 0x2000), 0xffffffff);
+		nvkm_wr32(gpu, 0x040148 + (i * 0x2000), 0xffffffff); /* INTR */
+		nvkm_wr32(gpu, 0x04014c + (i * 0x2000), 0xffffffff); /* INTREN */
 	}
 
 	for (i = 0; i < runlist_nr; i++) {
@@ -550,6 +569,20 @@ void nvidia_fb_copyarea(struct fb_info *info, const struct fb_copyarea *region)
 	nvidia_fence_wait(chan);
 }
 
+void nvidia_test(struct nvidia_gpu *gpu)
+{
+	struct nvkm_fifo_chan *chan = gpu->memcpy_chan;
+	u64 base = gpu->fb.fb->bar_addr;
+	u64 src = 0;
+	u64 dst = 0x400000000;
+	u64 len = 0x100000;
+	//nvidia_memory_copy(chan, base + src, base + dst, len);
+	//nvkm_wr32(gpu, 0x9420, 0x1000000);
+	//nvkm_wr32(gpu, 0x9140, 0x1);
+	//nvidia_memory_copy(chan, base + src, base + dst, len);
+}
+
+
 void register_nvidia_fb(struct nvidia_gpu *gpu)
 {
 	int i = 0;
@@ -559,31 +592,55 @@ void register_nvidia_fb(struct nvidia_gpu *gpu)
 	bootfb_ops.fb_copyarea = nvidia_fb_copyarea;
 }
 
+int nvidia_gpu_intr(int irq, void *data)
+{
+	struct nvidia_gpu *gpu = data;
+	u32 intr0, intr1;
+	intr0 = nvkm_rd32(gpu, 0x100);
+	intr1 = nvkm_rd32(gpu, 0x104);
+	printk("nvidia gpu intr: vector = %d\n", irq);
+	printk("nvidia gpu:intr0 status:%x\n", intr0);
+	printk("nvidia gpu:intr1 status:%x\n", intr1);
+	intr_init_gp100(gpu, 0x7fffffff);
+	msi_rearm_gp100(gpu);
+	return 0;
+}
+
 int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 {
 	u16 pci_command_reg;
 	u64 mmio_base;
 	u32 *mmio_virt;
 	u32 boot0, strap;
+	struct pci_irq_desc *irq_desc;
 	struct nvidia_gpu *gpu = kmalloc(sizeof(*gpu), GFP_KERNEL);
 	memset(gpu, 0, sizeof(*gpu));
 	gpu->pdev = pdev;
-	pci_read_config_word(pdev, PCI_COMMAND, &pci_command_reg);
-	pci_command_reg |= (PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER);
-	pci_write_config_word(pdev, PCI_COMMAND, pci_command_reg);
+	pci_enable_device(pdev);
+	pci_set_master(pdev);
 	gpu->mmio_virt = ioremap(pci_get_bar_base(pdev, 0), pci_get_bar_size(pdev, 0));
 
 	pdev->private_data = gpu;
 
+	pci_enable_msi(pdev);
+	
+	list_for_each_entry(irq_desc, &pdev->irq_list, list) {
+		request_irq_smp(get_cpu(), irq_desc->vector, nvidia_gpu_intr, 0, "nvidia-gpu", gpu);
+	}
+
+	mc_init_gp100(gpu);
+	intr_init_gp100(gpu, 0x7fffffff);
+	
 	nvidia_gpu_chip_probe(gpu);
 	nvidia_gpu_memory_init(gpu);
 	nvidia_gpu_bar_init(gpu);
 	nvidia_fifo_runlist_init(gpu);
 
-	nvkm_wr32(gpu, 0x200, 0xffffffff);
-
 	nvidia_ib_init(gpu, &gpu->memcpy_chan);
 	register_nvidia_fb(gpu);
+
+	nvidia_test(gpu);
+	
 	return 0;
 }
 

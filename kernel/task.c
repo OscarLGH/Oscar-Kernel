@@ -13,7 +13,7 @@ void idle_task()
 	while (1) {
 		cpu = get_cpu();
 		cpu->status = CPU_STATUS_IDLE;
-		printk("idle on cpu %d\n", get_cpu()->index);
+		//printk("idle on cpu %d\n", get_cpu()->index);
 		arch_cpu_halt();
 	}
 }

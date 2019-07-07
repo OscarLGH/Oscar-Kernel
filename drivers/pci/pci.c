@@ -75,7 +75,6 @@ static int msi_entry_setup(struct pci_dev *dev, u64 msg_addr, u64 msg_data, u64 
 	u8 msi_cap = pci_find_capability(dev, PCI_CAP_ID_MSI);
 	if (msi_cap == 0)
 		return -ENODEV;
-
 	pci_read_config_word(dev, msi_cap + PCI_MSI_FLAGS, &control);
 
 	pci_write_config_dword(dev, msi_cap + PCI_MSI_ADDRESS_LO, addr_l);
@@ -184,8 +183,11 @@ static int msi_capability_init(struct pci_dev *dev, int nvec,
 	}
 	arch_pci_build_msi_entry(&msi_data, start_irq, cpu);
 	msi_entry_setup(dev, msi_data.addr, msi_data.data, 0);
+	pci_msi_multiple_enable(dev, nvec);
 	
 	pci_msi_set_enable(dev, 1);
+
+	return 0;
 }
 
 /* return order 2 of nr_vectors. */
@@ -348,11 +350,15 @@ int pci_msix_vec_count(struct pci_dev *dev)
 int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec)
 {
 	int ret;
-	ret = pci_find_capability(dev, PCI_CAP_ID_MSIX);
-	if (ret)
-		return ret;
+	int nvec0;
 
-	//ret = msi_capability_init(dev);
+	nvec0 = pci_msix_vec_count(dev);
+	if (nvec0 < 0)
+		return nvec0;
+
+	printk("%02x:%02x.%01x pci msix:request %d vectors.\n", dev->bus, dev->device, dev->fun, nvec0);
+
+	//ret = msix_capability_init(dev);
 	return ret;
 }
 
@@ -363,6 +369,7 @@ static int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 	int rc;
 
 	nvec = pci_msi_vec_count(dev);
+	printk("%02x:%02x.%01x pci msi:request %d vectors.\n", dev->bus, dev->device, dev->fun, nvec);
 	if (nvec < 0)
 		return nvec;
 	if (nvec < minvec)
@@ -394,7 +401,7 @@ static int __pci_enable_msi_range(struct pci_dev *dev, int minvec, int maxvec,
 /* deprecated, don't use */
 int pci_enable_msi(struct pci_dev *dev)
 {
-	int rc = __pci_enable_msi_range(dev, 1, 1, NULL);
+	int rc = __pci_enable_msi_range(dev, 1, 32, NULL);
 	if (rc < 0)
 		return rc;
 	return 0;
@@ -660,6 +667,7 @@ void pci_device_init(struct pci_dev *pdev)
 	u8 type = 0;
 	u8 class_code[3];
 	INIT_LIST_HEAD(&pdev->list);
+	INIT_LIST_HEAD(&pdev->irq_list);
 	pci_read_config_byte(pdev, PCI_HEADER_TYPE, &type);
 	pci_read_config_word(pdev, PCI_VENDOR_ID, &vid);
 	pci_read_config_word(pdev, PCI_DEVICE_ID, &did);

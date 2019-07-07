@@ -6,6 +6,9 @@
 #include <string.h>
 #include <math.h>
 #include <fb.h>
+#include <cpu.h>
+#include <irq.h>
+
 
 struct nvidia_gpu;
 

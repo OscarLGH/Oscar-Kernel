@@ -6,6 +6,8 @@
 #include <string.h>
 #include <math.h>
 #include <fb.h>
+#include <irq.h>
+#include <cpu.h>
 
 struct xhci {
 	struct pci_dev *pdev;

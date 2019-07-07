@@ -64,7 +64,8 @@
 
 static inline void cpuid(u32 eax, u32 ecx, u32 *out)
 {
-	asm volatile("movq %rdx, %r8\n\t"
+	asm volatile("push %rbx \n\t"
+			"movq %rdx, %r8\n\t"
 			"movq %rdi, %rax\n\t"
 			"movq %rsi, %rcx\n\t"
 			"cpuid\n\t"
@@ -72,6 +73,7 @@ static inline void cpuid(u32 eax, u32 ecx, u32 *out)
 			"movl %ebx, 4(%r8)\n\t"
 			"movl %ecx, 8(%r8)\n\t"
 			"movl %edx, 12(%r8)\n\t"
+			"pop %rbx \n\t"
 		);
 }
 

@@ -73,7 +73,7 @@ int x86_pci_msi_entry_build(struct msi_data *msi, int irq, int cpu)
 	msi->addr = cpu | 
 		MSI_ADDR_BASE_LO |
 		MSI_ADDR_DEST_MODE_PHYSICAL;
-	msi->data = irq | 
+	msi->data = (irq + 32) | 
 		MSI_DATA_TRIGGER_EDGE |
 		MSI_DATA_LEVEL_ASSERT |
 		MSI_DATA_DELIVERY_FIXED;

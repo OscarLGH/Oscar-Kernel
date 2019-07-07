@@ -582,7 +582,7 @@ void arch_init()
 	}
 	
 	if (is_bsp()) {
-		//wakeup_all_processors();
+		wakeup_all_processors();
 		//lapic_send_ipi(0xff, 0xfe, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfc, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xfc, APIC_ICR_ASSERT);
@@ -597,11 +597,13 @@ void arch_init()
 		//create_task(test_task, 3, 0x10000, 1, -1);
 	}
 
-	//create_task(test_task, 3, 0x10000, 1, -1);
-	//create_task(test_task, 1, 0x10000, 1, -1);
+	create_task(test_task, 3, 0x10000, 1, -1);
+	create_task(test_task, 1, 0x10000, 1, -1);
 	create_task(vm_init_test, 1, 0x10000, 1, -1);
-	request_irq_smp(get_cpu(), 0x5, task_timer_tick, 0, "lapic-timer", NULL);
-	lapic_set_timer(1, 0x25);
+
+	int irq = alloc_irqs_cpu(get_cpu()->index, 1);
+	request_irq_smp(get_cpu(), irq, task_timer_tick, 0, "lapic-timer", NULL);
+	lapic_set_timer(1, irq + 0x20);
 
 	//if (is_bsp()) {
 	//create_task(test_task, 3, 0x10000, 1, -1);
