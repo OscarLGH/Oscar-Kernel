@@ -31,7 +31,7 @@ struct irq_desc {
 
 
 int alloc_irqs_cpu(int cpu, int nr_irq);
-int alloc_irqs(int *cpu, int nr_irq);
+int alloc_irqs(int *cpu, int nr_irq, int align);
 
 
 int free_irq(int cpu, int irq);

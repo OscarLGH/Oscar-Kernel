@@ -174,7 +174,7 @@ static int msi_capability_init(struct pci_dev *dev, int nvec,
 	struct msi_data msi_data;
 
 	pci_msi_set_enable(dev, 0);
-	start_irq = alloc_irqs(&cpu, nvec);
+	start_irq = alloc_irqs(&cpu, nvec, nvec);
 	if (start_irq == -1)
 		return -ENOSPC;
 

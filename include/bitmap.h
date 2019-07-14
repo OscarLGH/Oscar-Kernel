@@ -2,6 +2,7 @@
 #define BITMAP_H
 
 #include <types.h>
+#include <math.h>
 
 struct bitmap {
 	u8 *bitmap_data;
@@ -88,5 +89,22 @@ static inline int bitmap_allocate_bits(struct bitmap *bitmap, u64 bits)
 	}
 	return -1;
 }
+
+static inline int bitmap_allocate_bits_aligned(struct bitmap *bitmap, u64 bits, int align)
+{
+	int i;
+	int bit_f = bitmap_find_free_region(bitmap, round_up(bits, align));
+	if (bit_f != -1) {
+		for (i = bit_f; i < round_up(bit_f, align); i++)
+			bitmap_clear(bitmap, i);
+
+		for (i = div_round_up(bit_f, align); i < round_up(bit_f, align) + bits; i++)
+			bitmap_set(bitmap, i);
+		
+		return round_up(bit_f, align);
+	}
+	return -1;
+}
+
 
 #endif

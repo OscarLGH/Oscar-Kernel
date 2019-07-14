@@ -20,14 +20,15 @@ int alloc_irqs_cpu(int cpu, int nr_irq)
 	return -1;
 }
 
-int alloc_irqs(int *cpu, int nr_irq)
+int alloc_irqs(int *cpu, int nr_irq, int align)
 {
 	struct node *node;
 	struct cpu *cpu_ptr;
 	int ret;
 	list_for_each_entry(node, &node_list, list) {
 		list_for_each_entry(cpu_ptr, &node->cpu_list, list) {
-			ret = bitmap_allocate_bits(cpu_ptr->intr_desc.irq_bitmap, nr_irq);
+			/* MSI interrupt can only modified lower n(irq) bit of data, so irq must be aligned .*/
+			ret = bitmap_allocate_bits_aligned(cpu_ptr->intr_desc.irq_bitmap, nr_irq, align);
 			if (ret != -1) {
 				cpu_ptr->intr_desc.irq_nr += nr_irq;
 				*cpu = cpu_ptr->id;
