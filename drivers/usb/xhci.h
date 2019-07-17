@@ -16,16 +16,16 @@ struct event_ring_segment_table_entry {
 	u32 reserved1;
 };
 
-struct xhci {
-	struct pci_dev *pdev;
-	volatile u32 *mmio_virt;
-	u64 hc_op_reg_offset;
-	u64 hc_rt_reg_offset;
-	u64 hc_doorbell_reg_offset;
-	u64 hc_vt_reg_offset;
-	u64 *dcbaa;
-	u32 *cmd_ring;
-	struct event_ring_segment_table_entry *event_ring_seg_table;
+
+struct trb_template {
+	u64 parameter;
+	u32 status;
+
+	u32 c:1;
+	u32 ent:1;
+	u32 reserved1:8;
+	u32 trb_type:6;
+	u32 control:16;
 };
 
 struct transfer_trb {
@@ -74,6 +74,26 @@ struct transfer_event_trb {
 	u32 rsvd3:3;
 	u32 slot_id:8;
 };
+
+struct xhci {
+	struct pci_dev *pdev;
+	volatile u32 *mmio_virt;
+	u64 hc_op_reg_offset;
+	u64 hc_rt_reg_offset;
+	u64 hc_doorbell_reg_offset;
+	u64 hc_vt_reg_offset;
+	u64 *dcbaa;
+	u64 dcbaa_size;
+	
+	struct trb_template *cmd_ring;
+	u64 cmd_ring_size;
+	
+	struct trb_template *event_ring;
+	u64 event_ring_size;
+
+	struct event_ring_segment_table_entry *event_ring_seg_table;
+};
+
 
 
 //TODO define other TRBs
@@ -163,6 +183,11 @@ void xhci_rtreg_wr64(struct xhci *xhci, u64 offset, u64 value)
 {
 	xhci_rtreg_wr32(xhci, offset, value);
 	xhci_rtreg_wr32(xhci, offset + 4, value >> 32);
+}
+
+void xhci_doorbell_reg_wr32(struct xhci *xhci, u64 offset, u32 value)
+{
+	xhci->mmio_virt[(xhci->hc_doorbell_reg_offset + offset) / 4] = value;
 }
 
 
