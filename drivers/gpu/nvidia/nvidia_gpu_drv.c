@@ -668,5 +668,5 @@ void nvidia_gpu_init()
 	pci_register_driver(&nvidia_gpu_driver);
 }
 
-module_init(nvidia_gpu_init);
+//module_init(nvidia_gpu_init);
 

@@ -1,5 +1,20 @@
 #include "xhci.h"
 
+
+int xhci_enable_slot(struct xhci *xhci, int slot_id)
+{
+	struct trb_template cmd;
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.trb_type = TRB_NO_OP_CMD;
+	xhci->cmd_ring[0].c = 0;
+	xhci->cmd_ring[0].trb_type = 23;
+	xhci->cmd_ring[1].c = 0;
+	xhci->cmd_ring[1].trb_type = 23;
+	xhci->cmd_ring[2].c = 1;
+	xhci->cmd_ring[2].trb_type = 23;
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+}
+
 int xhci_intr(int irq, void *data)
 {
 	struct xhci *xhci = data;
@@ -9,12 +24,14 @@ int xhci_intr(int irq, void *data)
 	u64 erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
 	printk("xhci_intr.USB STS = %x\n", usb_sts);
 	struct trb_template *current_trb = (void *)PHYS2VIRT(erdp);
+
 	if (current_trb[0].trb_type == 34) {
 		struct port_status_change_event_trb *port_ch_trb = (struct port_status_change_event_trb *)current_trb;
 		port = port_ch_trb[0].port_id - 1;
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
 		printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
 		xhci_opreg_wr32(xhci, 0x400 + port * 0x10, xhci_opreg_rd32(xhci, 0x400 + port * 0x10) | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
+		//xhci_enable_slot(xhci, 0);
 	}
 	
 	u32 ir = xhci_rtreg_rd32(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP);
@@ -32,7 +49,7 @@ int xhci_intr(int irq, void *data)
 	int i;
 	for (i = 0; i < 4; i++) {
 		if (current_trb[i].c == 1) {
-			printk("event ring %d, type = %d\n", i, xhci->event_ring[i].trb_type);
+			printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
 			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size)
 				erdp += 16;
 		}
@@ -40,7 +57,6 @@ int xhci_intr(int irq, void *data)
 	xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp) | BIT3);
 	xhci_opreg_wr32(xhci, XHCI_HC_USBSTS, usb_sts | BIT3 | BIT4);
 
-	
 	return 0;
 }
 
@@ -78,6 +94,12 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	printk("runtime_reg_offset offset:%x\n", xhci->hc_rt_reg_offset);
 	printk("xhci_vtio_offset offset:%x\n", xhci->hc_vt_reg_offset);
 
+	xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RESET);
+	while (1) {
+		if ((xhci_opreg_rd32(xhci, XHCI_HC_USBCMD) & XHCI_HC_USBCMD_RESET) == 0)
+			break;
+	}
+
 	ret = pci_enable_msix(pdev, 0, 2);
 	if (ret < 0) {
 		ret = pci_enable_msi(pdev);
@@ -95,6 +117,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 
 	xhci->cmd_ring_size = 0x1000;
 	xhci->cmd_ring = kmalloc(xhci->cmd_ring_size, GFP_KERNEL);
+	xhci->cmd_ring_enqueue_ptr = 0;
 	memset(xhci->cmd_ring, 0, xhci->cmd_ring_size);
 	xhci_opreg_wr64(xhci, XHCI_HC_CRCR, VIRT2PHYS(xhci->cmd_ring));
 
@@ -115,14 +138,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 
 	xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RUN | XHCI_HC_USBCMD_INTE | XHCI_HC_USBCMD_HSEE);
 
-	xhci->cmd_ring[0].c = 0;
-	xhci->cmd_ring[0].trb_type = 23;
-	xhci->cmd_ring[1].c = 0;
-	xhci->cmd_ring[1].trb_type = 23;
-	xhci->cmd_ring[2].c = 1;
-	xhci->cmd_ring[2].trb_type = 23;
-
-	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	xhci_enable_slot(xhci, 0);
 	return 0;
 }
 

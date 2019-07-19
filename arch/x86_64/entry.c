@@ -601,7 +601,7 @@ void arch_init()
 	//create_task(test_task, 1, 0x10000, 1, -1);
 	//create_task(vm_init_test, 1, 0x10000, 1, -1);
 
-	int irq = alloc_irqs_cpu(get_cpu()->index, 1);
+	int irq = alloc_irqs_cpu(get_cpu()->id, 1);
 	request_irq_smp(get_cpu(), irq, task_timer_tick, 0, "lapic-timer", NULL);
 	lapic_set_timer(1, irq + 0x20);
 

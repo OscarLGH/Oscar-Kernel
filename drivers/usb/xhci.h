@@ -87,6 +87,8 @@ struct xhci {
 	
 	struct trb_template *cmd_ring;
 	u64 cmd_ring_size;
+	u64 cmd_ring_enqueue_ptr;
+	u64 cmd_ring_dequeue_ptr;
 	
 	struct trb_template *event_ring;
 	u64 event_ring_size;
@@ -94,7 +96,15 @@ struct xhci {
 	struct event_ring_segment_table_entry *event_ring_seg_table;
 };
 
-
+int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template cmd)
+{
+	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = cmd;
+	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 1;
+	printk("xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = %d\n", xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].trb_type);
+	xhci->cmd_ring_enqueue_ptr++;
+	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 0;
+	return 0;
+}
 
 //TODO define other TRBs
 
@@ -133,6 +143,26 @@ struct xhci {
 	#define XHCI_HC_IR_ERSTSZ 0x8
 	#define XHCI_HC_IR_ERSTBA 0x10
 	#define XHCI_HC_IR_ERDP 0x18
+
+
+// Data structures
+#define TRB_NORMAL 1
+#define TRB_SETUP_STAGE 2
+#define TRB_DATA_STAGE 3
+#define TRB_STATUS_STAGE 4
+#define TRB_ISOCH 5
+#define TRB_LINK 6
+#define TRB_EVENT_DATA 7
+#define TRB_NO_OP 8
+#define TRB_ENABLE_SLOT_CMD 9
+#define TRB_DISABLE_SLOT_CMD 10
+#define TRB_ADDRESS_DEVICE_CMD 11
+#define TRB_CONFIG_ENDPOINT_CMD 12
+
+#define TRB_NO_OP_CMD 23
+#define TRB_TRANSFER_EVENT 32
+#define TRB_COMMAND_COMPLETION_EVENT 33
+#define TRB_PORT_STATUS_CHANGE_EVENT 34
 
 
 u32 xhci_cap_rd32(struct xhci *xhci, u64 offset)
