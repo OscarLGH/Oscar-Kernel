@@ -75,6 +75,103 @@ struct transfer_event_trb {
 	u32 slot_id:8;
 };
 
+struct address_device_trb {
+	u32 input_context_ptr_lo;
+	u32 input_context_ptr_hi;
+	u32 rsvd;
+
+	u32 c:1;
+	u32 rsvd1:8;
+	u32 bsr:1;
+	u32 trb_type:6;
+	u32 rsvd2:8;
+	u32 slot_id:8;
+};
+
+struct slot_context {
+	u32 route_string:20;
+	u32 speed:4;
+	u32 rsvdz:1;
+	u32 mtt:1;
+	u32 hub:1;
+	u32 context_entries:5;
+
+	u32 max_exit_latency:16;
+	u32 root_hub_port_number:8;
+	u32 number_of_ports:8;
+
+	u32 tt_hub_slot_id:8;
+	u32 tt_port_number:8;
+	u32 ttt:2;
+	u32 rsvdz1:4;
+	u32 interrupt_target:10;
+
+	u32 usb_dev_addr:8;
+	u32 rsvdz2:19;
+	u32 slot_state:5;
+
+	u32 rsvd1;
+	u32 rsvd2;
+	u32 rsvd3;
+	u32 rsvd4;
+};
+
+struct endpoint_context {
+	u32 ep_state:3;
+	u32 rsvdz1:5;
+	u32 mult:2;
+	u32 max_pstreams:5;
+	u32 lsa:1;
+	u32 interval:8;
+	u32 max_esit_payload_hi:8;
+
+	u32 rsvdz2:1;
+	u32 cerr:2;
+	u32 ep_type:3;
+	u32 rsvdz3:1;
+	u32 hid:1;
+	u32 max_burst_size:8;
+	u32 max_packet_size:16;
+
+	u32 dcs:1;
+	u32 rsvdz4:3;
+	u32 tr_dequeue_pointer_lo:18;
+
+	u32 tr_dequeue_pointer_hi;
+
+	u32 average_trb_length:16;
+	u32 max_esit_payload_lo:16;
+	
+	u32 rsvd2;
+	u32 rsvd3;
+	u32 rsvd4;
+};
+
+struct input_control_context {
+	u32 drop_context_flags;
+	u32 add_context_flags;
+	u32 rsvd1;
+	u32 rsvd2;
+	u32 rsvd3;
+	u32 rsvd4;
+	u32 rsvd5;
+	u32 configuration_value:8;
+	u32 interface_number:8;
+	u32 alternate_setting:8;
+	u32 rsvdz:8;
+};
+
+struct device_context {
+	struct slot_context slot_context;
+	struct endpoint_context endpoint_context[31];
+};
+
+struct input_context {
+	struct input_control_context input_ctrl_context;
+	struct device_context dev_context;
+};
+
+
 struct xhci {
 	struct pci_dev *pdev;
 	volatile u32 *mmio_virt;
@@ -96,13 +193,13 @@ struct xhci {
 	struct event_ring_segment_table_entry *event_ring_seg_table;
 };
 
-int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template cmd)
+int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 {
-	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = cmd;
-	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 1;
-	printk("xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = %d\n", xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].trb_type);
-	xhci->cmd_ring_enqueue_ptr++;
+	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = *cmd;
 	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 0;
+	//printk("xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = %d\n", xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].trb_type);
+	xhci->cmd_ring_enqueue_ptr++;
+	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 1;
 	return 0;
 }
 

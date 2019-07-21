@@ -721,11 +721,22 @@ static inline u64 rdtsc()
 	u64 low, high;
 	/* Stop speculative execution by lfence */
 	asm volatile("lfence\n\t"
-				"rdmsr\n\t"
+				"rdtsc\n\t"
 				: "=a"(low), "=d"(high) : 
 		);
 	return low | (high << 32);
 }
+
+static inline u64 rdtscp()
+{
+	u64 low, high;
+	/* Stop speculative execution by lfence */
+	asm volatile("rdtscp\n\t"
+				: "=a"(low), "=d"(high) : 
+		);
+	return low | (high << 32);
+}
+
 
 static inline u64 rdpmc()
 {

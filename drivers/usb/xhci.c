@@ -6,12 +6,41 @@ int xhci_enable_slot(struct xhci *xhci, int slot_id)
 	struct trb_template cmd;
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.trb_type = TRB_NO_OP_CMD;
-	xhci->cmd_ring[0].c = 0;
-	xhci->cmd_ring[0].trb_type = 23;
-	xhci->cmd_ring[1].c = 0;
-	xhci->cmd_ring[1].trb_type = 23;
-	xhci->cmd_ring[2].c = 1;
-	xhci->cmd_ring[2].trb_type = 23;
+	xhci_cmd_ring_insert(xhci, &cmd);
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	return 0;
+}
+
+int init_device_slot(struct xhci *xhci, int slot_id)
+{
+	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
+	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
+	struct device_context *output_context = kmalloc(0x1000, GFP_KERNEL);
+	memset(input_context, 0, 0x1000);
+	memset(output_context, 0, 0x1000);
+	input_context->input_ctrl_context.add_context_flags = 0x3;
+	input_context->dev_context.slot_context.root_hub_port_number = 0;
+	input_context->dev_context.slot_context.route_string = 0;
+	input_context->dev_context.slot_context.context_entries = 1;
+	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = PHYS2VIRT(transfer_ring);
+	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = PHYS2VIRT(transfer_ring) >> 32;
+	input_context->dev_context.endpoint_context[0].ep_type = 4;
+	input_context->dev_context.endpoint_context[0].max_packet_size = 64;
+	input_context->dev_context.endpoint_context[0].max_burst_size = 64;
+	input_context->dev_context.endpoint_context[0].dcs = 1;
+	input_context->dev_context.endpoint_context[0].interval = 0;
+	input_context->dev_context.endpoint_context[0].max_pstreams = 0;
+	input_context->dev_context.endpoint_context[0].mult = 0;
+	input_context->dev_context.endpoint_context[0].cerr = 3;
+
+	xhci->dcbaa[slot_id] = VIRT2PHYS(output_context);
+
+	struct address_device_trb address_dev_trb;
+	address_dev_trb.input_context_ptr_lo = VIRT2PHYS(input_context);
+	address_dev_trb.input_context_ptr_hi = VIRT2PHYS(input_context) >> 32;
+	address_dev_trb.trb_type = TRB_ADDRESS_DEVICE_CMD;
+	address_dev_trb.slot_id = slot_id;
+	xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
 }
 
@@ -31,7 +60,6 @@ int xhci_intr(int irq, void *data)
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
 		printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
 		xhci_opreg_wr32(xhci, 0x400 + port * 0x10, xhci_opreg_rd32(xhci, 0x400 + port * 0x10) | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
-		//xhci_enable_slot(xhci, 0);
 	}
 	
 	u32 ir = xhci_rtreg_rd32(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP);
@@ -50,6 +78,8 @@ int xhci_intr(int irq, void *data)
 	for (i = 0; i < 4; i++) {
 		if (current_trb[i].c == 1) {
 			printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
+			u32 *trb = (u32 *)&current_trb[i];
+			printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
 			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size)
 				erdp += 16;
 		}
@@ -139,6 +169,9 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RUN | XHCI_HC_USBCMD_INTE | XHCI_HC_USBCMD_HSEE);
 
 	xhci_enable_slot(xhci, 0);
+	xhci_enable_slot(xhci, 0);
+	xhci_enable_slot(xhci, 0);
+	init_device_slot(xhci, 0);
 	return 0;
 }
 
