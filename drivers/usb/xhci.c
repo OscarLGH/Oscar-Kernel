@@ -1,14 +1,36 @@
 #include "xhci.h"
 
 
-int xhci_enable_slot(struct xhci *xhci, int slot_id)
+int xhci_enable_slot(struct xhci *xhci)
 {
+	u64 erdp;
+	struct trb_template *current_trb;
 	struct trb_template cmd;
+	struct command_completion_event_trb *completion_trb;
+	int i = 0;
 	memset(&cmd, 0, sizeof(cmd));
-	cmd.trb_type = TRB_NO_OP_CMD;
+	cmd.trb_type = TRB_ENABLE_SLOT_CMD;
 	xhci_cmd_ring_insert(xhci, &cmd);
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
-	return 0;
+
+	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
+	current_trb = (void *)PHYS2VIRT(erdp);
+	
+	while (1) {
+		for (i = 0; i < 16; i++) {
+			if (current_trb[i].c == 1)
+				break;
+		}
+
+		for (i = 0; i < 16; i++) {
+			if (current_trb[i].trb_type == 33) {
+				completion_trb = (struct command_completion_event_trb *)&current_trb[i];
+				return completion_trb->slot_id;
+			}
+		}
+	};
+	
+	return -1;
 }
 
 int init_device_slot(struct xhci *xhci, int slot_id)
@@ -19,14 +41,14 @@ int init_device_slot(struct xhci *xhci, int slot_id)
 	memset(input_context, 0, 0x1000);
 	memset(output_context, 0, 0x1000);
 	input_context->input_ctrl_context.add_context_flags = 0x3;
-	input_context->dev_context.slot_context.root_hub_port_number = 0;
+	input_context->dev_context.slot_context.root_hub_port_number = 3;
 	input_context->dev_context.slot_context.route_string = 0;
 	input_context->dev_context.slot_context.context_entries = 1;
 	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = PHYS2VIRT(transfer_ring);
 	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = PHYS2VIRT(transfer_ring) >> 32;
 	input_context->dev_context.endpoint_context[0].ep_type = 4;
 	input_context->dev_context.endpoint_context[0].max_packet_size = 64;
-	input_context->dev_context.endpoint_context[0].max_burst_size = 64;
+	input_context->dev_context.endpoint_context[0].max_burst_size = 0;
 	input_context->dev_context.endpoint_context[0].dcs = 1;
 	input_context->dev_context.endpoint_context[0].interval = 0;
 	input_context->dev_context.endpoint_context[0].max_pstreams = 0;
@@ -50,6 +72,7 @@ int xhci_intr(int irq, void *data)
 	u32 usb_sts = xhci_opreg_rd32(xhci, XHCI_HC_USBSTS);
 	u32 port;
 	u32 port_status;
+	u32 slot;
 	u64 erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
 	printk("xhci_intr.USB STS = %x\n", usb_sts);
 	struct trb_template *current_trb = (void *)PHYS2VIRT(erdp);
@@ -60,19 +83,15 @@ int xhci_intr(int irq, void *data)
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
 		printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
 		xhci_opreg_wr32(xhci, 0x400 + port * 0x10, xhci_opreg_rd32(xhci, 0x400 + port * 0x10) | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
+
+		if (port_status & 0x1) {
+			slot = xhci_enable_slot(xhci);
+			printk("available slot:%d\n", slot);
+			init_device_slot(xhci, slot);
+		}
 	}
 	
 	u32 ir = xhci_rtreg_rd32(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP);
-	//printk("ERDP:%x\n", xhci_rtreg_rd32(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP));
-	//if (ir & BIT3) {
-		//if (current_trb[0].trb_type == 34) {
-		//	if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size)
-		//		erdp += 16;
-		//	else
-		//		erdp = xhci->event_ring_seg_table[0].ring_segment_base_addr;
-		//}
-		
-	//}
 
 	int i;
 	for (i = 0; i < 4; i++) {
@@ -80,8 +99,10 @@ int xhci_intr(int irq, void *data)
 			printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
 			u32 *trb = (u32 *)&current_trb[i];
 			printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
-			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size)
+			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 				erdp += 16;
+				xhci->event_ring_dequeue_ptr++;
+			}
 		}
 	}
 	xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp) | BIT3);
@@ -141,6 +162,8 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	u32 page_size = xhci_opreg_rd32(xhci, 0x8);
 	printk("page size:%x\n", page_size);
 
+	xhci_opreg_wr32(xhci, XHCI_HC_CONFIG, hcs_params1 & 0xff);
+
 	xhci->dcbaa = kmalloc(0x1000, GFP_KERNEL);
 	memset(xhci->dcbaa, 0, 0x1000);
 	xhci_opreg_wr64(xhci, XHCI_HC_DCBAAP, VIRT2PHYS(xhci->dcbaa));
@@ -155,6 +178,8 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	memset(xhci->event_ring_seg_table, 0, 0x1000);
 	xhci->event_ring_size = 0x1000;
 	xhci->event_ring = kmalloc(xhci->event_ring_size, GFP_KERNEL);
+	xhci->event_ring_dequeue_ptr = xhci->event_ring;
+	xhci->event_ring[0].c = 1;
 	memset(xhci->event_ring, 0, xhci->event_ring_size);
 	xhci->event_ring_seg_table[0].ring_segment_base_addr = VIRT2PHYS(xhci->event_ring);
 	xhci->event_ring_seg_table[0].ring_segment_size = xhci->event_ring_size / 16;
@@ -168,10 +193,6 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 
 	xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RUN | XHCI_HC_USBCMD_INTE | XHCI_HC_USBCMD_HSEE);
 
-	xhci_enable_slot(xhci, 0);
-	xhci_enable_slot(xhci, 0);
-	xhci_enable_slot(xhci, 0);
-	init_device_slot(xhci, 0);
 	return 0;
 }
 

@@ -60,6 +60,19 @@ struct port_status_change_event_trb {
 	u32 rsvd4:16;
 };
 
+struct command_completion_event_trb {
+	u32 command_trb_ptr_lo;
+	u32 command_trb_ptr_hi;
+	u32 command_completion_parameter:24;
+	u32 completion_code:8;
+	
+	u32 c:1;
+	u32 rsvd3:9;
+	u32 trb_type:6;
+	u32 vf_id:8;
+	u32 slot_id:8;
+};
+
 struct transfer_event_trb {
 	u64 trb_pointer;
 	u32 trb_transfer_len:24;
@@ -185,10 +198,12 @@ struct xhci {
 	struct trb_template *cmd_ring;
 	u64 cmd_ring_size;
 	u64 cmd_ring_enqueue_ptr;
-	u64 cmd_ring_dequeue_ptr;
+	struct trb_template *cmd_ring_dequeue_ptr;
 	
 	struct trb_template *event_ring;
 	u64 event_ring_size;
+	struct trb_template *event_ring_dequeue_ptr;
+	
 
 	struct event_ring_segment_table_entry *event_ring_seg_table;
 };

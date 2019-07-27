@@ -639,7 +639,7 @@ int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	nvidia_ib_init(gpu, &gpu->memcpy_chan);
 	register_nvidia_fb(gpu);
 
-	nvidia_test(gpu);
+	//nvidia_test(gpu);
 	
 	return 0;
 }
