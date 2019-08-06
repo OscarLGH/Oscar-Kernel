@@ -330,7 +330,7 @@ static int msix_capability_init(struct pci_dev *dev, int nvec,
 		msix_entry_setup(dev, i, msi_data.addr, msi_data.data, 0);
 	}
 	
-	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_MASKALL, 0);
+	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_MASKALL, PCI_MSIX_FLAGS_ENABLE);
 
 	return 0;
 }
@@ -358,7 +358,7 @@ int pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries, int nvec)
 
 	printk("%02x:%02x.%01x pci msix:request %d vectors.\n", dev->bus, dev->device, dev->fun, nvec0);
 
-	//ret = msix_capability_init(dev);
+	ret = msix_capability_init(dev, nvec0, NULL);
 	return ret;
 }
 

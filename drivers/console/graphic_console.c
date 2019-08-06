@@ -26,7 +26,6 @@ int fbcon_scroll(struct console *con, int direction)
 		fi_area.width = con->width;
 		fi_area.height = con->font_height;
 		fi_area.color = 0;
-		
 		fillrect_active_fb(&fi_area);
 	}
 }

@@ -9,6 +9,8 @@
 #include <irq.h>
 #include <cpu.h>
 
+#pragma pack(1)
+
 struct event_ring_segment_table_entry {
 	u64 ring_segment_base_addr;
 	u16 ring_segment_size;
@@ -183,6 +185,7 @@ struct input_context {
 	struct input_control_context input_ctrl_context;
 	struct device_context dev_context;
 };
+#pragma pack(0)
 
 
 struct xhci {
@@ -192,8 +195,13 @@ struct xhci {
 	u64 hc_rt_reg_offset;
 	u64 hc_doorbell_reg_offset;
 	u64 hc_vt_reg_offset;
+	u64 hc_ext_reg_offset;
 	u64 *dcbaa;
 	u64 dcbaa_size;
+
+	u64 nr_slot;
+	u64 nr_port;
+	u64 nr_intr;
 	
 	struct trb_template *cmd_ring;
 	u64 cmd_ring_size;
@@ -211,10 +219,8 @@ struct xhci {
 int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 {
 	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = *cmd;
-	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 0;
-	//printk("xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = %d\n", xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].trb_type);
-	xhci->cmd_ring_enqueue_ptr++;
 	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 1;
+	xhci->cmd_ring_enqueue_ptr++;
 	return 0;
 }
 
@@ -243,7 +249,27 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 #define XHCI_HC_CRCR 0x18
 #define XHCI_HC_DCBAAP 0x30
 #define XHCI_HC_CONFIG 0x38
-#define XCHC_HC_PORT_REG 0x400
+#define XHCI_HC_PORT_REG 0x400
+
+#define XHCI_PORTSC_CCS BIT0
+#define XHCI_PORTSC_PED BIT1
+#define XHCI_PORTSC_OCA BIT3
+#define XHCI_PORTSC_PR BIT4
+#define XHCI_PORTSC_PP BIT9
+#define XHCI_PORTSC_LWS BIT16
+#define XHCI_PORTSC_CSC BIT17
+#define XHCI_PORTSC_PEC BIT18
+#define XHCI_PORTSC_WRC BIT19
+#define XHCI_PORTSC_OCC BIT20
+#define XHCI_PORTSC_PRC BIT21
+#define XHCI_PORTSC_CEC BIT23
+#define XHCI_PORTSC_CAS BIT24
+#define XHCI_PORTSC_WCE BIT25
+#define XHCI_PORTSC_WDE BIT26
+#define XHCI_PORTSC_WOE BIT27
+#define XHCI_PORTSC_DR BIT30
+#define XHCI_PORTSC_WPR BIT31
+
 
 //Host Controller Runtime Resgistes
 #define XHCI_HC_MFINDEX 0x0

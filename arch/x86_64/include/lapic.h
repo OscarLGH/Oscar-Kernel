@@ -244,6 +244,11 @@ inline static int lapic_set_timer(u64 freq, u8 vector)
 	/* some cpu doesn't report crystal freq by cpuid */
 	if (buffer1[2] == 0)
 		buffer1[2] = 24000000;
+	if (buffer1[0] == 0)
+		buffer1[0] = 1;
+
+	if (buffer1[0] == 0)
+		buffer1[0] = 1;
 
 	crystal_freq = buffer1[2];
 	tsc_freq = buffer1[2] * buffer1[1] / buffer1[0];

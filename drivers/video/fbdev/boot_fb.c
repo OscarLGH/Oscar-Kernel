@@ -10,7 +10,7 @@ struct fb_ops bootfb_ops;
 void boot_fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 {
 	int i, j;
-	u32 *framebuffer_ptr = (u32 *)info->screen_base;
+	volatile u32 *framebuffer_ptr = (volatile u32 *)info->screen_base;
 	for (j = 0; j < rect->height; j++) {
 		u32 dst_offset_y = (j + rect->dy) * info->var.xres_virtual;
 		for (i = 0; i < rect->width; i++) {
@@ -22,7 +22,7 @@ void boot_fb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 void boot_fb_copyarea(struct fb_info *info,  const struct fb_copyarea *region)
 {
 	int i, j;
-	u32 *framebuffer_ptr = (u32 *)info->screen_base;
+	volatile u32 *framebuffer_ptr = (volatile u32 *)info->screen_base;
 	u32 dst_offset_y, src_offset_y;
 	if (region->dy < region->sy && region->dx < region->sx) {
 		for (j = 0; j < region->height; j++) {
@@ -62,7 +62,7 @@ void boot_fb_copyarea(struct fb_info *info,  const struct fb_copyarea *region)
 void boot_fb_imageblit(struct fb_info *info, const struct fb_image *image)
 {
 	int i, j;
-	u32 *framebuffer_ptr = (u32 *)info->screen_base;
+	volatile u32 *framebuffer_ptr = (volatile u32 *)info->screen_base;
 	for (j = 0; j < image->height; j++) {
 		u32 dst_offset_y = (j + image->dy) * info->var.xres_virtual;
 		u32 src_offset_y = j * image->width;
