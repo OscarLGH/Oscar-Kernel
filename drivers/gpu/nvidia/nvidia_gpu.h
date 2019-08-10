@@ -202,6 +202,10 @@ struct nvidia_gpu {
 
 	struct gp_fifo fifo;
 	struct nvkm_fifo_chan *memcpy_chan;
+
+	u64 host_buffer_size;
+	u32 *host_buffer;
+	u64 host_buffer_vma;
 };
 
 static inline u32 nvkm_rd32(struct nvidia_gpu *gpu, u64 offset)

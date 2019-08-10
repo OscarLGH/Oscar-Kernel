@@ -716,7 +716,7 @@ static inline void wrmsr(u32 msr, u64 value)
 		);
 }
 
-static inline u64 rdtsc()
+static inline u64 __attribute__((always_inline)) rdtsc()
 {
 	u64 low, high;
 	/* Stop speculative execution by lfence */
@@ -727,7 +727,7 @@ static inline u64 rdtsc()
 	return low | (high << 32);
 }
 
-static inline u64 rdtscp()
+static inline __attribute__((always_inline)) u64 rdtscp()
 {
 	u64 low, high;
 	/* Stop speculative execution by lfence */

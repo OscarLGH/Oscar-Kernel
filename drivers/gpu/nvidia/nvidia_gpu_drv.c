@@ -397,7 +397,7 @@ void FIRE_RING(struct nvkm_fifo_chan *chan)
 
 	chan->ib_status_host.ib_put = (chan->ib_status_host.ib_put + 1) & chan->ib_status_host.ib_max;
 
-	//mb()
+	//mb();
 
 	offset = push_buffer_ptr[0];
 
@@ -519,6 +519,7 @@ int nvidia_fence_wait(struct nvkm_fifo_chan *chan)
 	do {
 		nvkm_gpuobj_rd32(chan->fence, 0, &val);
 	} while (val != chan->fence_sequence);
+	chan->fence_sequence++;
 	return 0;
 }
 
@@ -566,8 +567,50 @@ void nvidia_fb_copyarea(struct fb_info *info, const struct fb_copyarea *region)
 	u64 len = region->height * info->var.xres_virtual * (info->var.bits_per_pixel / 8);
 	nvidia_memory_copy(chan, base + src, base + dst, len);
 	nvidia_fence_emit32(chan);
+	nvidia_fence_sync32(chan);
 	nvidia_fence_wait(chan);
 }
+
+void nvidia_fb_fillrect(struct fb_info *info, const struct fb_fillrect *region)
+{
+	struct nvidia_gpu *gpu = (struct nvidia_gpu *)info->dev;
+	struct nvkm_fifo_chan *chan = gpu->memcpy_chan;
+	u64 base = gpu->fb.fb->bar_addr;
+	int i;
+	for (i = 0; i < 0x1000 / 4; i++) {
+		gpu->host_buffer[i] = region->color;
+	}
+	nvkm_map_area(gpu->bar[1].pgd, gpu->host_buffer_vma, VIRT2PHYS(gpu->host_buffer), 0x1000, 0, NV_VM_TARGET_SYSRAM_SNOOP);
+	u64 dst = (region->dy * info->var.xres_virtual + region->dx) * (info->var.bits_per_pixel / 8);
+	u64 len = region->height * info->var.xres_virtual * (info->var.bits_per_pixel / 8);
+
+	for (i = 0; i < len; i += 0x1000) {
+		nvidia_memory_copy(chan, gpu->host_buffer_vma, base + dst + i, 0x1000);
+	}
+	nvidia_fence_emit32(chan);
+	nvidia_fence_sync32(chan);
+	nvidia_fence_wait(chan);
+
+}
+
+void nvidia_fb_imageblit(struct fb_info *info, const struct fb_image *image)
+{
+	int i, j;
+	struct nvidia_gpu *gpu = (struct nvidia_gpu *)info->dev;
+	struct nvkm_fifo_chan *chan = gpu->memcpy_chan;
+	volatile u32 *framebuffer_ptr = (volatile u32 *)info->screen_base;
+	//nvidia_fence_sync32(chan);
+	nvidia_fence_emit32(chan);
+	for (j = 0; j < image->height; j++) {
+		u32 dst_offset_y = (j + image->dy) * info->var.xres_virtual;
+		u32 src_offset_y = j * image->width;
+		for (i = 0; i < image->width; i++) {
+			framebuffer_ptr[dst_offset_y + i + image->dx] = ((u32 *)image->data)[src_offset_y + i];
+		}
+	}
+}
+
+
 
 void nvidia_test(struct nvidia_gpu *gpu)
 {
@@ -590,6 +633,8 @@ void register_nvidia_fb(struct nvidia_gpu *gpu)
 	extern struct fb_ops bootfb_ops;
 	boot_fb.dev = (struct device *)gpu;
 	bootfb_ops.fb_copyarea = nvidia_fb_copyarea;
+	bootfb_ops.fb_fillrect = nvidia_fb_fillrect;
+	bootfb_ops.fb_imageblit = nvidia_fb_imageblit;
 }
 
 int nvidia_gpu_intr(int irq, void *data)
@@ -634,9 +679,15 @@ int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	nvidia_gpu_chip_probe(gpu);
 	nvidia_gpu_memory_init(gpu);
 	nvidia_gpu_bar_init(gpu);
+	
 	nvidia_fifo_runlist_init(gpu);
 
 	nvidia_ib_init(gpu, &gpu->memcpy_chan);
+
+	gpu->host_buffer_size = 0x200000;
+	gpu->host_buffer = kmalloc(gpu->host_buffer_size, GFP_KERNEL);
+	gpu->host_buffer_vma = nvkm_vma_new(gpu, 1, gpu->host_buffer_size);
+
 	register_nvidia_fb(gpu);
 
 	//nvidia_test(gpu);

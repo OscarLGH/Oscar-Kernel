@@ -246,7 +246,7 @@ void map_kernel_memory()
 			if (i == 3) {
 				pdpt[i] = i * SIZE_1GB | (page_attr | PG_PDPTE_CACHE_DISABLE);
 			} else {
-				pdpt[i] = i * SIZE_1GB | (page_attr | PG_PDPTE_CACHE_WT);
+				pdpt[i] = i * SIZE_1GB | (page_attr);
 			}
 		}
 	}
@@ -550,9 +550,11 @@ void test_task()
 	schedule();
 	while (1) {
 		printk("task %d cpu %d iteration:%d\n",task->id, cpu->id, j++);
-		for (i = 0; i < 0x8000000; i++) {};
+		for (i = 0; i < 0xf000000; i++) {};
 	}
 }
+
+extern void test_uarch(void);
 
 void arch_init()
 {
@@ -574,6 +576,7 @@ void arch_init()
 	if (is_bsp()) {
 		start_kernel();
 		task_init();
+		//test_uarch();
 		//vm_init_test();
 		//x86_pci_hostbridge_init();
 		//instruction_test();
@@ -604,13 +607,6 @@ void arch_init()
 	int irq = alloc_irqs_cpu(get_cpu()->id, 1);
 	request_irq_smp(get_cpu(), irq, task_timer_tick, 0, "lapic-timer", NULL);
 	lapic_set_timer(1, irq + 0x20);
-
-	//if (is_bsp()) {
-	//create_task(test_task, 3, 0x10000, 1, -1);
-	//create_task(test_task, 3, 0x10000, 1, -1);
-	
-	//vm_init_test();
-	//}
 
 	while(1) {
 		asm("hlt");
