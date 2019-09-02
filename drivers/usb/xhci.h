@@ -198,6 +198,8 @@ struct xhci {
 	u64 hc_ext_reg_offset;
 	u64 *dcbaa;
 	u64 dcbaa_size;
+	u64 max_scratch_buffer_cnt;
+	u64 *scratch_buffer;
 
 	u64 nr_slot;
 	u64 nr_port;

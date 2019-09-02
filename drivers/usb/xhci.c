@@ -175,6 +175,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	u16 pci_command_reg;
 	u64 mmio_base;
 	u32 *mmio_virt;
+	u32 len_version, hcs_params1, hcs_params2, hcs_params3, hcc_params1;
 	int ret;
 	struct pci_irq_desc *irq_desc;
 	struct xhci *xhci = kmalloc(sizeof(*xhci), GFP_KERNEL);
@@ -187,18 +188,22 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	
 	pdev->private_data = xhci;
 
-	u32 len_version = xhci_cap_rd32(xhci, XHCI_CAPLENGTH);
+	len_version = xhci_cap_rd32(xhci, XHCI_CAPLENGTH);
 	xhci->hc_op_reg_offset = len_version & 0xff;
 	printk("Cap len:%d\n", len_version & 0xff);
 	printk("HCI version:%x\n", len_version >> 16);
-	u32 hcs_params1 = xhci_cap_rd32(xhci, XHCI_HCSPARAMS1);
+	hcs_params1 = xhci_cap_rd32(xhci, XHCI_HCSPARAMS1);
 	xhci->nr_slot = hcs_params1 & 0xff;
 	xhci->nr_intr = (hcs_params1 >> 8) & 0x3ff;
 	xhci->nr_port = hcs_params1 >> 24;
 	printk("Number of slots:%d\n", xhci->nr_slot);
 	printk("Number of Interrupts:%d\n", xhci->nr_intr);
 	printk("Number of Ports:%d\n", xhci->nr_port);
-	u32 hcc_params1 = xhci_cap_rd32(xhci, XHCI_HCCPARAMS1);
+	hcs_params2 = xhci_cap_rd32(xhci, XHCI_HCSPARAMS2);
+	xhci->max_scratch_buffer_cnt = (hcs_params2 >> 27) | (((hcs_params2 >> 21) & 0x1f) << 5);
+	printk("max scratch buffers:%d\n", xhci->max_scratch_buffer_cnt);
+	hcs_params3 = xhci_cap_rd32(xhci, XHCI_HCSPARAMS3);
+	hcc_params1 = xhci_cap_rd32(xhci, XHCI_HCCPARAMS1);
 	xhci->hc_ext_reg_offset = hcc_params1 >> 16;
 	printk("xHCI extended ptr:%x\n", xhci->hc_ext_reg_offset);
 
@@ -225,12 +230,22 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 		request_irq_smp(get_cpu(), irq_desc->vector, xhci_intr, 0, "xhci", xhci);
 	}
 
-	xhci_opreg_wr32(xhci, XHCI_HC_CONFIG, 64);
+	xhci_opreg_wr32(xhci, XHCI_HC_CONFIG, xhci->nr_slot);
 
 	xhci->dcbaa = kmalloc(0x1000, GFP_KERNEL);
 	for (int i = 0; i < 256; i++) {
 		xhci->dcbaa[i] = 0;
 	}
+
+	u64 *scrach_buffer = kmalloc(0x1000, GFP_KERNEL);
+	memset(scrach_buffer, 0, 0x1000);
+	for (int i = 0; i < xhci->max_scratch_buffer_cnt; i++) {
+		u64 *buffer_sc = kmalloc(0x1000, GFP_KERNEL);
+		memset(buffer_sc, 0, 0x1000);
+		scrach_buffer[i] = VIRT2PHYS(buffer_sc);
+	}
+	xhci->dcbaa[0] = VIRT2PHYS(scrach_buffer);
+	
 	xhci_opreg_wr64(xhci, XHCI_HC_DCBAAP, VIRT2PHYS(xhci->dcbaa));
 	//printk("dcbaap = %x\n", VIRT2PHYS(xhci->dcbaa));
 
@@ -287,4 +302,3 @@ void xhci_init()
 }
 
 module_init(xhci_init);
-
