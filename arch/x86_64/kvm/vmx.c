@@ -537,10 +537,19 @@ int vmx_handle_exception(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
 	u64 err_code = vmcs_read(VM_EXIT_INTR_ERROR_CODE);
-	printk("VM-Exit:Guest exception (%d).type:%d error code:%x\n", 
+	u64 cr0 = vmcs_read(GUEST_CR0);
+	printk("VM-Exit:Guest exception (%d) @ 0x%x.type:%d error code:%x\n", 
 		interruption_info & 0xff,
+		vcpu->guest_state.rip,
 		(interruption_info >> 8) & 0x7,
 		err_code);
+
+		/* real mode never use error code */
+	if (cr0 & CR0_PE == 0) {
+		interruption_info &= (~BIT11);
+	}
+	//vmcs_write(VM_ENTRY_INTR_INFO_FIELD, interruption_info);
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
 

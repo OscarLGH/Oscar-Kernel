@@ -112,6 +112,7 @@ guest_entry_64:
 	movl $0, %edx
 	movl $0, %ecx
 	xsetbv
+
 	vmcall
 
 	hlt	

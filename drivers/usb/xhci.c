@@ -13,8 +13,8 @@ int xhci_enable_slot(struct xhci *xhci)
 	cmd.trb_type = TRB_ENABLE_SLOT_CMD;
 	xhci_cmd_ring_insert(xhci, &cmd);
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
-	crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
-	xhci_opreg_wr32(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
+	//crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
+	//xhci_opreg_wr32(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0);
 
 	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
 	current_trb = (void *)PHYS2VIRT(erdp);
@@ -30,12 +30,10 @@ int xhci_enable_slot(struct xhci *xhci)
 		}
 	}
 done:
-	crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR);
-	xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT1);
-	for (i = 0; i < 4; i++) {
-		u32 *trb = (u32 *)&current_trb[i];
-		printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
-	}
+	//crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR);
+	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT1);
+	if (completion_trb->completion_code != 0x1)
+		slot = -1;
 	//xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp + event * 0x10) | BIT3);
 	return slot;
 }
@@ -64,8 +62,8 @@ int xhci_disable_slot(struct xhci *xhci, int slot)
 			}
 		}
 	};
-	u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
-	xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
+	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
+	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0);
 	return -1;
 }
 
@@ -141,7 +139,7 @@ int xhci_intr(int irq, void *data)
 			printk("available slot:%d\n", slot);
 			//init_device_slot(xhci, slot);
 		} else {
-			//xhci_disable_slot(xhci, 2);
+			xhci_disable_slot(xhci, 2);
 			xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
 		}
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
@@ -154,9 +152,9 @@ int xhci_intr(int irq, void *data)
 	int i;
 	for (i = 0; i < 4; i++) {
 		if (current_trb[i].c == 1) {
-			printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
+			//printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
 			u32 *trb = (u32 *)&current_trb[i];
-			printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
+			//printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
 			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 				erdp += 16;
 				xhci->event_ring_dequeue_ptr++;
@@ -166,7 +164,6 @@ int xhci_intr(int irq, void *data)
 	//xhci_opreg_wr32(xhci, 0x400 + port * 0x10, BIT9 | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
 	xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp) | BIT3);
 	xhci_opreg_wr32(xhci, XHCI_HC_USBSTS, usb_sts | BIT3 | BIT4);
-	printk("xhci intr done.STS = %x\n", xhci_opreg_rd32(xhci, XHCI_HC_USBSTS));
 	return 0;
 }
 
@@ -215,9 +212,9 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	printk("runtime_reg_offset offset:%x\n", xhci->hc_rt_reg_offset);
 	printk("xhci_vtio_offset offset:%x\n", xhci->hc_vt_reg_offset);
 
-	//xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RESET);
+	xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RESET);
 	/* VMware stuck here. */
-	while (0) {
+	while (1) {
 		if ((xhci_opreg_rd32(xhci, XHCI_HC_USBCMD) & XHCI_HC_USBCMD_RESET) == 0)
 			break;
 	}
@@ -253,7 +250,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	xhci->cmd_ring = kmalloc(xhci->cmd_ring_size, GFP_KERNEL);
 	xhci->cmd_ring_enqueue_ptr = 0;
 	memset(xhci->cmd_ring, 0, xhci->cmd_ring_size);
-	xhci_opreg_wr64(xhci, XHCI_HC_CRCR, VIRT2PHYS(xhci->cmd_ring) | BIT0 | BIT1);
+	xhci_opreg_wr64(xhci, XHCI_HC_CRCR, VIRT2PHYS(xhci->cmd_ring) | BIT0);
 
 	xhci->event_ring_seg_table = kmalloc(0x1000, GFP_KERNEL);
 	memset(xhci->event_ring_seg_table, 0, 0x1000);
