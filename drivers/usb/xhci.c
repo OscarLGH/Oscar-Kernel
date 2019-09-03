@@ -137,7 +137,7 @@ int xhci_intr(int irq, void *data)
 			printk("port_status after reset = %x\n", port_status);
 			slot = xhci_enable_slot(xhci);
 			printk("available slot:%d\n", slot);
-			//init_device_slot(xhci, slot);
+			init_device_slot(xhci, slot);
 		} else {
 			xhci_disable_slot(xhci, 2);
 			xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);

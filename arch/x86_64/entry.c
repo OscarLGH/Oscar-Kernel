@@ -211,6 +211,44 @@ void set_tss_desc()
 	ltr(SELECTOR_TSS);
 }
 
+void set_memory_type()
+{
+	u64 value0, value1;
+	value0 = rdmsr(MSR_MTRRdefType);
+	printk("MTRR default type:%x\n", value0);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE0);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK0);
+	printk("Range 0:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE1);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK1);
+	printk("Range 1:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE2);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK2);
+	printk("Range 2:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE3);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK3);
+	printk("Range 3:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE4);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK4);
+	printk("Range 4:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE5);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK5);
+	printk("Range 5:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE6);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK6);
+	printk("Range 6:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE7);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK7);
+	printk("Range 7:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE8);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK8);
+	printk("Range 8:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	value0 = rdmsr(MSR_IA32_MTRR_PHYSBASE9);
+	value1 = rdmsr(MSR_IA32_MTRR_PHYSMASK9);
+	printk("Range 9:base = 0x%x, mask = 0x%x, type = %x\n", value0 & (~0xfff), value1 & (~0xfff), value0 & 0xff);
+	
+}
+
 u64 kernel_pt_phys = 0;
 void map_kernel_memory()
 {
@@ -586,6 +624,7 @@ void arch_init()
 	
 	if (is_bsp()) {
 		wakeup_all_processors();
+		//set_memory_type();
 		//lapic_send_ipi(0xff, 0xfe, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfc, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xfc, APIC_ICR_ASSERT);
