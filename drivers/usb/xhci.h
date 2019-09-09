@@ -49,6 +49,96 @@ struct transfer_trb {
 	u32 reserved1:16;
 };
 
+struct setup_stage_trb {
+	u32 bm_request_type:8;
+	u32 b_request:8;
+	u32 w_value:16;
+	u32 w_index:16;
+	u32 w_length:16;
+	u32 trb_transfer_len:17;
+	u32 rsvd0:5;
+	u32 int_tar:10;
+
+	u32 c:1;
+	u32 rsvd1:4;
+	u32 ioc:1;
+	u32 idt:1;
+	u32 rsvd2:3;
+	u32 trb_type:6;
+	u32 trt:2;
+	u32 rsvd3:14;
+};
+
+struct data_stage_trb {
+	u64 data_buffer_addr;
+	u32 trb_transfer_len:17;
+	u32 td_size:5;
+	u32 int_tar:10;
+
+	u32 c:1;
+	u32 ent:1;
+	u32 isp:1;
+	u32 ns:1;
+	u32 ch:1;
+	u32 ioc:1;
+	u32 idt:1;
+	u32 resvd:3;
+	u32 trb_type:6;
+	u32 dir:1;
+	u32 rsvd1:15;
+};
+
+struct status_stage_trb {
+	u64 rsvd0;
+	u32 rsvd1:24;
+	u32 int_tar:8;
+	u32 c:1;
+	u32 ent:1;
+	u32 rsvd2:2;
+	u32 ch:1;
+	u32 ioc:1;
+	u32 resvd:4;
+	u32 trb_type:6;
+	u32 dir:1;
+	u32 rsvd3:15;
+};
+
+struct isoch_trb {
+	u64 data_buffer_addr;
+	u32 trb_transfer_len:17;
+	u32 td_size:5;
+	u32 int_tar:10;
+
+	u32 c:1;
+	u32 ent:1;
+	u32 isp:1;
+	u32 ns:1;
+	u32 ch:1;
+	u32 ioc:1;
+	u32 idt:1;
+	u32 tbc:2;
+	u32 bei:1;
+	u32 trb_type:6;
+	u32 tlbpc:4;
+	u32 rsvd1:11;
+	u32 sia:1;
+};
+
+struct no_op_trb {
+	u64 rsvd0;
+	u32 rsvd1:24;
+	u32 int_tar:8;
+	u32 c:1;
+	u32 ent:1;
+	u32 rsvd2:2;
+	u32 ch:1;
+	u32 ioc:1;
+	u32 resvd:4;
+	u32 trb_type:6;
+	u32 rsvd3:16;
+};
+
+
 struct port_status_change_event_trb {
 	u32 rsvd0:24;
 	u32 port_id:8;

@@ -100,8 +100,17 @@ int init_device_slot(struct xhci *xhci, int slot_id)
 	address_dev_trb.bsr = 0;
 	xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
-	u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
-	xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
+
+	struct no_op_trb *no_op_trb = (struct no_op_trb *)&transfer_ring[0];
+	no_op_trb->c = 1;
+	no_op_trb->ent = 0;
+	no_op_trb->int_tar = 0;
+	no_op_trb->ch = 0;
+	no_op_trb->ioc = 1;
+	no_op_trb->trb_type = TRB_NO_OP;
+	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
+	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
+	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
 }
 
 int xhci_intr(int irq, void *data)
@@ -152,9 +161,9 @@ int xhci_intr(int irq, void *data)
 	int i;
 	for (i = 0; i < 4; i++) {
 		if (current_trb[i].c == 1) {
-			//printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
+			printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
 			u32 *trb = (u32 *)&current_trb[i];
-			//printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
+			printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
 			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 				erdp += 16;
 				xhci->event_ring_dequeue_ptr++;
