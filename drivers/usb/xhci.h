@@ -394,6 +394,21 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 #define TRB_COMMAND_COMPLETION_EVENT 33
 #define TRB_PORT_STATUS_CHANGE_EVENT 34
 
+#define USB_REQ_GET_STATUS		0x00
+#define USB_REQ_CLEAR_FEATURE		0x01
+#define USB_REQ_SET_FEATURE		0x03
+#define USB_REQ_SET_ADDRESS		0x05
+#define USB_REQ_GET_DESCRIPTOR		0x06
+#define USB_REQ_SET_DESCRIPTOR		0x07
+#define USB_REQ_GET_CONFIGURATION	0x08
+#define USB_REQ_SET_CONFIGURATION	0x09
+#define USB_REQ_GET_INTERFACE		0x0A
+#define USB_REQ_SET_INTERFACE		0x0B
+#define USB_REQ_SYNCH_FRAME		0x0C
+#define USB_REQ_SET_SEL			0x30
+#define USB_REQ_SET_ISOCH_DELAY		0x31
+
+
 
 u32 xhci_cap_rd32(struct xhci *xhci, u64 offset)
 {

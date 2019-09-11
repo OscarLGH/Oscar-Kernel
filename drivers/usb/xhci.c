@@ -101,6 +101,7 @@ int init_device_slot(struct xhci *xhci, int slot_id)
 	xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
 
+/*
 	struct no_op_trb *no_op_trb = (struct no_op_trb *)&transfer_ring[0];
 	no_op_trb->c = 1;
 	no_op_trb->ent = 0;
@@ -109,6 +110,42 @@ int init_device_slot(struct xhci *xhci, int slot_id)
 	no_op_trb->ioc = 1;
 	no_op_trb->trb_type = TRB_NO_OP;
 	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
+*/
+
+	u32 *descriptor = kmalloc(64, GFP_KERNEL);
+	memset(descriptor, 0, 64);
+	struct setup_stage_trb *setup_trb = (struct setup_stage_trb *)&transfer_ring[0];
+	setup_trb->c = 1;
+	setup_trb->b_request = USB_REQ_GET_DESCRIPTOR;
+	setup_trb->bm_request_type = 0x80 | (1 << 5);
+	setup_trb->w_value = 0;
+	setup_trb->w_index = 0;
+	setup_trb->w_length = 64;
+	setup_trb->trb_type = TRB_SETUP_STAGE;
+	setup_trb->trb_transfer_len = 8;
+	setup_trb->idt = 1;
+	setup_trb->trt = 3;
+	
+
+	struct data_stage_trb *data_trb = (struct data_stage_trb *)&transfer_ring[1];
+	data_trb->c = 1;
+	data_trb->data_buffer_addr = VIRT2PHYS(descriptor);
+	data_trb->dir = 1;
+	data_trb->trb_type = TRB_DATA_STAGE;
+	data_trb->trb_transfer_len = 64;
+
+	struct status_stage_trb *status_trb = (struct status_stage_trb *)&transfer_ring[1];
+	status_trb->c = 1;
+	status_trb->ch = 0;
+	status_trb->dir = 1;
+	status_trb->trb_type = TRB_STATUS_STAGE;
+	
+	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
+
+	int i;
+	for (i = 0; i < 16; i++) {
+		printk("%x,", descriptor[i]);
+	}
 	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
 	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
 }
@@ -174,6 +211,21 @@ int xhci_intr(int irq, void *data)
 	xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp) | BIT3);
 	xhci_opreg_wr32(xhci, XHCI_HC_USBSTS, usb_sts | BIT3 | BIT4);
 	return 0;
+}
+
+int usb_control_transfer()
+{
+	
+}
+
+int usb_bulk_transfer()
+{
+	
+}
+
+int usb_int_transfer()
+{
+	
 }
 
 int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
