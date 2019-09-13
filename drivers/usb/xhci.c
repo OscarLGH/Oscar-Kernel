@@ -1,89 +1,150 @@
 #include "xhci.h"
 
 
-int xhci_enable_slot(struct xhci *xhci)
+struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci, int cmd_index, int timeout)
 {
 	u64 erdp;
+	int i;
 	struct trb_template *current_trb;
-	struct trb_template cmd = {0};
-	struct command_completion_event_trb *completion_trb;
-	int i = 0;
-	u64 crcr = 0;
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.trb_type = TRB_ENABLE_SLOT_CMD;
-	xhci_cmd_ring_insert(xhci, &cmd);
-	xhci_doorbell_reg_wr32(xhci, 0, 0);
-	//crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
-	//xhci_opreg_wr32(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0);
-
 	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
 	current_trb = (void *)PHYS2VIRT(erdp);
-
-	printk("STS = %x\n", xhci_opreg_rd32(xhci, XHCI_HC_USBSTS));
-	int slot = -1;
-
-	for (i = 0; i < 16; i++) {
-		if (current_trb[i].trb_type == 33) {
-			completion_trb = (struct command_completion_event_trb *)&current_trb[i];
-			slot = completion_trb->slot_id;
-			goto done;
+	u64 cmd_trb_phys = VIRT2PHYS(&xhci->cmd_ring[cmd_index]);
+	while (1) {
+		for (i = 0; i < 32; i++) {
+			if ((current_trb[i].trb_type == 33) && (current_trb[i].parameter == cmd_trb_phys)) {
+				return (struct command_completion_event_trb *)&current_trb[i];
+			}
 		}
 	}
-done:
-	//crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR);
-	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT1);
-	if (completion_trb->completion_code != 0x1)
+	return NULL;
+}
+
+struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 trb_phys_addr, int timeout)
+{
+	u64 erdp;
+	int i;
+	struct trb_template *current_trb;
+	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
+	current_trb = (void *)PHYS2VIRT(erdp);
+	while (1) {
+		for (i = 0; i < 32; i++) {
+			if ((current_trb[i].trb_type == 32)) {
+				return (struct transfer_event_trb *)&current_trb[i];
+			}
+		}
+	}
+	return NULL;
+}
+
+
+int xhci_enable_slot(struct xhci *xhci)
+{
+	struct trb_template cmd = {0};
+	int cmd_ring_index;
+	struct command_completion_event_trb *completion_trb;
+	int i = 0;
+	int slot = -1;
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.trb_type = TRB_ENABLE_SLOT_CMD;
+	cmd_ring_index = xhci_cmd_ring_insert(xhci, &cmd);
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	
+	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
 		slot = -1;
-	//xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp + event * 0x10) | BIT3);
+	slot = completion_trb->slot_id;
 	return slot;
 }
 
 int xhci_disable_slot(struct xhci *xhci, int slot)
 {
-	u64 erdp;
-	struct trb_template *current_trb;
 	struct trb_template cmd = {0};
+	int cmd_ring_index;
 	struct command_completion_event_trb *completion_trb;
 	int i = 0;
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.trb_type = TRB_DISABLE_SLOT_CMD;
-	cmd.control = slot << 8;
-	xhci_cmd_ring_insert(xhci, &cmd);
+	cmd.control = (slot << 8);
+	cmd_ring_index = xhci_cmd_ring_insert(xhci, &cmd);
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
-
-	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
-	current_trb = (void *)PHYS2VIRT(erdp);
-
-	while (1) {
-		for (i = 0; i < 16; i++) {
-			if (current_trb[i].trb_type == 33) {
-				completion_trb = (struct command_completion_event_trb *)&current_trb[i];
-				return completion_trb->slot_id;
-			}
-		}
-	};
-	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
-	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0);
-	return -1;
+	
+	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
+		return -1;
+	return 0;
 }
 
+int xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct transfer_trb *trb_in)
+{
+	int index = xhci->port[port].transfer_ring_status[endpoint].enquene_pointer;
+	struct transfer_trb *trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
+	*trb = *trb_in;
+	//printk("trb phys:%x\n", VIRT2PHYS(trb));
+	xhci->port[port].transfer_ring_status[endpoint].enquene_pointer++;
 
-int init_device_slot(struct xhci *xhci, int slot_id)
+	return 0;
+}
+
+int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int descriptor_index, void *data)
+{
+	struct setup_stage_trb *setup_trb = kmalloc(sizeof(*setup_trb), GFP_KERNEL);
+	memset(setup_trb, 0, sizeof(*setup_trb));
+	setup_trb->c = 1;
+	setup_trb->b_request = USB_REQ_GET_DESCRIPTOR;
+	setup_trb->bm_request_type = 0x80 | (0 << 5);
+	setup_trb->w_value = (descriptor_type << 8) | descriptor_index;
+	setup_trb->w_index = 0;
+	setup_trb->w_length = 18;
+	setup_trb->trb_type = TRB_SETUP_STAGE;
+	setup_trb->trb_transfer_len = 8;
+	setup_trb->idt = 1;
+	setup_trb->trt = 3;
+	//setup_trb->ioc = 1;
+	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)setup_trb);
+
+	struct data_stage_trb *data_trb = kmalloc(sizeof(*data_trb), GFP_KERNEL);
+	memset(data_trb, 0, sizeof(*data_trb));
+	data_trb->c = 1;
+	data_trb->data_buffer_addr = VIRT2PHYS(data);
+	data_trb->dir = 1;
+	data_trb->trb_type = TRB_DATA_STAGE;
+	data_trb->trb_transfer_len = 18;
+	//data_trb->ioc = 1;
+	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)data_trb);
+
+	struct status_stage_trb *status_trb = kmalloc(sizeof(*status_trb), GFP_KERNEL);
+	memset(status_trb, 0, sizeof(*status_trb));
+	status_trb->c = 1;
+	status_trb->ch = 0;
+	status_trb->dir = 0;
+	status_trb->trb_type = TRB_STATUS_STAGE;
+	status_trb->ioc = 1;
+	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)status_trb);
+
+	//printk("xhci->port[port].slot_id = %d\n", xhci->port[port].slot_id);
+	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, 1);
+	xhci_wait_transfer_completion(xhci, 0, 0);
+}
+
+int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num)
 {
 	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
 	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
 	struct device_context *output_context = kmalloc(0x1000, GFP_KERNEL);
 	memset(input_context, 0, 0x1000);
 	memset(output_context, 0, 0x1000);
+	memset(transfer_ring, 0, 0x1000);
 	input_context->input_ctrl_context.add_context_flags = 0x3;
-	input_context->dev_context.slot_context.root_hub_port_number = 3;
+	input_context->dev_context.slot_context.root_hub_port_number = root_hub_port_num;
 	input_context->dev_context.slot_context.route_string = 0;
 	input_context->dev_context.slot_context.context_entries = 1;
-	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = PHYS2VIRT(transfer_ring);
-	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = PHYS2VIRT(transfer_ring) >> 32;
+	input_context->dev_context.slot_context.speed = 0;
+	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
+	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
 	input_context->dev_context.endpoint_context[0].ep_type = 4;
 	input_context->dev_context.endpoint_context[0].max_packet_size = 64;
 	input_context->dev_context.endpoint_context[0].max_burst_size = 0;
+	input_context->dev_context.endpoint_context[0].average_trb_length = 8;
 	input_context->dev_context.endpoint_context[0].dcs = 1;
 	input_context->dev_context.endpoint_context[0].interval = 0;
 	input_context->dev_context.endpoint_context[0].max_pstreams = 0;
@@ -98,11 +159,23 @@ int init_device_slot(struct xhci *xhci, int slot_id)
 	address_dev_trb.trb_type = TRB_ADDRESS_DEVICE_CMD;
 	address_dev_trb.slot_id = slot_id;
 	address_dev_trb.bsr = 0;
-	xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
+	u64 cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
+
+	xhci->port[root_hub_port_num - 1].slot_id = slot_id;
+	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].transfer_ring_base = transfer_ring;
+	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].enquene_pointer = 0;
+
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	// device context debug
+	//int i;
+	//for (i = 0; i < 0x100; i++) {
+	//	printk("%08x,", ((u32 *)output_context)[i]);
+	//}
 
 /*
 	struct no_op_trb *no_op_trb = (struct no_op_trb *)&transfer_ring[0];
+	memset(no_op_trb, 0, sizeof(*no_op_trb));
 	no_op_trb->c = 1;
 	no_op_trb->ent = 0;
 	no_op_trb->int_tar = 0;
@@ -111,41 +184,13 @@ int init_device_slot(struct xhci *xhci, int slot_id)
 	no_op_trb->trb_type = TRB_NO_OP;
 	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
 */
-
-	u32 *descriptor = kmalloc(64, GFP_KERNEL);
+	void *descriptor = kmalloc(64, GFP_KERNEL);
 	memset(descriptor, 0, 64);
-	struct setup_stage_trb *setup_trb = (struct setup_stage_trb *)&transfer_ring[0];
-	setup_trb->c = 1;
-	setup_trb->b_request = USB_REQ_GET_DESCRIPTOR;
-	setup_trb->bm_request_type = 0x80 | (1 << 5);
-	setup_trb->w_value = 0;
-	setup_trb->w_index = 0;
-	setup_trb->w_length = 64;
-	setup_trb->trb_type = TRB_SETUP_STAGE;
-	setup_trb->trb_transfer_len = 8;
-	setup_trb->idt = 1;
-	setup_trb->trt = 3;
-	
 
-	struct data_stage_trb *data_trb = (struct data_stage_trb *)&transfer_ring[1];
-	data_trb->c = 1;
-	data_trb->data_buffer_addr = VIRT2PHYS(descriptor);
-	data_trb->dir = 1;
-	data_trb->trb_type = TRB_DATA_STAGE;
-	data_trb->trb_transfer_len = 64;
+	usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_DEVICE, 0, descriptor);
+	struct usb_device_descriptor *dev_desc = descriptor;
+	printk("USB VID = %04x PID = %04x configuration = %d\n", dev_desc->id_vender, dev_desc->id_product, dev_desc->b_num_configurations);
 
-	struct status_stage_trb *status_trb = (struct status_stage_trb *)&transfer_ring[1];
-	status_trb->c = 1;
-	status_trb->ch = 0;
-	status_trb->dir = 1;
-	status_trb->trb_type = TRB_STATUS_STAGE;
-	
-	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
-
-	int i;
-	for (i = 0; i < 16; i++) {
-		printk("%x,", descriptor[i]);
-	}
 	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
 	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
 }
@@ -167,6 +212,7 @@ int xhci_intr(int irq, void *data)
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
 		printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
 		printk("port_status = %x\n", port_status);
+		printk("port speed = %d\n", (port_status >> 10) & 0xf);
 		//xhci_opreg_wr32(xhci, 0x400 + port * 0x10, xhci_opreg_rd32(xhci, 0x400 + port * 0x10) | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
 
 		if (port_status & 0x1) {
@@ -183,9 +229,10 @@ int xhci_intr(int irq, void *data)
 			printk("port_status after reset = %x\n", port_status);
 			slot = xhci_enable_slot(xhci);
 			printk("available slot:%d\n", slot);
-			init_device_slot(xhci, slot);
+			init_device_slot(xhci, slot, port + 1);
+			xhci->port[port].slot_id = slot;
 		} else {
-			xhci_disable_slot(xhci, 2);
+			xhci_disable_slot(xhci, xhci->port[port].slot_id);
 			xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
 		}
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
@@ -196,7 +243,7 @@ int xhci_intr(int irq, void *data)
 	u32 ir = xhci_rtreg_rd32(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP);
 
 	int i;
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < 32; i++) {
 		if (current_trb[i].c == 1) {
 			printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
 			u32 *trb = (u32 *)&current_trb[i];
@@ -207,6 +254,8 @@ int xhci_intr(int irq, void *data)
 			}
 		}
 	}
+	//usb_sts = xhci_opreg_rd32(xhci, XHCI_HC_USBSTS);
+	//printk("xhci_intr.USB STS = %x\n", usb_sts);
 	//xhci_opreg_wr32(xhci, 0x400 + port * 0x10, BIT9 | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
 	xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp) | BIT3);
 	xhci_opreg_wr32(xhci, XHCI_HC_USBSTS, usb_sts | BIT3 | BIT4);

@@ -240,7 +240,7 @@ struct endpoint_context {
 
 	u32 dcs:1;
 	u32 rsvdz4:3;
-	u32 tr_dequeue_pointer_lo:18;
+	u32 tr_dequeue_pointer_lo:28;
 
 	u32 tr_dequeue_pointer_hi;
 
@@ -277,6 +277,126 @@ struct input_context {
 };
 #pragma pack(0)
 
+struct transfer_ring_status {
+	struct transfer_trb *transfer_ring_base;
+	int enquene_pointer;
+};
+struct port_status {
+	u64 slot_id;
+	struct transfer_ring_status transfer_ring_status[32];
+};
+
+//USB Standard Request Codes
+#define USB_REQUEST_GET_STATUS 0
+#define USB_REQUEST_CLEAR_FEATURE 1
+#define USB_REQUEST_SET_FEATURE 3
+#define USB_REQUEST_SET_ADDRESS 5
+#define USB_REQUEST_GET_DESCRIPTOR 6
+#define USB_REQUEST_SET_DESCRIPTOR 7
+#define USB_REQUEST_GET_CONFIGURATION 8
+#define USB_REQUEST_SET_CONFIGURATION 9
+#define USB_REQUEST_GET_INTERFACE 10
+#define USB_REQUEST_SET_INTERFACE 11
+#define USB_REQUEST_SYNCH_FRAME 12
+
+//USB Descriptor types
+#define USB_DESCRIPTOR_TYPE_DEVICE 1
+#define USB_DESCRIPTOR_TYPE_CONFIGURATION 2
+#define USB_DESCRIPTOR_TYPE_STRING 3
+#define USB_DESCRIPTOR_TYPE_INTERFACE 4
+#define USB_DESCRIPTOR_TYPE_ENDPOINT 5
+#define USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER 6
+#define USB_DESCRIPTOR_TYPE_OTHER_SPEED_CONF 7
+#define USB_DESCRIPTOR_TYPE_INTERFACE_POWER 8
+
+//USB Descriptors
+struct usb_device_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 bcd_usb;
+	u8 class;
+	u8 subclass;
+	u8 b_device_protocol;
+	u8 b_max_packet_size0;
+	u16 id_vender;
+	u16 id_product;
+	u16 bcd_device;
+	u8 i_manufacturer;
+	u8 i_product;
+	u8 i_serial_number;
+	u8 b_num_configurations;
+};
+
+struct usb_device_qualifier_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 bcd_usb;
+	u8 b_device_class;
+	u8 b_device_subclass;
+	u8 b_device_protocol;
+	u8 b_max_packet_size0;
+	u8 b_num_configurations;
+	u8 b_reserved;
+};
+
+struct usb_configuration_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 w_total_lenth;
+	u8 b_num_interfaces;
+	u8 b_configuration_value;
+	u8 i_configuration;
+	u8 bm_attributes;
+	u8 b_max_power;
+};
+
+struct usb_other_speed_conf_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 w_total_lenth;
+	u8 b_num_interfaces;
+	u8 b_configuration_value;
+	u8 i_configuration;
+	u8 bm_attributes;
+	u8 b_max_power;
+};
+
+struct usb_interface_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u8 b_interface_number;
+	u8 b_alternate_setting;
+	u8 b_num_endpoints;
+	u8 b_interface_class;
+	u8 b_interface_subclass;
+	u8 b_interface_protocol;
+	u8 i_interface;
+};
+
+struct usb_endpoint_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u8 b_endpoint_addr;
+	u8 bm_attributes;
+	u16 w_max_packet_size;
+	u8 b_interval;
+};
+
+struct usb_string_zero_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 w_lang_id[256];
+};
+
+struct usb_string_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u8 b_string[256];
+};
+
+
+
+
 
 struct xhci {
 	struct pci_dev *pdev;
@@ -306,14 +426,18 @@ struct xhci {
 	
 
 	struct event_ring_segment_table_entry *event_ring_seg_table;
+
+	struct port_status port[32];
 };
 
 int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 {
+	int index;
+	index = xhci->cmd_ring_enqueue_ptr;
 	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = *cmd;
 	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 1;
 	xhci->cmd_ring_enqueue_ptr++;
-	return 0;
+	return index;
 }
 
 //TODO define other TRBs
