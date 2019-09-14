@@ -42,5 +42,7 @@ void memset(void *dst,char value,int size);
 int memcmp(const void *s1,const void *s2,int size);
 int hex_dump(void *addr, u64 len);
 int long_int_print(void *addr, u64 len);
+void unicode_to_ascii(u16 *unicode_str, char *ascii_str);
+
 
 #endif

@@ -409,3 +409,12 @@ int long_int_print(void *addr, u64 len)
 	}
 }
 
+void unicode_to_ascii(u16 *unicode_str, char *ascii_str)
+{
+	int i = 0;
+	while (unicode_str[i] != 0) {
+		ascii_str[i] = unicode_str[i];
+		i++;
+	}
+	ascii_str[i] = unicode_str[i];
+}

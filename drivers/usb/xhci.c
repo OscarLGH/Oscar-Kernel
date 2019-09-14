@@ -28,7 +28,7 @@ struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 
 	current_trb = (void *)PHYS2VIRT(erdp);
 	while (1) {
 		for (i = 0; i < 32; i++) {
-			if ((current_trb[i].trb_type == 32)) {
+			if ((current_trb[i].trb_type == 32) && current_trb[i].parameter == trb_phys_addr) {
 				return (struct transfer_event_trb *)&current_trb[i];
 			}
 		}
@@ -74,20 +74,23 @@ int xhci_disable_slot(struct xhci *xhci, int slot)
 	return 0;
 }
 
-int xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct transfer_trb *trb_in)
+u64 xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct transfer_trb *trb_in)
 {
+	u64 phys;
 	int index = xhci->port[port].transfer_ring_status[endpoint].enquene_pointer;
 	struct transfer_trb *trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
 	*trb = *trb_in;
+	phys = VIRT2PHYS(trb);
 	//printk("trb phys:%x\n", VIRT2PHYS(trb));
 	xhci->port[port].transfer_ring_status[endpoint].enquene_pointer++;
 
-	return 0;
+	return phys;
 }
 
 int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int descriptor_index, void *data)
 {
 	struct setup_stage_trb *setup_trb = kmalloc(sizeof(*setup_trb), GFP_KERNEL);
+	u64 trb_phys;
 	memset(setup_trb, 0, sizeof(*setup_trb));
 	setup_trb->c = 1;
 	setup_trb->b_request = USB_REQ_GET_DESCRIPTOR;
@@ -99,7 +102,7 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	setup_trb->trb_transfer_len = 8;
 	setup_trb->idt = 1;
 	setup_trb->trt = 3;
-	//setup_trb->ioc = 1;
+	setup_trb->ioc = 1;
 	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)setup_trb);
 
 	struct data_stage_trb *data_trb = kmalloc(sizeof(*data_trb), GFP_KERNEL);
@@ -109,7 +112,7 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	data_trb->dir = 1;
 	data_trb->trb_type = TRB_DATA_STAGE;
 	data_trb->trb_transfer_len = 256;
-	//data_trb->ioc = 1;
+	data_trb->ioc = 1;
 	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)data_trb);
 
 	struct status_stage_trb *status_trb = kmalloc(sizeof(*status_trb), GFP_KERNEL);
@@ -119,12 +122,12 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	status_trb->dir = 0;
 	status_trb->trb_type = TRB_STATUS_STAGE;
 	status_trb->ioc = 1;
-	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)status_trb);
+	trb_phys = xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)status_trb);
 
 	//printk("xhci->port[port].slot_id = %d\n", xhci->port[port].slot_id);
 	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, 1);
-	xhci_wait_transfer_completion(xhci, 0, 0);
-	for (int i = 0; i < 0x8000000; i++);
+	xhci_wait_transfer_completion(xhci, trb_phys, 0);
+	//for (int i = 0; i < 0x8000000; i++);
 }
 
 int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
@@ -191,14 +194,34 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 	no_op_trb->trb_type = TRB_NO_OP;
 	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
 */
+	int i;
 	void *descriptor = kmalloc(512, GFP_KERNEL);
 	memset(descriptor, 0, 512);
 
 	usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_DEVICE, 0, descriptor);
 	struct usb_device_descriptor *dev_desc = descriptor;
 	printk("USB VID = %04x PID = %04x configuration = %d\n", dev_desc->id_vender, dev_desc->id_product, dev_desc->b_num_configurations);
-	for (int i = 0; i < 18; i++) {
-		printk("%02x ", ((u8 *)descriptor)[i]);
+	//for (int i = 0; i < 18; i++) {
+	//	printk("%02x ", ((u8 *)descriptor)[i]);
+	//}
+	//printk("\n");
+	u16 *string = kmalloc(128, GFP_KERNEL);
+	char ascii_str[256];
+	memset(string, 0, 128);
+	usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_manufacturer, string);
+	unicode_to_ascii(&string[1], ascii_str);
+	printk("%s ", ascii_str);
+
+	memset(string, 0, 128);
+	usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_product, string);
+	unicode_to_ascii(&string[1], ascii_str);
+	printk("%s ", ascii_str);
+
+	if (dev_desc->i_serial_number != 0) {
+		memset(string, 0, 128);
+		usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_serial_number, string);
+		unicode_to_ascii(&string[1], ascii_str);
+		printk("%s", ascii_str);
 	}
 	printk("\n");
 	memset(descriptor, 0, 512);
@@ -230,7 +253,6 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 			i += 1;
 		i += len;
 	}
-	printk("\n");
 	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
 	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
 }
