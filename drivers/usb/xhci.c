@@ -94,7 +94,7 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	setup_trb->bm_request_type = 0x80 | (0 << 5);
 	setup_trb->w_value = (descriptor_type << 8) | descriptor_index;
 	setup_trb->w_index = 0;
-	setup_trb->w_length = 18;
+	setup_trb->w_length = 256;
 	setup_trb->trb_type = TRB_SETUP_STAGE;
 	setup_trb->trb_transfer_len = 8;
 	setup_trb->idt = 1;
@@ -108,7 +108,7 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	data_trb->data_buffer_addr = VIRT2PHYS(data);
 	data_trb->dir = 1;
 	data_trb->trb_type = TRB_DATA_STAGE;
-	data_trb->trb_transfer_len = 18;
+	data_trb->trb_transfer_len = 256;
 	//data_trb->ioc = 1;
 	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)data_trb);
 
@@ -124,9 +124,10 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	//printk("xhci->port[port].slot_id = %d\n", xhci->port[port].slot_id);
 	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, 1);
 	xhci_wait_transfer_completion(xhci, 0, 0);
+	for (int i = 0; i < 0x8000000; i++);
 }
 
-int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num)
+int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
 {
 	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
 	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
@@ -142,7 +143,13 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num)
 	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
 	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
 	input_context->dev_context.endpoint_context[0].ep_type = 4;
-	input_context->dev_context.endpoint_context[0].max_packet_size = 64;
+	if (port_speed == 1 || port_speed == 2) {
+		input_context->dev_context.endpoint_context[0].max_packet_size = 8;
+	} else if (port_speed == 3) {
+		input_context->dev_context.endpoint_context[0].max_packet_size = 64;
+	} else {
+		input_context->dev_context.endpoint_context[0].max_packet_size = 512;
+	}
 	input_context->dev_context.endpoint_context[0].max_burst_size = 0;
 	input_context->dev_context.endpoint_context[0].average_trb_length = 8;
 	input_context->dev_context.endpoint_context[0].dcs = 1;
@@ -184,13 +191,46 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num)
 	no_op_trb->trb_type = TRB_NO_OP;
 	xhci_doorbell_reg_wr32(xhci, slot_id * 4, 1);
 */
-	void *descriptor = kmalloc(64, GFP_KERNEL);
-	memset(descriptor, 0, 64);
+	void *descriptor = kmalloc(512, GFP_KERNEL);
+	memset(descriptor, 0, 512);
 
 	usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_DEVICE, 0, descriptor);
 	struct usb_device_descriptor *dev_desc = descriptor;
 	printk("USB VID = %04x PID = %04x configuration = %d\n", dev_desc->id_vender, dev_desc->id_product, dev_desc->b_num_configurations);
-
+	for (int i = 0; i < 18; i++) {
+		printk("%02x ", ((u8 *)descriptor)[i]);
+	}
+	printk("\n");
+	memset(descriptor, 0, 512);
+	usb_get_descriptor(xhci, root_hub_port_num - 1, USB_DESCRIPTOR_TYPE_CONFIGURATION, 0, descriptor);
+	struct usb_configuration_descriptor *conf = descriptor;
+	printk("w_total = %d, interfaces:%d configuration value:%x i conf:%d max power:%dmA\n", conf->w_total_lenth, conf->b_num_interfaces, conf->b_configuration_value, conf->i_configuration, conf->b_max_power * 2);
+	for (int i = 0; i < conf->w_total_lenth; i++) {
+		printk("%02x ", ((u8 *)descriptor)[i]);
+	}
+	printk("\n");
+	char *endpoint_type[] = {
+		"Control",
+		"Isochronous",
+		"Bulk",
+		"Interrupt"
+	};
+	for (int i = conf->b_length; i < conf->w_total_lenth; ) {
+		int len = ((u8 *)descriptor)[i];
+		int type = ((u8 *)descriptor)[i + 1];
+		if (type == USB_DESCRIPTOR_TYPE_INTERFACE) {
+			struct usb_interface_descriptor *intf = (void *)&((u8 *)descriptor)[i];
+			printk("interface number = %d num of endpoints = %d\n", intf->b_interface_number, intf->b_num_endpoints);
+		}
+		if (type == USB_DESCRIPTOR_TYPE_ENDPOINT) {
+			struct usb_endpoint_descriptor *endp = (void *)&((u8 *)descriptor)[i];
+			printk("endpoint address = %x type = %s\n", endp->b_endpoint_addr, endpoint_type[endp->bm_attributes]);
+		}
+		if (len  == 0)
+			i += 1;
+		i += len;
+	}
+	printk("\n");
 	//u64 crcr = xhci_opreg_rd32(xhci, XHCI_HC_CRCR) & (~0x3f);
 	//xhci_opreg_wr64(xhci, XHCI_HC_CRCR, (crcr + 16) | BIT0 | BIT1);
 }
@@ -212,7 +252,6 @@ int xhci_intr(int irq, void *data)
 		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
 		printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
 		printk("port_status = %x\n", port_status);
-		printk("port speed = %d\n", (port_status >> 10) & 0xf);
 		//xhci_opreg_wr32(xhci, 0x400 + port * 0x10, xhci_opreg_rd32(xhci, 0x400 + port * 0x10) | BIT17 | BIT18 | BIT19 | BIT20 | BIT21 | BIT22);
 
 		if (port_status & 0x1) {
@@ -227,9 +266,10 @@ int xhci_intr(int irq, void *data)
 			}
 			port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
 			printk("port_status after reset = %x\n", port_status);
+			printk("port speed = %d\n", (port_status >> 10) & 0xf);
 			slot = xhci_enable_slot(xhci);
 			printk("available slot:%d\n", slot);
-			init_device_slot(xhci, slot, port + 1);
+			init_device_slot(xhci, slot, port + 1, (port_status >> 10) & 0xf);
 			xhci->port[port].slot_id = slot;
 		} else {
 			xhci_disable_slot(xhci, xhci->port[port].slot_id);
