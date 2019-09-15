@@ -193,6 +193,20 @@ struct address_device_trb {
 	u32 slot_id:8;
 };
 
+struct configure_endpoint_trb {
+	u32 input_context_ptr_lo;
+	u32 input_context_ptr_hi;
+	u32 rsvd;
+
+	u32 c:1;
+	u32 rsvd1:8;
+	u32 dc:1;
+	u32 trb_type:6;
+	u32 rsvd2:8;
+	u32 slot_id:8;
+};
+
+
 struct slot_context {
 	u32 route_string:20;
 	u32 speed:4;
@@ -532,7 +546,31 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 #define USB_REQ_SET_SEL			0x30
 #define USB_REQ_SET_ISOCH_DELAY		0x31
 
+struct usb_endpoint {
+	u64 address;
+	u64 direction;
+	u64 type;
+	u64 reserved;
+	struct list_head head;
+};
 
+struct usb_device {
+	int port;
+	int endpoints;
+	struct list_head endpoint_head;
+	struct list_head list;
+	void *host_controller;
+};
+
+struct list_head usb_device_list;
+
+struct urb {
+	int bm_request_type;
+	int b_request;
+	int w_value;
+	int w_index;
+	int w_length;
+};
 
 u32 xhci_cap_rd32(struct xhci *xhci, u64 offset)
 {
@@ -589,5 +627,17 @@ void xhci_doorbell_reg_wr32(struct xhci *xhci, u64 offset, u32 value)
 	xhci->mmio_virt[(xhci->hc_doorbell_reg_offset + offset) / 4] = value;
 }
 
+static int ep_addr_to_dci(int ep_addr)
+{
+	int index = (ep_addr & 0x7f) * 2;
+
+	if (ep_addr == 0)
+		return 0;
+
+	if (ep_addr & 0x80)
+		index += 1;
+	
+	return index;
+}
 
 
