@@ -636,8 +636,43 @@ static int ep_addr_to_dci(int ep_addr)
 
 	if (ep_addr & 0x80)
 		index += 1;
-	
+
+	//printk("dci:%d\n", index);
 	return index;
 }
+
+#pragma pack(1)
+struct usbmassbulk_cbw {
+	u32 sig;
+	u32 tag;
+	u32 data_transfer_len;
+	u8 flags;
+	u8 lun;
+	u8 length;
+	u8 cb[16];
+};
+
+struct usbmassbulk_csw {
+	u32 sig;
+	u32 tag;
+	u32 data_residue;
+	u8 status;
+};
+
+struct ufi_cmd {
+	u8 op_code;
+	u8 rsvd0:5;
+	u8 logical_unit_number:3;
+	u32 logical_block_addr; //big endian
+	u32 parameter; //big endian
+	u8 rsvd2;
+	u8 rsvd3;
+};
+
+#define SCSI_READ 0xa8
+#define SCSI_READ_CAPACITY 0x25
+#define SCSI_INNQUIRY 0x12
+
+#pragma pack(0)
 
 
