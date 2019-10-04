@@ -206,7 +206,6 @@ struct configure_endpoint_trb {
 	u32 slot_id:8;
 };
 
-
 struct slot_context {
 	u32 route_string:20;
 	u32 speed:4;
@@ -323,6 +322,7 @@ struct port_status {
 #define USB_DESCRIPTOR_TYPE_OTHER_SPEED_CONF 7
 #define USB_DESCRIPTOR_TYPE_INTERFACE_POWER 8
 
+#pragma pack(1)
 //USB Descriptors
 struct usb_device_descriptor {
 	u8 b_length;
@@ -407,7 +407,7 @@ struct usb_string_descriptor {
 	u8 b_descriptor_type;
 	u8 b_string[256];
 };
-
+#pragma pack(0)
 
 
 
