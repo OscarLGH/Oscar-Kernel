@@ -74,11 +74,42 @@ int xhci_disable_slot(struct xhci *xhci, int slot)
 	return 0;
 }
 
+int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
+{
+	int index;
+	index = xhci->cmd_ring_enqueue_ptr;
+	if (index == 0x1000 / sizeof(struct trb_template) - 1) {
+		memset(&xhci->cmd_ring[0], 0, 0x1000);
+		struct link_trb link_trb = {0};
+		link_trb.c = 1;
+		link_trb.trb_type = TRB_LINK;
+		link_trb.ring_seg_pointer = VIRT2PHYS(xhci->cmd_ring);
+		xhci->cmd_ring[index] = *((struct trb_template *)&link_trb);
+		index = 0;
+		xhci->cmd_ring_enqueue_ptr = 0;
+	}
+	xhci->cmd_ring[index] = *cmd;
+	xhci->cmd_ring[index].c = 1;
+	xhci->cmd_ring_enqueue_ptr++;
+	return index;
+}
+
 u64 xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct transfer_trb *trb_in)
 {
 	u64 phys;
 	int index = xhci->port[port].transfer_ring_status[endpoint].enquene_pointer;
 	struct transfer_trb *trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
+	if (index == 0x1000 / sizeof(struct transfer_trb) - 1) {
+		memset(&xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[0], 0, 0x1000);
+		struct link_trb link_trb = {0};
+		link_trb.c = 1;
+		link_trb.trb_type = TRB_LINK;
+		link_trb.ring_seg_pointer = VIRT2PHYS(&xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[0]);
+		*trb = *((struct transfer_trb *)&link_trb);
+		index = 0;
+		xhci->port[port].transfer_ring_status[endpoint].enquene_pointer = 0;
+	}
+	trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
 	*trb = *trb_in;
 	phys = VIRT2PHYS(trb);
 	//printk("trb phys:%x\n", VIRT2PHYS(trb));
@@ -178,9 +209,9 @@ int usb_bulk_transfer(struct xhci *xhci, int port, int endpoint, void *data, int
 	//printk("doorbell target:%x\n", ep_addr_to_dci(endpoint));
 	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, ep_addr_to_dci(endpoint));
 	transfer_trb = xhci_wait_transfer_completion(xhci, trb_phys, 0);
-	printk("transfer result:%d\n", transfer_trb->completion_code);
+	//printk("transfer result:%d\n", transfer_trb->completion_code);
 	//for (int i = 0; i < 0x10000000; i++);
-	return 0;
+	return transfer_trb->completion_code;
 }
 
 int usb_interrupt_transfer(struct xhci *xhci, int port, int endpoint, void *data, int len)
@@ -231,6 +262,15 @@ int usb_set_interface(struct xhci *xhci, int port, int interface)
 	return 0;
 }
 
+#include <msr.h>
+void delay(u64 us)
+{
+	u64 time1 = rdtscp();
+	u64 time2;
+	do {
+		time2 = rdtscp();
+	} while (time2 - time1 < us * 3600);
+}
 
 int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
 {
@@ -393,17 +433,12 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 			input_context->input_ctrl_context.configuration_value = 0;//conf->b_configuration_value;
 			input_context->dev_context.endpoint_context[ep_addr].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
 			input_context->dev_context.endpoint_context[ep_addr].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
-			if (endp->bm_attributes == 0)
-				input_context->dev_context.endpoint_context[ep_addr].ep_type = 4;
-			else {
-				input_context->dev_context.endpoint_context[ep_addr].ep_type = endp->bm_attributes | (endp->b_endpoint_addr & 0x80 ? 0x4 : 0);
-			}
-			//input_context->dev_context.endpoint_context[ep_addr].ep_type = 4;
+			input_context->dev_context.endpoint_context[ep_addr].ep_type = endp->bm_attributes | (endp->b_endpoint_addr & 0x80 ? 0x4 : 0);
 			printk("ep type:%d\n", input_context->dev_context.endpoint_context[ep_addr].ep_type);
 			input_context->dev_context.endpoint_context[ep_addr].max_packet_size = endp->w_max_packet_size;
-			input_context->dev_context.endpoint_context[ep_addr].max_burst_size = 0;
+			input_context->dev_context.endpoint_context[ep_addr].max_burst_size = (endp->w_max_packet_size & 0x1800) >> 11;
 			input_context->dev_context.endpoint_context[ep_addr].average_trb_length = 0x1000;
-			input_context->dev_context.endpoint_context[ep_addr].max_esit_payload_lo = input_context->dev_context.endpoint_context[ep_addr].max_packet_size;
+			input_context->dev_context.endpoint_context[ep_addr].max_esit_payload_lo = endp->w_max_packet_size * (input_context->dev_context.endpoint_context[ep_addr].max_burst_size + 1);
 			input_context->dev_context.endpoint_context[ep_addr].dcs = 1;
 			input_context->dev_context.endpoint_context[ep_addr].interval = 6;
 			input_context->dev_context.endpoint_context[ep_addr].max_pstreams = 0;
@@ -492,14 +527,20 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 		//usb_control_transfer(xhci, root_hub_port_num - 1, &kbd_urb, 1, data);
 		//printk("get idle = %d\n", data[0]);
 		int j = 0;
-		//for (i = 0; i < 0x40000000; i++);
-		while (j++ < 10) {
-			for (i = 0; i < 0x40000000; i++);
+		//while (1) {
+		//	delay(8000);
 			//printk("kbd int endpoint transfer...\n");
-			memset(data, 0, 8);
-			usb_interrupt_transfer(xhci, root_hub_port_num - 1, 0x81, data, 8);
-			hex_dump(data, 8);
-	    }
+		//	memset(data, 0, 8);
+		//	usb_interrupt_transfer(xhci, root_hub_port_num - 1, 0x81, data, 8);
+		//	hex_dump(data, 8);
+			//kbd_urb.b_request = 0x9;
+			//kbd_urb.bm_request_type = (1 << 5) | 1;
+			//kbd_urb.w_value = 0x200;
+			//kbd_urb.w_index = 0;
+			//kbd_urb.w_length = 1;
+			//*data = 0x7;
+			//usb_control_transfer(xhci, root_hub_port_num - 1, &kbd_urb, 0, data);
+	    //}
 	    printk("ep state:%x\n", usb_get_context(xhci, xhci->port[root_hub_port_num - 1].slot_id, 0x81)->ep_state);
 		printk("ep interval:%d\n", usb_get_context(xhci, xhci->port[root_hub_port_num - 1].slot_id, 0x81)->interval);
 		
@@ -638,13 +679,18 @@ int xhci_intr(int irq, void *data)
 
 	int i;
 	for (i = 0; i < 64; i++) {
-		if (current_trb[i].c == 1) {
+		if (current_trb[i].c == 1 && (erdp + 16 * i < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size)) {
 			//printk("event ring %d, type = %d\n", i, current_trb[i].trb_type);
 			u32 *trb = (u32 *)&current_trb[i];
 			printk("%08x %08x %08x %08x\n", trb[0], trb[1], trb[2], trb[3]);
 			if (erdp + 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 				erdp += 16;
 				xhci->event_ring_dequeue_ptr++;
+			} else {
+				void *event_ring = (void *)PHYS2VIRT(xhci->event_ring_seg_table[0].ring_segment_base_addr);
+				memset(event_ring, 0, xhci->event_ring_size);
+				erdp = xhci->event_ring_seg_table[0].ring_segment_base_addr;
+				xhci->event_ring_dequeue_ptr = 0;
 			}
 		}
 	}

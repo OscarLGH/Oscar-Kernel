@@ -252,7 +252,7 @@ inline static int lapic_set_timer(u64 freq, u8 vector)
 
 	crystal_freq = buffer1[2];
 	tsc_freq = buffer1[2] * buffer1[1] / buffer1[0];
-	
+	printk("tsc freq = %d\n", tsc_freq);
 	lapic_reg_write32(APIC_REG_TIMER_DCR, 0xb);
 	
 	lapic_reg_write32(APIC_REG_LVT_TIMER, 0x20000 | vector);

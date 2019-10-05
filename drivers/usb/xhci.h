@@ -138,6 +138,21 @@ struct no_op_trb {
 	u32 rsvd3:16;
 };
 
+struct link_trb {
+	u64 ring_seg_pointer;
+	u32 rsvd1:24;
+	u32 int_tar:8;
+	u32 c:1;
+	u32 tc:1;
+	u32 rsvd2:2;
+	u32 ch:1;
+	u32 ioc:1;
+	u32 resvd:4;
+	u32 trb_type:6;
+	u32 rsvd3:16;
+};
+
+
 
 struct port_status_change_event_trb {
 	u32 rsvd0:24;
@@ -444,15 +459,7 @@ struct xhci {
 	struct port_status port[32];
 };
 
-int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
-{
-	int index;
-	index = xhci->cmd_ring_enqueue_ptr;
-	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr] = *cmd;
-	xhci->cmd_ring[xhci->cmd_ring_enqueue_ptr].c = 1;
-	xhci->cmd_ring_enqueue_ptr++;
-	return index;
-}
+int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd);
 
 //TODO define other TRBs
 
