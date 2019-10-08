@@ -195,6 +195,17 @@ struct transfer_event_trb {
 	u32 slot_id:8;
 };
 
+struct host_controller_event_trb {
+	u64 rsvd1;
+	u32 rsvd2:24;
+	u32 completion_code:8;
+
+	u32 c:1;
+	u32 rsvd3:9;
+	u32 trb_type:6;
+	u32 rsvd4:16;
+};
+
 struct address_device_trb {
 	u32 input_context_ptr_lo;
 	u32 input_context_ptr_hi;
@@ -308,6 +319,7 @@ struct input_context {
 struct transfer_ring_status {
 	struct transfer_trb *transfer_ring_base;
 	int enquene_pointer;
+	int dcs;
 };
 struct port_status {
 	u64 slot_id;
@@ -448,11 +460,12 @@ struct xhci {
 	u64 cmd_ring_size;
 	u64 cmd_ring_enqueue_ptr;
 	struct trb_template *cmd_ring_dequeue_ptr;
+	u64 cmd_ring_dcs;
 	
 	struct trb_template *event_ring;
 	u64 event_ring_size;
 	struct trb_template *event_ring_dequeue_ptr;
-	
+	u64 event_ring_ccs;
 
 	struct event_ring_segment_table_entry *event_ring_seg_table;
 
@@ -538,6 +551,60 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd);
 #define TRB_TRANSFER_EVENT 32
 #define TRB_COMMAND_COMPLETION_EVENT 33
 #define TRB_PORT_STATUS_CHANGE_EVENT 34
+#define TRB_BANDWIDTH_REQUEST_EVENT 35
+#define TRB_BOORBELL_EVENT 36
+#define TRB_HOST_CONTROLLER_EVENT 37
+#define TRB_MFINDEX_WRAP_EVENT 35
+
+#define TRB_COMPLETION_INVALID 0
+#define TRB_COMPLETION_SUCCESS 1
+#define TRB_COMPLETION_DATA_BUFFER_ERROR 2
+#define TRB_COMPLETION_BABBLE_DETECTED_ERROR 3
+#define TRB_COMPLETION_USB_TRANSACTION_ERROR 4
+#define TRB_COMPLETION_TRB_ERROR 5
+#define TRB_COMPLETION_STALL_ERROR 6
+#define TRB_COMPLETION_RESOURCE_ERROR 7
+#define TRB_COMPLETION_BANDWIDTH_ERROR 8
+#define TRB_COMPLETION_NO_SLOTS_AVAILABLE_ERROR 9
+#define TRB_COMPLETION_INVALID_STEAM_TYPE_ERROR 10
+#define TRB_COMPLETION_SLOT_NOT_ENABLED_ERROR 11
+#define TRB_COMPLETION_ENDPOINT_NOT_ENABLED_ERROR 12
+#define TRB_COMPLETION_SHORT_PACKET 13
+#define TRB_COMPLETION_RING_UNDERRUN 14
+#define TRB_COMPLETION_RING_OVERRUN 15
+#define TRB_COMPLETION_VF_EVENT_RING_FULL_ERROR 16
+#define TRB_COMPLETION_PARAMETER_ERROR 17
+#define TRB_COMPLETION_BANDWIDTH_OVERRUN_ERROR 18
+#define TRB_COMPLETION_CONTEXT_STATE_ERROR 19
+#define TRB_COMPLETION_NO_PING_RESPONSE_ERROR 20
+#define TRB_COMPLETION_EVENT_RING_FULL_ERROR 21
+#define TRB_COMPLETION_INCOMPATIBLE_DEVICE_ERROR 22
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #define USB_REQ_GET_STATUS		0x00
 #define USB_REQ_CLEAR_FEATURE		0x01
