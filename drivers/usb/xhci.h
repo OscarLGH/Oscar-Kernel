@@ -546,6 +546,10 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd);
 #define TRB_DISABLE_SLOT_CMD 10
 #define TRB_ADDRESS_DEVICE_CMD 11
 #define TRB_CONFIG_ENDPOINT_CMD 12
+#define TRB_EVALUATE_CONTEXT_CMD 13
+#define TRB_RESET_ENDPOINT_CMD 14
+#define TRB_STOP_ENDPOINT_CMD 15
+
 
 #define TRB_NO_OP_CMD 23
 #define TRB_TRANSFER_EVENT 32
