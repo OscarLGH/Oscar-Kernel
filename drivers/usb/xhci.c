@@ -4,87 +4,83 @@
 struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci, int cmd_index, int timeout)
 {
 	u64 erdp;
-	int i = 0, j = timeout;
+	int i = 0, j = timeout = 10000000;
 	struct trb_template *current_trb;
 	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
-	current_trb = (void *)PHYS2VIRT(erdp);
 	u64 cmd_trb_phys = VIRT2PHYS(&xhci->cmd_ring[cmd_index]);
-	int ccs = xhci->event_ring_ccs;
+	int ccs;
 	while (j--) {
-loop1:
+		ccs = xhci->event_ring_ccs;
+		current_trb = (void *)PHYS2VIRT(erdp);
 		i = 0;
 		ccs = xhci->event_ring_ccs;
 		while (erdp + i * 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_COMMAND_COMPLETION_EVENT) && (current_trb[i].parameter == cmd_trb_phys)) {
+					xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp + i * 16) | BIT3);
+					printk("erdp index = %d\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16);
 					return (struct command_completion_event_trb *)&current_trb[i];
 				}
-				i++;
-			} else {
-				timeout--;
-				if (timeout == 0) {
-					goto out;
-				}
-				goto loop1;
 			}
+			i++;
 		}
-loop2:
 		current_trb = (void *)PHYS2VIRT(xhci->event_ring_seg_table[0].ring_segment_base_addr);
 		ccs = ~ccs;
 		i = 0;
 		while (xhci->event_ring_seg_table[0].ring_segment_base_addr + i * 16 <= erdp - 16) {
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_COMMAND_COMPLETION_EVENT) && (current_trb[i].parameter == cmd_trb_phys)) {
+					xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (xhci->event_ring_seg_table[0].ring_segment_base_addr + i * 16) | BIT3);
+					xhci->event_ring_ccs = ~xhci->event_ring_ccs;
+					printk("erdp index = %d\n", i);
 					return (struct command_completion_event_trb *)&current_trb[i];
 				}
-				i++;
-			} else {
-				timeout--;
-				timeout--;
-				if (timeout == 0) {
-					goto out;
-				}
-				goto loop2;
+				
 			}
+			i++;
 		}
 	}
-out:		
 	return NULL;
 }
 
 struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 trb_phys_addr, int timeout)
 {
 	u64 erdp;
-	int i = 0, j = timeout;
+	int i = 0, j = timeout = 10000000;
 	struct trb_template *current_trb;
 	erdp = xhci_rtreg_rd64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP) & (~0xf);
-	current_trb = (void *)PHYS2VIRT(erdp);
-	int ccs = xhci->event_ring_ccs;
+	int ccs;
 	while (j--) {
+		ccs = xhci->event_ring_ccs;
+		current_trb = (void *)PHYS2VIRT(erdp);
+		i = 0;
 		ccs = xhci->event_ring_ccs;
 		while (erdp + i * 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_TRANSFER_EVENT) && (current_trb[i].parameter == trb_phys_addr)) {
+					xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp + i * 16) | BIT3);
+					printk("erdp index = %d\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16);
 					return (struct transfer_event_trb *)&current_trb[i];
 				}
-				i++;
 			}
+			i++;
 		}
-		//printk("iter1....\n");
 		current_trb = (void *)PHYS2VIRT(xhci->event_ring_seg_table[0].ring_segment_base_addr);
 		ccs = ~ccs;
 		i = 0;
 		while (xhci->event_ring_seg_table[0].ring_segment_base_addr + i * 16 <= erdp - 16) {
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_TRANSFER_EVENT) && (current_trb[i].parameter == trb_phys_addr)) {
+					xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (xhci->event_ring_seg_table[0].ring_segment_base_addr + i * 16) | BIT3);
+					xhci->event_ring_ccs = ~xhci->event_ring_ccs;
+					printk("erdp index = %d\n", i);
 					return (struct transfer_event_trb *)&current_trb[i];
 				}
-				i++;
+				
 			}
+			i++;
 		}
-		//printk("iter2....\n");
 	}
-	printk("trb %x time out.\n", trb_phys_addr);
 	return NULL;
 }
 
@@ -172,9 +168,9 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 	int index;
 	index = xhci->cmd_ring_enqueue_ptr;
 	printk("cmd index = %d\n", index);
-	if (index == 0x1000 / sizeof(struct trb_template) - 1) {
+	if (index == xhci->cmd_ring_size / sizeof(struct trb_template) - 1) {
 		printk("cmd ring overrun.============================\n");
-		memset(&xhci->cmd_ring[0], 0, 0x1000);
+		//memset(&xhci->cmd_ring[0], 0, 0x1000);
 		struct link_trb link_trb = {0};
 		link_trb.c = xhci->cmd_ring_dcs;
 		link_trb.trb_type = TRB_LINK;
@@ -183,6 +179,7 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 		index = 0;
 		xhci->cmd_ring_enqueue_ptr = 0;
 		xhci->cmd_ring_dcs = ~xhci->cmd_ring_dcs;
+		xhci_doorbell_reg_wr32(xhci, 0, 0);
 	}
 	xhci->cmd_ring[index] = *cmd;
 	xhci->cmd_ring[index].c = xhci->cmd_ring_dcs;
@@ -617,7 +614,7 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 		kbd_urb.w_value = 0 << 8;
 		kbd_urb.w_index = 0;
 		kbd_urb.w_length = 0;
-		//usb_control_transfer(xhci, root_hub_port_num - 1, &kbd_urb, 0, NULL);
+		usb_control_transfer(xhci, root_hub_port_num - 1, &kbd_urb, 0, NULL);
 
 		kbd_urb.b_request = 0x2;
 		kbd_urb.bm_request_type = (1 << 5) | 1 | (1 << 7);
