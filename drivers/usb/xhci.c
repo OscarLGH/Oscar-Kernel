@@ -1,5 +1,6 @@
 #include "xhci.h"
 
+struct list_head usb_device_list;
 
 struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci, int cmd_index, int timeout)
 {
@@ -165,7 +166,7 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
 {
 	int index;
 	index = xhci->cmd_ring_enqueue_ptr;
-	printk("cmd index = %d\n", index);
+	//printk("cmd index = %d\n", index);
 	if (index == xhci->cmd_ring_size / sizeof(struct trb_template) - 1) {
 		printk("cmd ring wrapback.============================\n");
 		struct link_trb link_trb = {0};
@@ -192,7 +193,7 @@ u64 xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct t
 	int index = xhci->port[port].transfer_ring_status[endpoint].enquene_pointer;
 	struct transfer_trb *trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
 	trb_in->c = xhci->port[port].transfer_ring_status[endpoint].dcs;
-	printk("trb_in->c = %x\n", trb_in->c);
+	//printk("trb_in->c = %x\n", trb_in->c);
 	if (index == 0x1000 / sizeof(struct transfer_trb) - 1) {
 		printk("transfer ring overrun.\n");
 		//memset(&xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[0], 0, 0x1000);
@@ -301,7 +302,7 @@ int usb_bulk_transfer(struct xhci *xhci, int port, int endpoint, void *data, int
 	//printk("xhci->port[port].slot_id = %d\n", xhci->port[port].slot_id);
 	//printk("doorbell target:%x\n", ep_addr_to_dci(endpoint));
 	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, ep_addr_to_dci(endpoint));
-	//transfer_trb = xhci_wait_transfer_completion(xhci, trb_phys, 300000);
+	transfer_trb = xhci_wait_transfer_completion(xhci, trb_phys, 0xffffffff);
 	//printk("transfer result:%d\n", transfer_trb->completion_code);
 	//for (int i = 0; i < 0x10000000; i++);
 	return transfer_trb->completion_code;
@@ -379,7 +380,10 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 	input_context->dev_context.slot_context.root_hub_port_number = root_hub_port_num;
 	input_context->dev_context.slot_context.route_string = 0;
 	input_context->dev_context.slot_context.context_entries = 1;
-	input_context->dev_context.slot_context.speed = 0;
+	input_context->dev_context.slot_context.speed = port_speed;
+
+	printk("slot context:\n");
+	hex_dump(&input_context->dev_context, 32);
 	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
 	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
 	input_context->dev_context.endpoint_context[0].ep_type = 4;
@@ -397,6 +401,9 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 	input_context->dev_context.endpoint_context[0].max_pstreams = 0;
 	input_context->dev_context.endpoint_context[0].mult = 0;
 	input_context->dev_context.endpoint_context[0].cerr = 3;
+
+	printk("ep0 context:\n");
+	hex_dump(&input_context->dev_context.endpoint_context[0], 32);
 
 	xhci->dcbaa[slot_id] = VIRT2PHYS(output_context);
 
@@ -421,7 +428,6 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 	//for (i = 0; i < 0x100; i++) {
 	//	printk("%08x,", ((u32 *)output_context)[i]);
 	//}
-	
 
 #if 0
 	struct no_op_trb *no_op_trb = (struct no_op_trb *)&transfer_ring[0];
@@ -523,8 +529,10 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 			input_context->dev_context.slot_context.root_hub_port_number = root_hub_port_num;
 			input_context->dev_context.slot_context.route_string = 0;
 			input_context->dev_context.slot_context.context_entries = 5;
-			input_context->dev_context.slot_context.speed = 0;
+			input_context->dev_context.slot_context.speed = port_speed;
 			input_context->dev_context.slot_context.max_exit_latency = 0;
+			printk("slot context:\n");
+			hex_dump(&input_context->dev_context, 32);
 			input_context->input_ctrl_context.configuration_value = 0;//conf->b_configuration_value;
 			input_context->dev_context.endpoint_context[ep_addr].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
 			input_context->dev_context.endpoint_context[ep_addr].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
@@ -532,13 +540,16 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 			printk("ep type:%d\n", input_context->dev_context.endpoint_context[ep_addr].ep_type);
 			input_context->dev_context.endpoint_context[ep_addr].max_packet_size = endp->w_max_packet_size;
 			input_context->dev_context.endpoint_context[ep_addr].max_burst_size = (endp->w_max_packet_size & 0x1800) >> 11;
-			input_context->dev_context.endpoint_context[ep_addr].average_trb_length = 0x8;
+			input_context->dev_context.endpoint_context[ep_addr].average_trb_length = endp->w_max_packet_size;
 			input_context->dev_context.endpoint_context[ep_addr].max_esit_payload_lo = endp->w_max_packet_size * (input_context->dev_context.endpoint_context[ep_addr].max_burst_size + 1);
 			input_context->dev_context.endpoint_context[ep_addr].dcs = 1;
-			input_context->dev_context.endpoint_context[ep_addr].interval = 8;
+			input_context->dev_context.endpoint_context[ep_addr].interval = 6;
 			input_context->dev_context.endpoint_context[ep_addr].max_pstreams = 0;
 			input_context->dev_context.endpoint_context[ep_addr].mult = 0;
 			input_context->dev_context.endpoint_context[ep_addr].cerr = 3;
+
+			printk("ep %d context:\n", ep_addr);
+			hex_dump(&input_context->dev_context.endpoint_context[ep_addr], 32);
 			
 			struct configure_endpoint_trb config_ep_trb = {0};
 			config_ep_trb.input_context_ptr_lo = VIRT2PHYS(input_context);
@@ -623,22 +634,18 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 		//usb_control_transfer(xhci, root_hub_port_num - 1, &kbd_urb, 1, data);
 		//printk("get idle = %d\n", data[0]);
 		int j = 0;
-		while (0) {
-			//printk("kbd int endpoint transfer...\n");
+		while (1) {
+			printk("kbd int endpoint transfer...\n");
 			kbd_urb.b_request = 0x9;
 			kbd_urb.bm_request_type = (1 << 5) | 1;
 			kbd_urb.w_value = 0x200;
 			kbd_urb.w_index = 0;
 			kbd_urb.w_length = 1;
 			*data = 0x7;
-			//usb_control_transfer(xhci, root_hub_port_num - 1, &kbd_urb, 0, data);
 			memset(data, 0, 8);
-			xhci_stop_endpoint(xhci, xhci->port[root_hub_port_num - 1].slot_id, ep_addr_to_dci(0x81));
 			usb_interrupt_transfer(xhci, root_hub_port_num - 1, 0x81, data, 8);
 			delay(8000);
 			hex_dump(data, 8);
-
-			//xhci_reset_endpoint(xhci, xhci->port[root_hub_port_num - 1].slot_id, ep_addr_to_dci(0x81));
 	    }
 	    
 		
@@ -781,7 +788,7 @@ int xhci_intr(int irq, void *data)
 		if (erdp + i * 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 			if (current_trb[i].c == (xhci->event_ring_ccs & BIT0)) {
 				u32 *trb = (u32 *)&current_trb[i];
-				printk("%d:%08x %08x %08x %08x\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16, trb[0], trb[1], trb[2], trb[3]);
+				//printk("%d:%08x %08x %08x %08x\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16, trb[0], trb[1], trb[2], trb[3]);
 				delta += 16;
 				xhci->event_ring_dequeue_ptr++;
 				i++;
@@ -925,7 +932,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 		xhci_rtreg_wr32(xhci, XHCI_HC_IR(i) + XHCI_HC_IR_IMAN, XHCI_HC_IR_IMAN_IE);
 	}
 
-	xhci_opreg_wr32(xhci, XHCI_HC_DNCTRL, 0xffff);
+	xhci_opreg_wr32(xhci, XHCI_HC_DNCTRL, 0x2);
 	xhci_opreg_wr32(xhci, XHCI_HC_USBCMD, XHCI_HC_USBCMD_RUN | XHCI_HC_USBCMD_INTE | XHCI_HC_USBCMD_HSEE);
 
 	return 0;

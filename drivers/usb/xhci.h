@@ -585,31 +585,6 @@ int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd);
 #define TRB_COMPLETION_INCOMPATIBLE_DEVICE_ERROR 22
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #define USB_REQ_GET_STATUS		0x00
 #define USB_REQ_CLEAR_FEATURE		0x01
 #define USB_REQ_SET_FEATURE		0x03
@@ -639,8 +614,6 @@ struct usb_device {
 	struct list_head list;
 	void *host_controller;
 };
-
-struct list_head usb_device_list;
 
 struct urb {
 	int bm_request_type;
@@ -703,6 +676,8 @@ void xhci_rtreg_wr64(struct xhci *xhci, u64 offset, u64 value)
 void xhci_doorbell_reg_wr32(struct xhci *xhci, u64 offset, u32 value)
 {
 	xhci->mmio_virt[(xhci->hc_doorbell_reg_offset + offset) / 4] = value;
+	/* Flush PCI posted writes */
+	xhci->mmio_virt[(xhci->hc_doorbell_reg_offset + offset) / 4];
 }
 
 static int ep_addr_to_dci(int ep_addr)
