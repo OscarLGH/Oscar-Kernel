@@ -17,7 +17,7 @@ struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci,
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_COMMAND_COMPLETION_EVENT) && (current_trb[i].parameter == cmd_trb_phys)) {
 					//xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp + i * 16) | BIT3);
-					printk("erdp index = %d\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16);
+					//printk("erdp index = %d\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16);
 					return (struct command_completion_event_trb *)&current_trb[i];
 				}
 			}
@@ -31,7 +31,7 @@ struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci,
 			if (1 || current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_COMMAND_COMPLETION_EVENT) && (current_trb[i].parameter == cmd_trb_phys)) {
 					//xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (xhci->event_ring_seg_table[0].ring_segment_base_addr + i * 16) | BIT3);
-					printk("erdp index = %d\n", i);
+					//printk("erdp index = %d\n", i);
 					return (struct command_completion_event_trb *)&current_trb[i];
 				}
 				
@@ -58,7 +58,7 @@ struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_TRANSFER_EVENT) && (current_trb[i].parameter == trb_phys_addr)) {
 					//xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (erdp + i * 16) | BIT3);
-					printk("erdp index = %d\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16);
+					//printk("erdp index = %d\n", (erdp + i * 16 - xhci->event_ring_seg_table[0].ring_segment_base_addr) / 16);
 					return (struct transfer_event_trb *)&current_trb[i];
 				}
 			}
@@ -72,7 +72,7 @@ struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 
 			if (current_trb[i].c == (ccs & BIT0)) {
 				if ((current_trb[i].trb_type == TRB_TRANSFER_EVENT) && (current_trb[i].parameter == trb_phys_addr)) {
 					//xhci_rtreg_wr64(xhci, XHCI_HC_IR(0) + XHCI_HC_IR_ERDP, (xhci->event_ring_seg_table[0].ring_segment_base_addr + i * 16) | BIT3);
-					printk("erdp index = %d\n", i);
+					//printk("erdp index = %d\n", i);
 					return (struct transfer_event_trb *)&current_trb[i];
 				}
 				
@@ -134,7 +134,7 @@ int xhci_stop_endpoint(struct xhci *xhci, int slot_id, int endpoint_id)
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
 	
 	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 1000000);
-	printk("reset endpoint:%d\n", completion_trb->completion_code);
+	//printk("reset endpoint:%d\n", completion_trb->completion_code);
 	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
 		return -1;
 	return 0;
@@ -223,8 +223,9 @@ struct endpoint_context *usb_get_context(struct xhci *xhci, int slot_id, int end
 	return context;
 }
 
-int usb_control_transfer(struct xhci *xhci, int port, struct urb *urb, bool direction, void *data)
+int usb_control_transfer(struct usb_device *udev, struct urb *urb, bool direction, void *data)
 {
+	struct xhci *xhci = udev->host_controller_context;
 	struct setup_stage_trb *setup_trb = kmalloc(sizeof(*setup_trb), GFP_KERNEL);
 	struct data_stage_trb *data_trb;
 	struct status_stage_trb *status_trb = kmalloc(sizeof(*status_trb), GFP_KERNEL);
@@ -258,7 +259,7 @@ int usb_control_transfer(struct xhci *xhci, int port, struct urb *urb, bool dire
 	}	
 
 	//setup_trb->ioc = 1;
-	xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)setup_trb);
+	xhci_insert_transfer_trb(xhci, udev->port, 1, (struct transfer_trb *)setup_trb);
 
 	if (data != NULL) {
 		data_trb = kmalloc(sizeof(*data_trb), GFP_KERNEL);
@@ -268,23 +269,24 @@ int usb_control_transfer(struct xhci *xhci, int port, struct urb *urb, bool dire
 		data_trb->trb_type = TRB_DATA_STAGE;
 		data_trb->trb_transfer_len = urb->w_length;
 		data_trb->ioc = 1;
-		trb_phys = xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)data_trb);
+		trb_phys = xhci_insert_transfer_trb(xhci, udev->port, 1, (struct transfer_trb *)data_trb);
 		//printk("control transfer:data trb phys = %x\n", trb_phys);
 	}
 
 	status_trb->ch = 0;
 	status_trb->trb_type = TRB_STATUS_STAGE;
 	status_trb->ioc = 1;
-	trb_phys = xhci_insert_transfer_trb(xhci, port, 1, (struct transfer_trb *)status_trb);
+	trb_phys = xhci_insert_transfer_trb(xhci, udev->port, 1, (struct transfer_trb *)status_trb);
 	//printk("control transfer trb phys:%x\n", trb_phys);
 	//printk("xhci->port[port].slot_id = %d\n", xhci->port[port].slot_id);
-	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, 1);
+	xhci_doorbell_reg_wr32(xhci, xhci->port[udev->port].slot_id * 4, 1);
 	xhci_wait_transfer_completion(xhci, trb_phys, 10000000);
 	//for (int i = 0; i < 0x8000000; i++);
 }
 
-int usb_bulk_transfer(struct xhci *xhci, int port, int endpoint, void *data, int len)
+int usb_bulk_transfer(struct usb_device *udev, int endpoint, void *data, int len)
 {
+	struct xhci *xhci = udev->host_controller_context;
 	struct transfer_event_trb *transfer_trb;
 	struct transfer_trb *normal_trb = kmalloc(sizeof(*normal_trb), GFP_KERNEL);
 	u64 trb_phys = VIRT2PHYS(data);
@@ -297,24 +299,24 @@ int usb_bulk_transfer(struct xhci *xhci, int port, int endpoint, void *data, int
 	normal_trb->ioc = 1;
 	normal_trb->trb_type = TRB_NORMAL;
 	//printk("dci = %d\n", ep_addr_to_dci(endpoint));
-	trb_phys = xhci_insert_transfer_trb(xhci, port, ep_addr_to_dci(endpoint) - 1, normal_trb);
+	trb_phys = xhci_insert_transfer_trb(xhci, udev->port, ep_addr_to_dci(endpoint) - 1, normal_trb);
 	//printk("bulk transfer trb phys:%x\n", trb_phys);
 	//printk("xhci->port[port].slot_id = %d\n", xhci->port[port].slot_id);
 	//printk("doorbell target:%x\n", ep_addr_to_dci(endpoint));
-	xhci_doorbell_reg_wr32(xhci, xhci->port[port].slot_id * 4, ep_addr_to_dci(endpoint));
+	xhci_doorbell_reg_wr32(xhci, xhci->port[udev->port].slot_id * 4, ep_addr_to_dci(endpoint));
 	transfer_trb = xhci_wait_transfer_completion(xhci, trb_phys, 0xffffffff);
 	//printk("transfer result:%d\n", transfer_trb->completion_code);
 	//for (int i = 0; i < 0x10000000; i++);
 	return transfer_trb->completion_code;
 }
 
-int usb_interrupt_transfer(struct xhci *xhci, int port, int endpoint, void *data, int len)
+int usb_interrupt_transfer(struct usb_device *udev, int endpoint, void *data, int len)
 {
-	return usb_bulk_transfer(xhci, port, endpoint, data, len);
+	return usb_bulk_transfer(udev, endpoint, data, len);
 }
 
 
-int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int descriptor_index, void *data, int len)
+int usb_get_descriptor(struct usb_device *udev, int descriptor_type, int descriptor_index, void *data, int len)
 {
 	struct urb *urb = kmalloc(sizeof(*urb), GFP_KERNEL);
 	memset(urb, 0, sizeof(*urb));
@@ -323,12 +325,12 @@ int usb_get_descriptor(struct xhci *xhci, int port, int descriptor_type, int des
 	urb->w_value = (descriptor_type << 8) | descriptor_index;
 	urb->w_index = 0;
 	urb->w_length = len;
-	usb_control_transfer(xhci, port, urb, 1, data);
+	usb_control_transfer(udev, urb, 1, data);
 	//kfree(urb);
 	return 0;
 }
 
-int usb_set_config(struct xhci *xhci, int port, int configuration)
+int usb_set_config(struct usb_device *udev, int configuration)
 {
 	struct urb *urb = kmalloc(sizeof(*urb), GFP_KERNEL);
 	memset(urb, 0, sizeof(*urb));
@@ -337,12 +339,12 @@ int usb_set_config(struct xhci *xhci, int port, int configuration)
 	urb->w_value = configuration;
 	urb->w_index = 0;
 	urb->w_length = 0;
-	usb_control_transfer(xhci, port, urb, 0, NULL);
+	usb_control_transfer(udev, urb, 0, NULL);
 	//kfree(urb);
 	return 0;
 }
 
-int usb_set_interface(struct xhci *xhci, int port, int interface)
+int usb_set_interface(struct usb_device *udev, int interface)
 {
 	struct urb *urb = kmalloc(sizeof(*urb), GFP_KERNEL);
 	memset(urb, 0, sizeof(*urb));
@@ -351,7 +353,7 @@ int usb_set_interface(struct xhci *xhci, int port, int interface)
 	urb->w_value = interface;
 	urb->w_index = 0;
 	urb->w_length = 0;
-	usb_control_transfer(xhci, port, urb, 0, NULL);
+	usb_control_transfer(udev, urb, 0, NULL);
 	//kfree(urb);
 	return 0;
 }
@@ -366,6 +368,221 @@ void delay(u64 us)
 	} while (time2 - time1 < us * 3600);
 }
 
+int xhci_address_device(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
+{
+	struct command_completion_event_trb *comp_trb;
+	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
+	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
+	struct device_context *output_context = kmalloc(0x1000, GFP_KERNEL);
+	memset(input_context, 0, 0x1000);
+	memset(output_context, 0, 0x1000);
+	memset(transfer_ring, 0, 0x1000);
+	input_context->input_ctrl_context.add_context_flags = 0x3;
+	input_context->dev_context.slot_context.root_hub_port_number = root_hub_port_num;
+	input_context->dev_context.slot_context.route_string = 0;
+	input_context->dev_context.slot_context.context_entries = 1;
+	input_context->dev_context.slot_context.speed = port_speed;
+
+	//printk("slot context:\n");
+	//hex_dump(&input_context->dev_context, 32);
+	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
+	input_context->dev_context.endpoint_context[0].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
+	input_context->dev_context.endpoint_context[0].ep_type = 4;
+	if (port_speed == 1 || port_speed == 2) {
+		input_context->dev_context.endpoint_context[0].max_packet_size = 8;
+	} else if (port_speed == 3) {
+		input_context->dev_context.endpoint_context[0].max_packet_size = 64;
+	} else {
+		input_context->dev_context.endpoint_context[0].max_packet_size = 512;
+	}
+	input_context->dev_context.endpoint_context[0].max_burst_size = 0;
+	input_context->dev_context.endpoint_context[0].average_trb_length = 0x1000;
+	input_context->dev_context.endpoint_context[0].dcs = 1;
+	input_context->dev_context.endpoint_context[0].interval = 0;
+	input_context->dev_context.endpoint_context[0].max_pstreams = 0;
+	input_context->dev_context.endpoint_context[0].mult = 0;
+	input_context->dev_context.endpoint_context[0].cerr = 3;
+
+	//printk("ep0 context:\n");
+	//hex_dump(&input_context->dev_context.endpoint_context[0], 32);
+
+	xhci->dcbaa[slot_id] = VIRT2PHYS(output_context);
+
+	struct address_device_trb address_dev_trb = {0};
+	address_dev_trb.input_context_ptr_lo = VIRT2PHYS(input_context);
+	address_dev_trb.input_context_ptr_hi = VIRT2PHYS(input_context) >> 32;
+	address_dev_trb.trb_type = TRB_ADDRESS_DEVICE_CMD;
+	address_dev_trb.slot_id = slot_id;
+	address_dev_trb.bsr = 0;
+	u64 cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
+
+	xhci->port[root_hub_port_num - 1].slot_id = slot_id;
+	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].transfer_ring_base = transfer_ring;
+	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].enquene_pointer = 0;
+	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].dcs = 1;
+
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	comp_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	return comp_trb->completion_code;
+}
+
+int configure_all_endpoints(struct usb_device *udev)
+{
+	struct xhci *xhci = udev->host_controller_context;
+	struct usb_endpoint *ep;
+	int i;
+	int cmd_ring_index;
+	struct command_completion_event_trb *comp_trb;
+	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
+	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
+	struct device_context *output_context = kmalloc(0x1000, GFP_KERNEL);
+	memset(input_context, 0, 0x1000);
+	memset(output_context, 0, 0x1000);
+	memset(transfer_ring, 0, 0x1000);
+	void *descriptor = kmalloc(512, GFP_KERNEL);
+	memset(descriptor, 0, 512);
+
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_DEVICE, 0, descriptor, sizeof(struct usb_device_descriptor));
+	struct usb_device_descriptor *dev_desc = descriptor;
+	printk("USB VID = %04x PID = %04x configuration = %d class:%x subclass:%x protocol:%x\n", dev_desc->id_vender, dev_desc->id_product, dev_desc->b_num_configurations, dev_desc->class, dev_desc->subclass, dev_desc->b_device_protocol);
+
+	u16 *string = kmalloc(128, GFP_KERNEL);
+	char ascii_str[256];
+	memset(string, 0, 128);
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_manufacturer, string, 2);
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_manufacturer, string, ((u8 *)string)[0]);
+	unicode_to_ascii(&string[1], ascii_str);
+	printk("%s ", ascii_str);
+
+	memset(string, 0, 128);
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_product, string, 2);
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_product, string, ((u8 *)string)[0]);
+	unicode_to_ascii(&string[1], ascii_str);
+	printk("%s ", ascii_str);
+
+	if (dev_desc->i_serial_number != 0) {
+		memset(string, 0, 128);
+		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_serial_number, string, 2);
+		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, dev_desc->i_serial_number, string, ((u8 *)string)[0]);
+		unicode_to_ascii(&string[1], ascii_str);
+		printk("%s", ascii_str);
+	}
+	printk("\n");
+	memset(descriptor, 0, 512);
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_CONFIGURATION, 0, descriptor, sizeof(struct usb_configuration_descriptor));
+	struct usb_configuration_descriptor *conf = descriptor;
+	printk("w_total = %d, interfaces:%d configuration value:%x i conf:%d max power:%dmA\n", conf->w_total_lenth, conf->b_num_interfaces, conf->b_configuration_value, conf->i_configuration, conf->b_max_power * 2);
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_CONFIGURATION, 0, descriptor, conf->w_total_lenth);
+
+	char *endpoint_type[] = {
+		"Control",
+		"Isochronous",
+		"Bulk",
+		"Interrupt"
+	};
+
+	usb_set_config(udev, conf->b_configuration_value);
+
+	int intfi = 0;
+	for (int i = conf->b_length; i < conf->w_total_lenth; ) {
+		int len = ((u8 *)descriptor)[i];
+		int type = ((u8 *)descriptor)[i + 1];
+		if (type == USB_DESCRIPTOR_TYPE_INTERFACE) {
+			struct usb_interface_descriptor *intf = (void *)&((u8 *)descriptor)[i];
+			printk("interface number = %d num of endpoints = %d alternate setting:%d class:%x subclass:%x protocol:%x\n", intf->b_interface_number, intf->b_num_endpoints, intf->b_alternate_setting, intf->b_interface_class, intf->b_interface_subclass, intf->b_interface_protocol);
+			intfi++;
+		}
+		if (type == USB_DESCRIPTOR_TYPE_ENDPOINT) {
+			struct usb_endpoint_descriptor *endp = (void *)&((u8 *)descriptor)[i];
+			printk("endpoint address = %x type = %s max packet size = %d interval = %d\n", endp->b_endpoint_addr, endpoint_type[endp->bm_attributes], endp->w_max_packet_size, endp->b_interval);
+			int ep_addr = endp->b_endpoint_addr & 0x1f;
+			int dci = ep_addr_to_dci(endp->b_endpoint_addr);
+			ep_addr = dci - 1;
+			//printk("configuring endpoint %d dci = %d\n", ep_addr, dci);
+			transfer_ring = kmalloc(0x1000, GFP_KERNEL);
+			memset(transfer_ring, 0, 0x1000);
+			//printk("transfer ring:%x\n", transfer_ring);
+			input_context = kmalloc(0x1000, GFP_KERNEL);
+			memset(input_context, 0, 0x1000);
+			input_context->input_ctrl_context.add_context_flags = (1 << dci);
+			//printk("input_context->input_ctrl_context.add_context_flags = %x\n", input_context->input_ctrl_context.add_context_flags);
+			input_context->dev_context.slot_context.root_hub_port_number = udev->port;
+			input_context->dev_context.slot_context.route_string = 0;
+			input_context->dev_context.slot_context.context_entries = 5;
+			input_context->dev_context.slot_context.speed = udev->speed;
+			input_context->dev_context.slot_context.max_exit_latency = 0;
+			//printk("slot context:\n");
+			//hex_dump(&input_context->dev_context, 32);
+			input_context->input_ctrl_context.configuration_value = 0;//conf->b_configuration_value;
+			input_context->dev_context.endpoint_context[ep_addr].tr_dequeue_pointer_lo = VIRT2PHYS(transfer_ring) >> 4;
+			input_context->dev_context.endpoint_context[ep_addr].tr_dequeue_pointer_hi = (VIRT2PHYS(transfer_ring) >> 32);
+			input_context->dev_context.endpoint_context[ep_addr].ep_type = endp->bm_attributes | (endp->b_endpoint_addr & 0x80 ? 0x4 : 0);
+			//printk("ep type:%d\n", input_context->dev_context.endpoint_context[ep_addr].ep_type);
+			input_context->dev_context.endpoint_context[ep_addr].max_packet_size = endp->w_max_packet_size;
+			input_context->dev_context.endpoint_context[ep_addr].max_burst_size = (endp->w_max_packet_size & 0x1800) >> 11;
+			input_context->dev_context.endpoint_context[ep_addr].average_trb_length = endp->w_max_packet_size;
+			input_context->dev_context.endpoint_context[ep_addr].max_esit_payload_lo = endp->w_max_packet_size * (input_context->dev_context.endpoint_context[ep_addr].max_burst_size + 1);
+			input_context->dev_context.endpoint_context[ep_addr].dcs = 1;
+			input_context->dev_context.endpoint_context[ep_addr].interval = order_base_2(endp->b_interval) + 3;
+			input_context->dev_context.endpoint_context[ep_addr].max_pstreams = 0;
+			input_context->dev_context.endpoint_context[ep_addr].mult = 0;
+			input_context->dev_context.endpoint_context[ep_addr].cerr = 3;
+
+			//printk("ep %d context:\n", ep_addr);
+			//hex_dump(&input_context->dev_context.endpoint_context[ep_addr], 32);
+			
+			struct configure_endpoint_trb config_ep_trb = {0};
+			config_ep_trb.input_context_ptr_lo = VIRT2PHYS(input_context);
+			config_ep_trb.input_context_ptr_hi = VIRT2PHYS(input_context) >> 32;
+			config_ep_trb.trb_type = TRB_CONFIG_ENDPOINT_CMD;
+			config_ep_trb.slot_id = udev->slot;
+			config_ep_trb.dc = 0;
+			config_ep_trb.c = 1;
+			cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&config_ep_trb);
+			xhci->port[udev->port - 1].slot_id = udev->slot;
+			xhci->port[udev->port - 1].transfer_ring_status[ep_addr].transfer_ring_base = transfer_ring;
+			xhci->port[udev->port - 1].transfer_ring_status[ep_addr].enquene_pointer = 0;
+			xhci->port[udev->port - 1].transfer_ring_status[ep_addr].dcs = 1;
+
+			xhci_doorbell_reg_wr32(xhci, 0, 0);
+			comp_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+			if (comp_trb->completion_code == TRB_COMPLETION_SUCCESS) {
+				ep = kmalloc(sizeof(*ep), GFP_KERNEL);
+				ep->address = ep_addr;
+				ep->type = input_context->dev_context.endpoint_context[ep_addr].ep_type;
+				memset(ep, 0, sizeof(*ep));
+				INIT_LIST_HEAD(&ep->head);
+				list_add(&ep->head, &udev->endpoint_head);
+			}
+		}
+		if (len == 0)
+			i += 1;
+		i += len;
+	}
+}
+
+int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
+{
+	struct usb_device *udev;
+	int ret;
+	ret = xhci_address_device(xhci, slot_id, root_hub_port_num, port_speed);
+	if (ret != TRB_COMPLETION_SUCCESS) {
+		printk("address device failed!\n");
+		return -EFAULT;
+	}
+	udev = kmalloc(sizeof(*udev), GFP_KERNEL);
+	memset(udev, 0, sizeof(*udev));
+	INIT_LIST_HEAD(&udev->endpoint_head);
+	udev->port = root_hub_port_num - 1;
+	udev->speed = port_speed;
+	udev->slot = slot_id;
+	udev->host_controller_context = xhci;
+	printk("usb device at port %d slot:%d speed %d registered.\n", udev->port, udev->slot, udev->speed);
+	configure_all_endpoints(udev);
+	return 0;
+}
+
+#if 0
 int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
 {
 	int dev_type = -1;
@@ -723,6 +940,7 @@ int init_device_slot(struct xhci *xhci, int slot_id, int root_hub_port_num, int 
 	}
 #endif
 }
+#endif
 
 char *usb_port_speed_info[] = {
 	"",
@@ -768,7 +986,7 @@ int xhci_intr(int irq, void *data)
 			printk("port speed = %d, %s\n", (port_status >> 10) & 0xf, usb_port_speed_info[(port_status >> 10) & 0xf]);
 			slot = xhci_enable_slot(xhci);
 			printk("available slot:%d\n", slot);
-			init_device_slot(xhci, slot, port + 1, (port_status >> 10) & 0xf);
+			usb_device_init(xhci, slot, port + 1, (port_status >> 10) & 0xf);
 			xhci->port[port].slot_id = slot;
 		} else {
 			xhci_disable_slot(xhci, xhci->port[port].slot_id);
@@ -783,7 +1001,7 @@ int xhci_intr(int irq, void *data)
 	int i = 0;
 	u64 last_erdp = erdp;
 	u64 delta = 0;
-	printk("erdp = %x\n", erdp);
+	//printk("erdp = %x\n", erdp);
 	while (erdp + 16 != last_erdp) {
 		if (erdp + i * 16 < xhci->event_ring_seg_table[0].ring_segment_base_addr + xhci->event_ring_size) {
 			if (current_trb[i].c == (xhci->event_ring_ccs & BIT0)) {

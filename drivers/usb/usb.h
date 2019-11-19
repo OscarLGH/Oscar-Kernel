@@ -2,6 +2,7 @@
 #define _USB_h
 
 #include <types.h>
+#include "list.h"
 
 struct usb_endpoint {
 	u64 address;
@@ -13,11 +14,12 @@ struct usb_endpoint {
 
 struct usb_device {
 	int port;
+	int slot;
 	int endpoints;
 	int speed;
 	struct list_head endpoint_head;
 	struct list_head list;
-	void *host_controller;
+	void *host_controller_context;
 };
 
 struct urb;
@@ -279,4 +281,7 @@ struct usb_string_descriptor {
 	u8 b_string[256];
 };
 #pragma pack(0)
+
+int usb_device_register(struct usb_device *dev);
+int usb_device_unregister(struct usb_device *dev);
 #endif
