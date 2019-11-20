@@ -91,24 +91,35 @@ struct usb_string_descriptor {
 };
 #pragma pack(0)
 
+struct urb;
+typedef void (*usb_complete_t)(struct urb *);
+
+struct inflight_transfer {
+	struct list_head list;
+	u64 trb_phys;
+};
+
 struct usb_endpoint {
 	struct usb_endpoint_descriptor desc;
 	struct list_head list;
 	struct list_head urb_list;
 };
 
+struct usb_interface {
+	struct usb_interface_descriptor desc;
+	struct list_head endpoint_list;
+	struct list_head list;
+};
 struct usb_device {
 	int port;
 	int slot;
 	int endpoints;
 	int speed;
-	struct list_head endpoint_head;
+	struct usb_device_descriptor desc;
+	struct list_head interface_head;
 	struct list_head list;
 	void *host_controller_context;
 };
-
-struct urb;
-typedef void (*usb_complete_t)(struct urb *);
 
 enum usb_device_speed {
 	USB_SPEED_UNKNOWN = 0,			/* enumerating */
@@ -283,4 +294,7 @@ static inline void usb_fill_int_urb(struct urb *urb,
 
 int usb_device_register(struct usb_device *dev);
 int usb_device_unregister(struct usb_device *dev);
+int usb_core_init() ;
+
+extern struct list_head usb_dev_list;
 #endif
