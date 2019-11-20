@@ -190,13 +190,13 @@ u64 xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct t
 	u64 phys;
 	int index = xhci->port[port].transfer_ring_status[endpoint].enquene_pointer;
 	struct transfer_trb *trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
-	trb_in->c = xhci->port[port].transfer_ring_status[endpoint].dcs;
 	//printk("trb_in->c = %x\n", trb_in->c);
 	if (index == 0x1000 / sizeof(struct transfer_trb) - 1) {
 		printk("transfer ring overrun.\n");
-		//memset(&xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[0], 0, 0x1000);
+		//memset(&xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[0], 0, 0x1000 - 0x10);
 		struct link_trb link_trb = {0};
-		xhci->port[port].transfer_ring_status[endpoint].dcs;
+		link_trb.c = xhci->port[port].transfer_ring_status[endpoint].dcs;
+		link_trb.tc = 1;
 		link_trb.trb_type = TRB_LINK;
 		link_trb.ring_seg_pointer = VIRT2PHYS(xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base);
 		*trb = *((struct transfer_trb *)&link_trb);
@@ -206,6 +206,7 @@ u64 xhci_insert_transfer_trb(struct xhci *xhci, int port, int endpoint, struct t
 		
 	}
 	trb = &xhci->port[port].transfer_ring_status[endpoint].transfer_ring_base[index];
+	trb_in->c = xhci->port[port].transfer_ring_status[endpoint].dcs;
 	*trb = *trb_in;
 	phys = VIRT2PHYS(trb);
 	//printk("trb phys:%x\n", VIRT2PHYS(trb));
@@ -663,6 +664,12 @@ int usb_kbd_test(struct usb_device *udev)
 	usb_interrupt_transfer(udev, 0x81, data, 8);
 }
 
+int usb_mouse_test(struct usb_device *udev)
+{
+	u8 data[128];
+	usb_interrupt_transfer(udev, 0x82, data, 4);
+}
+
 int usb_massstorage_test(struct usb_device *udev)
 {
 	struct urb bbb_urb;
@@ -768,6 +775,11 @@ int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int p
 			(intf->desc.b_interface_protocol == 1)) {
 			usb_kbd_test(udev);
 		}
+		if ((intf->desc.b_interface_class == 3) && 
+			(intf->desc.b_interface_subclass == 1) && 
+			(intf->desc.b_interface_protocol == 2)) {
+			usb_mouse_test(udev);
+		}
 		if ((intf->desc.b_interface_class == 8) && 
 			(intf->desc.b_interface_subclass == 6) && 
 			(intf->desc.b_interface_protocol == 0x50)) {
@@ -821,6 +833,10 @@ int handle_transfer_completion(struct xhci *xhci, struct transfer_event_trb *eve
 						printk("transfer completed on usb port %d endpoint %x\n", udev->port, ep->desc.b_endpoint_addr);
 						if (ep->desc.b_endpoint_addr == 0x81) {
 							usb_interrupt_transfer(udev, 0x81, data, 8);
+						}
+
+						if (ep->desc.b_endpoint_addr == 0x82) {
+							usb_interrupt_transfer(udev, 0x82, data, 4);
 						}
 					}
 				}
