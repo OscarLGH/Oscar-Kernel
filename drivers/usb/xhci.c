@@ -340,7 +340,7 @@ int usb_set_config(struct usb_device *udev, int configuration)
 	urb->w_index = 0;
 	urb->w_length = 0;
 	usb_control_transfer(udev, urb, 0, NULL);
-	//kfree(urb);
+	kfree(urb);
 	return 0;
 }
 
@@ -354,7 +354,7 @@ int usb_set_interface(struct usb_device *udev, int interface)
 	urb->w_index = 0;
 	urb->w_length = 0;
 	usb_control_transfer(udev, urb, 0, NULL);
-	//kfree(urb);
+	kfree(urb);
 	return 0;
 }
 
@@ -416,6 +416,7 @@ int xhci_address_device(struct xhci *xhci, int slot_id, int root_hub_port_num, i
 	address_dev_trb.bsr = 0;
 	u64 cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
 
+	xhci->port[root_hub_port_num - 1].input_context = input_context;
 	xhci->port[root_hub_port_num - 1].slot_id = slot_id;
 	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].transfer_ring_base = transfer_ring;
 	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].enquene_pointer = 0;
@@ -580,6 +581,27 @@ int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int p
 	printk("usb device at port %d slot:%d speed %d registered.\n", udev->port, udev->slot, udev->speed);
 	configure_all_endpoints(udev);
 	return 0;
+}
+
+int usb_device_remove(struct xhci *xhci, int slot_id, int root_hub_port_num)
+{
+	struct usb_device *udev = NULL, *udevp;
+	void *slot_output = (void *)PHYS2VIRT(xhci->dcbaa[slot_id]);
+
+	list_for_each_entry(udevp, &usb_device_list, list) {
+		if (udevp->port == root_hub_port_num) {
+			udev = udevp;
+			break;
+		}
+	}
+
+	if (udev != NULL) {
+		kfree(slot_output);
+		//TODO free all allocated resources.
+		
+		list_del(&udev->list);
+		kfree(udev);
+	}
 }
 
 #if 0
@@ -953,6 +975,53 @@ char *usb_port_speed_info[] = {
 	"SuperSpeedPlus Gen2 x2, 10 Gb/s USB 3.2",
 };
 
+int submit_urb(struct urb *urb)
+{
+	
+}
+
+int handle_transfer_complemetion(struct xhci *xhci, struct transfer_event_trb *event_trb)
+{
+	struct trb *trb = PHYS2VIRT(event_trb->trb_pointer);
+	struct urb *urb = NULL;
+	if (urb->complete != NULL) {
+		urb->complete(urb);
+	}
+}
+
+int handle_port_status_change(struct xhci *xhci, struct port_status_change_event_trb *port_ch_trb)
+{
+	int port;
+	int slot;
+	port = port_ch_trb[0].port_id - 1;
+	port_status = xhci_opreg_rd32(xhci, XHCI_HC_PORT_REG + port * 0x10);
+	printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
+	printk("port_status = %x\n", port_status);
+
+	if (port_status & 0x1) {
+		xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PR | XHCI_PORTSC_PP);
+		while (1) {
+			port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
+			
+			if ((port_status & XHCI_PORTSC_PRC) != 0) {
+				xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
+				break;
+			}
+		}
+		port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
+		printk("port_status after reset = %x\n", port_status);
+		printk("port speed = %d, %s\n", (port_status >> 10) & 0xf, usb_port_speed_info[(port_status >> 10) & 0xf]);
+		slot = xhci_enable_slot(xhci);
+		printk("available slot:%d\n", slot);
+		usb_device_init(xhci, slot, port + 1, (port_status >> 10) & 0xf);
+		xhci->port[port].slot_id = slot;
+	} else {
+		xhci_disable_slot(xhci, xhci->port[port].slot_id);
+		usb_device_remove(xhci, slot, port + 1);
+		xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
+	}
+}
+
 int xhci_intr(int irq, void *data)
 {
 	struct xhci *xhci = data;
@@ -990,6 +1059,7 @@ int xhci_intr(int irq, void *data)
 			xhci->port[port].slot_id = slot;
 		} else {
 			xhci_disable_slot(xhci, xhci->port[port].slot_id);
+			usb_device_remove(xhci, slot, port + 1);
 			xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
 		}
 	}

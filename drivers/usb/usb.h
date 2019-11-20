@@ -4,12 +4,97 @@
 #include <types.h>
 #include "list.h"
 
+#pragma pack(1)
+//USB Descriptors
+struct usb_device_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 bcd_usb;
+	u8 class;
+	u8 subclass;
+	u8 b_device_protocol;
+	u8 b_max_packet_size0;
+	u16 id_vender;
+	u16 id_product;
+	u16 bcd_device;
+	u8 i_manufacturer;
+	u8 i_product;
+	u8 i_serial_number;
+	u8 b_num_configurations;
+};
+
+struct usb_device_qualifier_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 bcd_usb;
+	u8 b_device_class;
+	u8 b_device_subclass;
+	u8 b_device_protocol;
+	u8 b_max_packet_size0;
+	u8 b_num_configurations;
+	u8 b_reserved;
+};
+
+struct usb_configuration_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 w_total_lenth;
+	u8 b_num_interfaces;
+	u8 b_configuration_value;
+	u8 i_configuration;
+	u8 bm_attributes;
+	u8 b_max_power;
+};
+
+struct usb_other_speed_conf_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 w_total_lenth;
+	u8 b_num_interfaces;
+	u8 b_configuration_value;
+	u8 i_configuration;
+	u8 bm_attributes;
+	u8 b_max_power;
+};
+
+struct usb_interface_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u8 b_interface_number;
+	u8 b_alternate_setting;
+	u8 b_num_endpoints;
+	u8 b_interface_class;
+	u8 b_interface_subclass;
+	u8 b_interface_protocol;
+	u8 i_interface;
+};
+
+struct usb_endpoint_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u8 b_endpoint_addr;
+	u8 bm_attributes;
+	u16 w_max_packet_size;
+	u8 b_interval;
+};
+
+struct usb_string_zero_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u16 w_lang_id[256];
+};
+
+struct usb_string_descriptor {
+	u8 b_length;
+	u8 b_descriptor_type;
+	u8 b_string[256];
+};
+#pragma pack(0)
+
 struct usb_endpoint {
-	u64 address;
-	u64 direction;
-	u64 type;
-	u64 reserved;
-	struct list_head head;
+	struct usb_endpoint_descriptor desc;
+	struct list_head list;
+	struct list_head urb_list;
 };
 
 struct usb_device {
@@ -48,6 +133,7 @@ struct urb {
 	int w_index;
 	int w_length;
 	int pipe;
+	struct usb_endpoint *ep;
 	unsigned char *setup_packet;	/* (in) setup packet (control only) */
 	void *transfer_buffer;		/* (in) associated data buffer */
 	u32 transfer_buffer_length;	/* (in) data buffer length */
@@ -194,93 +280,6 @@ static inline void usb_fill_int_urb(struct urb *urb,
 #define USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER 6
 #define USB_DESCRIPTOR_TYPE_OTHER_SPEED_CONF 7
 #define USB_DESCRIPTOR_TYPE_INTERFACE_POWER 8
-
-#pragma pack(1)
-//USB Descriptors
-struct usb_device_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u16 bcd_usb;
-	u8 class;
-	u8 subclass;
-	u8 b_device_protocol;
-	u8 b_max_packet_size0;
-	u16 id_vender;
-	u16 id_product;
-	u16 bcd_device;
-	u8 i_manufacturer;
-	u8 i_product;
-	u8 i_serial_number;
-	u8 b_num_configurations;
-};
-
-struct usb_device_qualifier_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u16 bcd_usb;
-	u8 b_device_class;
-	u8 b_device_subclass;
-	u8 b_device_protocol;
-	u8 b_max_packet_size0;
-	u8 b_num_configurations;
-	u8 b_reserved;
-};
-
-struct usb_configuration_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u16 w_total_lenth;
-	u8 b_num_interfaces;
-	u8 b_configuration_value;
-	u8 i_configuration;
-	u8 bm_attributes;
-	u8 b_max_power;
-};
-
-struct usb_other_speed_conf_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u16 w_total_lenth;
-	u8 b_num_interfaces;
-	u8 b_configuration_value;
-	u8 i_configuration;
-	u8 bm_attributes;
-	u8 b_max_power;
-};
-
-struct usb_interface_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u8 b_interface_number;
-	u8 b_alternate_setting;
-	u8 b_num_endpoints;
-	u8 b_interface_class;
-	u8 b_interface_subclass;
-	u8 b_interface_protocol;
-	u8 i_interface;
-};
-
-struct usb_endpoint_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u8 b_endpoint_addr;
-	u8 bm_attributes;
-	u16 w_max_packet_size;
-	u8 b_interval;
-};
-
-struct usb_string_zero_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u16 w_lang_id[256];
-};
-
-struct usb_string_descriptor {
-	u8 b_length;
-	u8 b_descriptor_type;
-	u8 b_string[256];
-};
-#pragma pack(0)
 
 int usb_device_register(struct usb_device *dev);
 int usb_device_unregister(struct usb_device *dev);

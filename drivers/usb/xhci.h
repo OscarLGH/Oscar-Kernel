@@ -325,6 +325,7 @@ struct transfer_ring_status {
 struct port_status {
 	u64 slot_id;
 	struct transfer_ring_status transfer_ring_status[32];
+	struct input_context *input_context;
 };
 
 struct xhci {
