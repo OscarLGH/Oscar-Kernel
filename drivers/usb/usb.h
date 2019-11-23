@@ -94,21 +94,21 @@ struct usb_string_descriptor {
 struct urb;
 typedef void (*usb_complete_t)(struct urb *);
 
-struct inflight_transfer {
-	struct list_head list;
-	u64 trb_phys;
-};
+struct usb_interface;
+struct usb_device;
 
 struct usb_endpoint {
 	struct usb_endpoint_descriptor desc;
 	struct list_head list;
 	struct list_head urb_list;
+	struct usb_interface *intf;
 };
 
 struct usb_interface {
 	struct usb_interface_descriptor desc;
-	struct list_head endpoint_list;
 	struct list_head list;
+	struct list_head endpoint_list;
+	struct usb_device *udev;
 };
 struct usb_device {
 	int port;
@@ -130,28 +130,26 @@ enum usb_device_speed {
 	USB_SPEED_SUPER_PLUS,			/* usb 3.1 */
 };
 
-struct setup_packet {
-	int bm_request_type;
-	int b_request;
-	int w_value;
-	int w_index;
-	int w_length;
-};
+struct usb_ctrlrequest {
+	u8 bRequestType;
+	u8 bRequest;
+	u16 wValue;
+	u16 wIndex;
+	u16 wLength;
+} __attribute__ ((packed));
+
+
 struct urb {
-	int bm_request_type;
-	int b_request;
-	int w_value;
-	int w_index;
-	int w_length;
 	int pipe;
 	struct usb_endpoint *ep;
-	unsigned char *setup_packet;	/* (in) setup packet (control only) */
+	char *setup_packet;	/* (in) setup packet (control only) */
 	void *transfer_buffer;		/* (in) associated data buffer */
 	u32 transfer_buffer_length;	/* (in) data buffer length */
 	struct usb_device *dev;
 	void *context;			/* (in) context for completion */
 	int interval;
 	int start_frame;
+	bool polling_wait;
 	usb_complete_t complete;
 };
 
@@ -297,4 +295,38 @@ int usb_device_unregister(struct usb_device *dev);
 int usb_core_init() ;
 
 extern struct list_head usb_dev_list;
+
+#pragma pack(1)
+struct usbmassbulk_cbw {
+	u32 sig;
+	u32 tag;
+	u32 data_transfer_len;
+	u8 flags;
+	u8 lun;
+	u8 length;
+	u8 cb[16];
+};
+
+struct usbmassbulk_csw {
+	u32 sig;
+	u32 tag;
+	u32 data_residue;
+	u8 status;
+};
+
+struct ufi_cmd {
+	u8 op_code;
+	u8 rsvd0:5;
+	u8 logical_unit_number:3;
+	u32 logical_block_addr; //big endian
+	u32 parameter; //big endian
+	u8 rsvd2;
+	u8 rsvd3;
+};
+
+#define SCSI_READ 0xa8
+#define SCSI_READ_CAPACITY 0x25
+#define SCSI_INNQUIRY 0x12
+
+#pragma pack(0)
 #endif

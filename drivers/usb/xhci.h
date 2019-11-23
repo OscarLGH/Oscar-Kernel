@@ -319,6 +319,7 @@ struct input_context {
 
 struct transfer_ring_status {
 	struct transfer_trb *transfer_ring_base;
+	int transfer_ring_size;
 	int enquene_pointer;
 	int dcs;
 };
@@ -326,6 +327,12 @@ struct port_status {
 	u64 slot_id;
 	struct transfer_ring_status transfer_ring_status[32];
 	struct input_context *input_context;
+};
+
+struct inflight_transfer {
+	struct list_head list;
+	u64 trb_phys;
+	struct urb *urb;
 };
 
 struct xhci {
@@ -359,6 +366,7 @@ struct xhci {
 	struct event_ring_segment_table_entry *event_ring_seg_table;
 
 	struct port_status port[32];
+	struct list_head inflight_transfer_list;
 };
 
 int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd);
@@ -559,39 +567,3 @@ static int ep_addr_to_dci(int ep_addr)
 	//printk("dci:%d\n", index);
 	return index;
 }
-
-#pragma pack(1)
-struct usbmassbulk_cbw {
-	u32 sig;
-	u32 tag;
-	u32 data_transfer_len;
-	u8 flags;
-	u8 lun;
-	u8 length;
-	u8 cb[16];
-};
-
-struct usbmassbulk_csw {
-	u32 sig;
-	u32 tag;
-	u32 data_residue;
-	u8 status;
-};
-
-struct ufi_cmd {
-	u8 op_code;
-	u8 rsvd0:5;
-	u8 logical_unit_number:3;
-	u32 logical_block_addr; //big endian
-	u32 parameter; //big endian
-	u8 rsvd2;
-	u8 rsvd3;
-};
-
-#define SCSI_READ 0xa8
-#define SCSI_READ_CAPACITY 0x25
-#define SCSI_INNQUIRY 0x12
-
-#pragma pack(0)
-
-
