@@ -580,7 +580,6 @@ void nvidia_fb_fillrect(struct fb_info *info, const struct fb_fillrect *region)
 	for (i = 0; i < 0x1000 / 4; i++) {
 		gpu->host_buffer[i] = region->color;
 	}
-	nvkm_map_area(gpu->bar[1].pgd, gpu->host_buffer_vma, VIRT2PHYS(gpu->host_buffer), 0x1000, 0, NV_VM_TARGET_SYSRAM_SNOOP);
 	u64 dst = (region->dy * info->var.xres_virtual + region->dx) * (info->var.bits_per_pixel / 8);
 	u64 len = region->height * info->var.xres_virtual * (info->var.bits_per_pixel / 8);
 
@@ -687,7 +686,7 @@ int nvidia_gpu_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	gpu->host_buffer_size = 0x200000;
 	gpu->host_buffer = kmalloc(gpu->host_buffer_size, GFP_KERNEL);
 	gpu->host_buffer_vma = nvkm_vma_new(gpu, 1, gpu->host_buffer_size);
-
+	nvkm_map_area(gpu->bar[1].pgd, gpu->host_buffer_vma, VIRT2PHYS(gpu->host_buffer), 0x1000, 0, NV_VM_TARGET_SYSRAM_SNOOP);
 	register_nvidia_fb(gpu);
 
 	//nvidia_test(gpu);
