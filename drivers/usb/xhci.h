@@ -220,6 +220,19 @@ struct address_device_trb {
 	u32 slot_id:8;
 };
 
+struct evaluate_context_trb {
+	u32 input_context_ptr_lo;
+	u32 input_context_ptr_hi;
+	u32 rsvd;
+
+	u32 c:1;
+	u32 rsvd1:8;
+	u32 bsr:1;
+	u32 trb_type:6;
+	u32 rsvd2:8;
+	u32 slot_id:8;
+};
+
 struct configure_endpoint_trb {
 	u32 input_context_ptr_lo;
 	u32 input_context_ptr_hi;

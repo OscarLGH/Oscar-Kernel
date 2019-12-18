@@ -1,5 +1,30 @@
 #include "xhci.h"
 
+int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
+{
+	int index;
+	index = xhci->cmd_ring_enqueue_ptr;
+	//printk("cmd index = %d\n", index);
+	if (index == xhci->cmd_ring_size / sizeof(struct trb_template) - 1) {
+		printk("cmd ring wrapback.============================\n");
+		struct link_trb link_trb = {0};
+		link_trb.c = xhci->cmd_ring_dcs;
+		link_trb.trb_type = TRB_LINK;
+		link_trb.ring_seg_pointer = VIRT2PHYS(xhci->cmd_ring);
+		xhci->cmd_ring[index] = *((struct trb_template *)&link_trb);
+		//xhci->cmd_ring_dcs = ~xhci->cmd_ring_dcs;
+		//xhci_doorbell_reg_wr32(xhci, 0, 0);
+		//memset(&xhci->cmd_ring[index], 0, 16);
+		index = 0;
+		xhci->cmd_ring_enqueue_ptr = 0;
+	}
+	xhci->cmd_ring[index] = *cmd;
+	xhci->cmd_ring[index].c = xhci->cmd_ring_dcs;
+	xhci->cmd_ring_enqueue_ptr++;
+	memset(&xhci->cmd_ring[index + 1], 0, 16);
+	return index;
+}
+
 struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci, int cmd_index, int timeout)
 {
 	u64 erdp;
@@ -40,6 +65,7 @@ struct command_completion_event_trb *xhci_wait_cmd_completion(struct xhci *xhci,
 	}
 	return NULL;
 }
+
 
 struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 trb_phys_addr, int timeout)
 {
@@ -82,12 +108,11 @@ struct transfer_event_trb *xhci_wait_transfer_completion(struct xhci *xhci, u64 
 }
 
 
-int xhci_enable_slot(struct xhci *xhci)
+int xhci_cmd_enable_slot(struct xhci *xhci)
 {
 	struct trb_template cmd = {0};
 	int cmd_ring_index;
 	struct command_completion_event_trb *completion_trb;
-	int i = 0;
 	int slot = -1;
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.trb_type = TRB_ENABLE_SLOT_CMD;
@@ -101,12 +126,11 @@ int xhci_enable_slot(struct xhci *xhci)
 	return slot;
 }
 
-int xhci_disable_slot(struct xhci *xhci, int slot_id)
+int xhci_cmd_disable_slot(struct xhci *xhci, int slot_id)
 {
 	struct trb_template cmd = {0};
 	int cmd_ring_index;
 	struct command_completion_event_trb *completion_trb;
-	int i = 0;
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.trb_type = TRB_DISABLE_SLOT_CMD;
 	cmd.control = (slot_id << 8);
@@ -114,6 +138,67 @@ int xhci_disable_slot(struct xhci *xhci, int slot_id)
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
 	
 	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 100000);
+	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
+		return -1;
+	return 0;
+}
+
+int xhci_cmd_address_device(struct xhci *xhci, struct input_context *input_ctx, int slot_id)
+{
+	struct address_device_trb address_dev_trb = {0};
+	int cmd_ring_index = 0;
+	struct command_completion_event_trb *completion_trb;
+	address_dev_trb.input_context_ptr_lo = VIRT2PHYS(input_ctx);
+	address_dev_trb.input_context_ptr_hi = VIRT2PHYS(input_ctx) >> 32;
+	address_dev_trb.trb_type = TRB_ADDRESS_DEVICE_CMD;
+	address_dev_trb.slot_id = slot_id;
+	address_dev_trb.bsr = 0;
+	cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
+
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	printk("completion_trb->completion_code = %d\n", completion_trb->completion_code);
+	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
+		return -1;
+	return 0;
+}
+
+int xhci_cmd_configure_endpoint(struct xhci *xhci, struct input_context *input_ctx, int slot_id, bool dc)
+{
+	struct configure_endpoint_trb config_ep_trb = {0};
+	int cmd_ring_index = 0;
+	struct command_completion_event_trb *completion_trb;
+	config_ep_trb.input_context_ptr_lo = VIRT2PHYS(input_ctx);
+	config_ep_trb.input_context_ptr_hi = VIRT2PHYS(input_ctx) >> 32;
+	config_ep_trb.trb_type = TRB_CONFIG_ENDPOINT_CMD;
+	config_ep_trb.slot_id = slot_id;
+	config_ep_trb.dc = 0;
+	config_ep_trb.c = 1;
+	cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&config_ep_trb);
+
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	
+	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
+		return -1;
+	return 0;
+}
+
+int xhci_cmd_evaluate_context(struct xhci *xhci, struct input_context *input_ctx, int slot_id)
+{
+	struct evaluate_context_trb evaluate_context_trb = {0};
+	int cmd_ring_index = 0;
+	struct command_completion_event_trb *completion_trb;
+	evaluate_context_trb.input_context_ptr_lo = VIRT2PHYS(input_ctx);
+	evaluate_context_trb.input_context_ptr_hi = VIRT2PHYS(input_ctx) >> 32;
+	evaluate_context_trb.trb_type = TRB_EVALUATE_CONTEXT_CMD;
+	evaluate_context_trb.slot_id = slot_id;
+	evaluate_context_trb.bsr = 0;
+	cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&evaluate_context_trb);
+
+	xhci_doorbell_reg_wr32(xhci, 0, 0);
+	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
+	
 	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
 		return -1;
 	return 0;
@@ -132,12 +217,10 @@ int xhci_stop_endpoint(struct xhci *xhci, int slot_id, int endpoint_id)
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
 	
 	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 1000000);
-	//printk("reset endpoint:%d\n", completion_trb->completion_code);
 	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
 		return -1;
 	return 0;
 }
-
 
 int xhci_reset_endpoint(struct xhci *xhci, int slot_id, int endpoint_id)
 {
@@ -153,36 +236,9 @@ int xhci_reset_endpoint(struct xhci *xhci, int slot_id, int endpoint_id)
 	xhci_doorbell_reg_wr32(xhci, 0, 0);
 	
 	completion_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 100000);
-	//printk("reset endpoint:%d\n", completion_trb->completion_code);
 	if ((completion_trb == NULL) || (completion_trb->completion_code != 0x1))
 		return -1;
 	return 0;
-}
-
-
-int xhci_cmd_ring_insert(struct xhci *xhci, struct trb_template *cmd)
-{
-	int index;
-	index = xhci->cmd_ring_enqueue_ptr;
-	//printk("cmd index = %d\n", index);
-	if (index == xhci->cmd_ring_size / sizeof(struct trb_template) - 1) {
-		printk("cmd ring wrapback.============================\n");
-		struct link_trb link_trb = {0};
-		link_trb.c = xhci->cmd_ring_dcs;
-		link_trb.trb_type = TRB_LINK;
-		link_trb.ring_seg_pointer = VIRT2PHYS(xhci->cmd_ring);
-		xhci->cmd_ring[index] = *((struct trb_template *)&link_trb);
-		//xhci->cmd_ring_dcs = ~xhci->cmd_ring_dcs;
-		//xhci_doorbell_reg_wr32(xhci, 0, 0);
-		//memset(&xhci->cmd_ring[index], 0, 16);
-		index = 0;
-		xhci->cmd_ring_enqueue_ptr = 0;
-	}
-	xhci->cmd_ring[index] = *cmd;
-	xhci->cmd_ring[index].c = xhci->cmd_ring_dcs;
-	xhci->cmd_ring_enqueue_ptr++;
-	memset(&xhci->cmd_ring[index + 1], 0, 16);
-	return index;
 }
 
 struct endpoint_context *usb_get_context(struct xhci *xhci, int slot_id, int endpoint)
@@ -411,7 +467,7 @@ void delay(u64 us)
 
 int xhci_address_device(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
 {
-	struct command_completion_event_trb *comp_trb;
+	int ret;
 	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
 	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
 	struct device_context *output_context = kmalloc(0x1000, GFP_KERNEL);
@@ -449,23 +505,31 @@ int xhci_address_device(struct xhci *xhci, int slot_id, int root_hub_port_num, i
 
 	xhci->dcbaa[slot_id] = VIRT2PHYS(output_context);
 
-	struct address_device_trb address_dev_trb = {0};
-	address_dev_trb.input_context_ptr_lo = VIRT2PHYS(input_context);
-	address_dev_trb.input_context_ptr_hi = VIRT2PHYS(input_context) >> 32;
-	address_dev_trb.trb_type = TRB_ADDRESS_DEVICE_CMD;
-	address_dev_trb.slot_id = slot_id;
-	address_dev_trb.bsr = 0;
-	u64 cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&address_dev_trb);
-
 	xhci->port[root_hub_port_num - 1].input_context = input_context;
 	xhci->port[root_hub_port_num - 1].slot_id = slot_id;
 	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].transfer_ring_base = transfer_ring;
 	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].enquene_pointer = 0;
 	xhci->port[root_hub_port_num - 1].transfer_ring_status[1].dcs = 1;
 
-	xhci_doorbell_reg_wr32(xhci, 0, 0);
-	comp_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
-	return comp_trb->completion_code;
+	return xhci_cmd_address_device(xhci, input_context, slot_id);
+}
+
+int evaluate_context(struct usb_device *udev)
+{
+	struct usb_device_descriptor tmp_desc;
+	struct xhci *xhci = udev->host_controller_context;
+	int slot_id = xhci->port[udev->port].slot_id;
+	struct input_context *input_ctx = xhci->port[udev->port].input_context;
+	
+	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_DEVICE, 0, &tmp_desc, 8);
+	//printk("device max packet size0 = %d bcd usb = %x\n", tmp_desc.b_max_packet_size0, tmp_desc.bcd_usb);
+	if ((tmp_desc.bcd_usb >> 8) == 0x2)
+		input_ctx->dev_context.endpoint_context[0].max_packet_size = tmp_desc.b_max_packet_size0;
+	if ((tmp_desc.bcd_usb >> 8) == 0x3)
+		input_ctx->dev_context.endpoint_context[0].max_packet_size = 512;
+
+	//printk("max_packet_size = %d\n", input_ctx->dev_context.endpoint_context[0].max_packet_size);
+	return xhci_cmd_evaluate_context(xhci, input_ctx, slot_id);
 }
 
 int configure_all_endpoints(struct usb_device *udev)
@@ -474,15 +538,21 @@ int configure_all_endpoints(struct usb_device *udev)
 	struct usb_endpoint *ep;
 	struct usb_interface *interface;
 	int i;
-	int cmd_ring_index;
-	struct command_completion_event_trb *comp_trb;
+	int len, type,intfi;
+	int ret;
+	char ascii_str[256];
+	u16 *string;
+	int ep_addr, dci;
+	struct usb_interface_descriptor *intf;
+	struct usb_endpoint_descriptor *endp;
+	
 	struct input_context *input_context = kmalloc(0x1000, GFP_KERNEL);
 	struct transfer_trb *transfer_ring = kmalloc(0x1000, GFP_KERNEL);
 	struct device_context *output_context = kmalloc(0x1000, GFP_KERNEL);
+	void *descriptor = kmalloc(512, GFP_KERNEL);
 	memset(input_context, 0, 0x1000);
 	memset(output_context, 0, 0x1000);
 	memset(transfer_ring, 0, 0x1000);
-	void *descriptor = kmalloc(512, GFP_KERNEL);
 	memset(descriptor, 0, 512);
 
 	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_DEVICE, 0, &udev->desc, sizeof(struct usb_device_descriptor));
@@ -494,8 +564,7 @@ int configure_all_endpoints(struct usb_device *udev)
 		udev->desc.subclass, 
 		udev->desc.b_device_protocol);
 
-	u16 *string = kmalloc(128, GFP_KERNEL);
-	char ascii_str[256];
+	string = kmalloc(128, GFP_KERNEL);
 	memset(string, 0, 128);
 	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_manufacturer, string, 2);
 	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_manufacturer, string, ((u8 *)string)[0]);
@@ -531,12 +600,12 @@ int configure_all_endpoints(struct usb_device *udev)
 
 	usb_set_config(udev, conf->b_configuration_value);
 
-	int intfi = 0;
-	for (int i = conf->b_length; i < conf->w_total_lenth; ) {
-		int len = ((u8 *)descriptor)[i];
-		int type = ((u8 *)descriptor)[i + 1];
+	intfi = 0;
+	for (i = conf->b_length; i < conf->w_total_lenth; ) {
+		len = ((u8 *)descriptor)[i];
+		type = ((u8 *)descriptor)[i + 1];
 		if (type == USB_DESCRIPTOR_TYPE_INTERFACE) {
-			struct usb_interface_descriptor *intf = (void *)&((u8 *)descriptor)[i];
+			intf = (void *)&((u8 *)descriptor)[i];
 			printk("interface number = %d num of endpoints = %d alternate setting:%d class:%x subclass:%x protocol:%x\n", intf->b_interface_number, intf->b_num_endpoints, intf->b_alternate_setting, intf->b_interface_class, intf->b_interface_subclass, intf->b_interface_protocol);
 			intfi++;
 			interface = kmalloc(sizeof(*interface), GFP_KERNEL);
@@ -546,7 +615,7 @@ int configure_all_endpoints(struct usb_device *udev)
 			INIT_LIST_HEAD(&interface->endpoint_list);
 		}
 		if (type == USB_DESCRIPTOR_TYPE_ENDPOINT) {
-			struct usb_endpoint_descriptor *endp = (void *)&((u8 *)descriptor)[i];
+			endp = (void *)&((u8 *)descriptor)[i];
 			printk("endpoint address = %x type = %s max packet size = %d interval = %d\n", endp->b_endpoint_addr, endpoint_type[endp->bm_attributes], endp->w_max_packet_size, endp->b_interval);
 			int ep_addr = endp->b_endpoint_addr & 0x1f;
 			int dci = ep_addr_to_dci(endp->b_endpoint_addr);
@@ -577,7 +646,7 @@ int configure_all_endpoints(struct usb_device *udev)
 			input_context->dev_context.endpoint_context[ep_addr].max_esit_payload_lo = endp->w_max_packet_size * (input_context->dev_context.endpoint_context[ep_addr].max_burst_size + 1);
 			input_context->dev_context.endpoint_context[ep_addr].dcs = 1;
 			input_context->dev_context.endpoint_context[ep_addr].interval = order_base_2(endp->b_interval) + 3;
-			printk("interval = %d\n", input_context->dev_context.endpoint_context[ep_addr].interval);
+			//printk("interval = %d\n", input_context->dev_context.endpoint_context[ep_addr].interval);
 			input_context->dev_context.endpoint_context[ep_addr].max_pstreams = 0;
 			input_context->dev_context.endpoint_context[ep_addr].mult = 0;
 			input_context->dev_context.endpoint_context[ep_addr].cerr = 3;
@@ -585,22 +654,13 @@ int configure_all_endpoints(struct usb_device *udev)
 			//printk("ep %d context:\n", ep_addr);
 			//hex_dump(&input_context->dev_context.endpoint_context[ep_addr], 32);
 			
-			struct configure_endpoint_trb config_ep_trb = {0};
-			config_ep_trb.input_context_ptr_lo = VIRT2PHYS(input_context);
-			config_ep_trb.input_context_ptr_hi = VIRT2PHYS(input_context) >> 32;
-			config_ep_trb.trb_type = TRB_CONFIG_ENDPOINT_CMD;
-			config_ep_trb.slot_id = udev->slot;
-			config_ep_trb.dc = 0;
-			config_ep_trb.c = 1;
-			cmd_ring_index = xhci_cmd_ring_insert(xhci, (struct trb_template *)&config_ep_trb);
 			xhci->port[udev->port].slot_id = udev->slot;
 			xhci->port[udev->port].transfer_ring_status[ep_addr].transfer_ring_base = transfer_ring;
 			xhci->port[udev->port].transfer_ring_status[ep_addr].enquene_pointer = 0;
 			xhci->port[udev->port].transfer_ring_status[ep_addr].dcs = 1;
 
-			xhci_doorbell_reg_wr32(xhci, 0, 0);
-			comp_trb = xhci_wait_cmd_completion(xhci, cmd_ring_index, 0);
-			if (comp_trb->completion_code == TRB_COMPLETION_SUCCESS) {
+			ret = xhci_cmd_configure_endpoint(xhci, input_context, udev->slot, 0);
+			if (ret == 0) {
 				ep = kmalloc(sizeof(*ep), GFP_KERNEL);
 				memset(ep, 0, sizeof(*ep));
 				memcpy(&ep->desc, endp, sizeof(struct usb_endpoint_descriptor));
@@ -679,20 +739,27 @@ int usb_kbd_test(struct usb_device *udev)
 	usb_interrupt_transfer(kbd_urb);
 }
 
-/*
+
 int usb_massstorage_test(struct usb_device *udev)
 {
 	struct urb bbb_urb;
+	struct urb blkin_urb;
+	struct urb blkout_urb;
 	struct usb_ctrlrequest ureq = {0};
+	struct usbmassbulk_cbw *cbw = kmalloc(sizeof(*cbw), GFP_KERNEL);
+	struct usbmassbulk_csw *csw = kmalloc(sizeof(*csw), GFP_KERNEL);
+	struct ufi_cmd scsi_cmd = {0};
+	u8 *disk_buf;
+	u64 cap;
+
 	ureq.bRequest = 0xff;
 	ureq.bRequestType = (1 << 5) | 1;
 	bbb_urb.dev = udev;
 	bbb_urb.pipe = 0;
 	bbb_urb.setup_packet = (char *)&ureq;
 	bbb_urb.polling_wait = true;
-	usb_control_transfer(bbb_urb);
-	struct usbmassbulk_cbw *cbw = kmalloc(sizeof(*cbw), GFP_KERNEL);
-	struct usbmassbulk_csw *csw = kmalloc(sizeof(*csw), GFP_KERNEL);
+	usb_control_transfer(&bbb_urb);
+	
 	memset(cbw, 0, sizeof(*cbw));
 	memset(csw, 0, sizeof(*csw));
 	cbw->sig = 0x43425355;
@@ -700,21 +767,42 @@ int usb_massstorage_test(struct usb_device *udev)
 	cbw->flags = (1 << 7);
 	cbw->length = 0xc;
 	cbw->data_transfer_len = 8;
-	struct ufi_cmd scsi_cmd = {0};
+	
 	scsi_cmd.logical_block_addr = 0;
 	scsi_cmd.logical_unit_number = 0;
 	scsi_cmd.op_code = SCSI_READ_CAPACITY;
 	scsi_cmd.parameter = 0x01000000;
 	memcpy(&cbw->cb, &scsi_cmd, sizeof(scsi_cmd));
-	u8 *disk_buf = kmalloc(0x2000, GFP_KERNEL);
+	disk_buf = kmalloc(0x2000, GFP_KERNEL);
 	memset(disk_buf, 0, 0x2000);
-	usb_bulk_transfer(udev, 0x2, cbw, sizeof(*cbw));
-	usb_bulk_transfer(udev, 0x81, disk_buf, 8);
-	usb_bulk_transfer(udev, 0x81, csw, sizeof(*csw));
+
+	blkout_urb.dev = udev;
+	blkout_urb.pipe = 0x2;
+	blkout_urb.setup_packet = NULL;
+	blkout_urb.polling_wait = true;
+	blkout_urb.transfer_buffer = cbw;
+	blkout_urb.transfer_buffer_length = sizeof(*csw);
+	usb_bulk_transfer(&blkout_urb);
+
+	blkin_urb.dev = udev;
+	blkin_urb.pipe = 0x81;
+	blkin_urb.setup_packet = NULL;
+	blkin_urb.polling_wait = true;
+	blkin_urb.transfer_buffer = disk_buf;
+	blkin_urb.transfer_buffer_length = 8;
+	usb_bulk_transfer(&blkin_urb);
+
+	blkin_urb.dev = udev;
+	blkin_urb.pipe = 0x81;
+	blkin_urb.setup_packet = NULL;
+	blkin_urb.polling_wait = true;
+	blkin_urb.transfer_buffer = csw;
+	blkin_urb.transfer_buffer_length = sizeof(*csw);
+	usb_bulk_transfer(&blkin_urb);
 
 	printk("csw.tag = %x\n", csw->tag);
 	printk("csw.status = %x\n", csw->status);
-	u64 cap = disk_buf[3] | (disk_buf[2] << 8) | (disk_buf[1] << 16) | (disk_buf[0] << 24);
+	cap = disk_buf[3] | (disk_buf[2] << 8) | (disk_buf[1] << 16) | (disk_buf[0] << 24);
 	cap *= disk_buf[5] | (disk_buf[6] << 8) | (disk_buf[7] << 16) | (disk_buf[8] << 24);
 	printk("CAPACITY:%d GB.\n", cap / 1024 / 1024 / 1024);
 
@@ -732,36 +820,22 @@ int usb_massstorage_test(struct usb_device *udev)
 	scsi_cmd.parameter = 0x01000000;
 	memcpy(&cbw->cb, &scsi_cmd, sizeof(scsi_cmd));
 	memset(disk_buf, 0, 0x2000);
-	usb_bulk_transfer(udev, 0x2, cbw, sizeof(*cbw));
-	usb_bulk_transfer(udev, 0x81, disk_buf, 0x200);
-	usb_bulk_transfer(udev, 0x81, csw, sizeof(*csw));
+	usb_bulk_transfer(&blkout_urb);
+	blkin_urb.transfer_buffer = disk_buf;
+	blkin_urb.transfer_buffer_length = 0x200;
+	usb_bulk_transfer(&blkin_urb);
+	usb_bulk_transfer(&blkin_urb);
 	hex_dump(disk_buf + 512 - 16, 16);
 
-	cbw->sig = 0x43425355;
-	cbw->tag = 0x12345678;
-	cbw->flags = (1 << 7);
-	cbw->length = 0xc;
-	cbw->data_transfer_len = 0x200;
-	scsi_cmd.logical_block_addr = 1;
-	scsi_cmd.logical_unit_number = 0;
-	scsi_cmd.op_code = SCSI_READ;
-	scsi_cmd.parameter = 0x01000000;
-	memcpy(&cbw->cb, &scsi_cmd, sizeof(scsi_cmd));
-	memset(disk_buf, 0, 0x2000);
-	usb_bulk_transfer(udev, 0x2, cbw, sizeof(*cbw));
-	usb_bulk_transfer(udev, 0x81, disk_buf, 0x200);
-	usb_bulk_transfer(udev, 0x81, csw, sizeof(*csw));
-	hex_dump(disk_buf + 512 - 16, 16);
+	
 }
-*/
-
 
 int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
 {
 	struct usb_device *udev;
 	int ret;
 	ret = xhci_address_device(xhci, slot_id, root_hub_port_num, port_speed);
-	if (ret != TRB_COMPLETION_SUCCESS) {
+	if (ret != 0) {
 		printk("address device failed!\n");
 		return -EFAULT;
 	}
@@ -780,6 +854,7 @@ int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int p
 	);
 
 	list_add(&udev->list, &usb_dev_list);
+	evaluate_context(udev);
 	configure_all_endpoints(udev);
 
 	struct usb_interface *intf;
@@ -861,33 +936,35 @@ int handle_port_status_change(struct xhci *xhci, struct port_status_change_event
 	int port;
 	int slot;
 	u32 port_status;
+	int port_speed;
 	port = port_ch_trb[0].port_id - 1;
 	port_status = xhci_opreg_rd32(xhci, XHCI_HC_PORT_REG + port * 0x10);
+	port_speed = (port_status >> 10) & 0xf;
 	//printk("XHCI Port %x %s\n", port, port_status & 0x1 ? "connected" : "disconnected");
 	//printk("port_status = %x\n", port_status);
 
-	if (port_status & 0x1) {
-		xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PR | XHCI_PORTSC_PP);
-		while (1) {
-			port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
-			
-			if ((port_status & XHCI_PORTSC_PRC) != 0) {
-				xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
-				break;
+	if (port_status & XHCI_PORTSC_CCS) {
+		/* USB3 device doesn't need to be reset. */
+		if (port_speed < 4) {
+			xhci_opreg_wr32(xhci, 0x400 + port * 0x10, XHCI_PORTSC_PR | XHCI_PORTSC_PP);
+			while (1) {
+				port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
+				
+				if ((port_status & XHCI_PORTSC_PRC) != 0) {
+					break;
+				}
 			}
+			delay(1000);
 		}
-		//port_status = xhci_opreg_rd32(xhci, 0x400 + port * 0x10);
-		//printk("port_status after reset = %x\n", port_status);
-		//printk("port speed = %d, %s\n", (port_status >> 10) & 0xf, usb_port_speed_info[(port_status >> 10) & 0xf]);
-		delay(1000);
-		slot = xhci_enable_slot(xhci);
+		xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
+		slot = xhci_cmd_enable_slot(xhci);
 		//printk("available slot:%d\n", slot);
 		usb_device_init(xhci, slot, port + 1, (port_status >> 10) & 0xf);
 		xhci->port[port].slot_id = slot;
 	} else {
-		xhci_disable_slot(xhci, xhci->port[port].slot_id);
+		xhci_cmd_disable_slot(xhci, xhci->port[port].slot_id);
 		usb_device_remove(xhci, slot, port + 1);
-		xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
+		xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, port_status | XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
 	}
 }
 
