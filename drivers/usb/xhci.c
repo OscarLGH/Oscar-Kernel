@@ -428,7 +428,7 @@ int usb_set_config(struct usb_device *udev, int configuration)
 	urb->polling_wait = true;
 	urb->complete = NULL;
 	urb->transfer_buffer = NULL;
-	urb->pipe = 0x80000000 | 1;
+	urb->pipe = 1;
 	usb_control_transfer(urb);
 	kfree(urb);
 	return 0;
@@ -449,7 +449,7 @@ int usb_set_interface(struct usb_device *udev, int interface)
 	urb->polling_wait = true;
 	urb->complete = NULL;
 	urb->transfer_buffer = NULL;
-	urb->pipe = 0x80000000 | 1;
+	urb->pipe = 1;
 	usb_control_transfer(urb);
 	kfree(urb);
 	return 0;
@@ -522,12 +522,9 @@ int evaluate_context(struct usb_device *udev)
 	struct input_context *input_ctx = xhci->port[udev->port].input_context;
 	
 	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_DEVICE, 0, &tmp_desc, 8);
-	//printk("device max packet size0 = %d bcd usb = %x\n", tmp_desc.b_max_packet_size0, tmp_desc.bcd_usb);
-	if ((tmp_desc.bcd_usb >> 8) == 0x2)
+	if ((tmp_desc.bcd_usb >> 8) == 0x2 && udev->speed == 1)
 		input_ctx->dev_context.endpoint_context[0].max_packet_size = tmp_desc.b_max_packet_size0;
-	if ((tmp_desc.bcd_usb >> 8) == 0x3)
-		input_ctx->dev_context.endpoint_context[0].max_packet_size = 512;
-
+	
 	//printk("max_packet_size = %d\n", input_ctx->dev_context.endpoint_context[0].max_packet_size);
 	return xhci_cmd_evaluate_context(xhci, input_ctx, slot_id);
 }
@@ -565,26 +562,30 @@ int configure_all_endpoints(struct usb_device *udev)
 		udev->desc.b_device_protocol);
 
 	string = kmalloc(128, GFP_KERNEL);
-	memset(string, 0, 128);
-	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_manufacturer, string, 2);
-	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_manufacturer, string, ((u8 *)string)[0]);
-	unicode_to_ascii(&string[1], ascii_str);
-	printk("%s ", ascii_str);
 
-	memset(string, 0, 128);
-	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_product, string, 2);
-	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_product, string, ((u8 *)string)[0]);
-	unicode_to_ascii(&string[1], ascii_str);
-	printk("%s ", ascii_str);
+	if (udev->desc.i_manufacturer != 0) {
+		memset(string, 0, 128);
+		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_manufacturer, string, 2);
+		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_manufacturer, string, ((u8 *)string)[0]);
+		unicode_to_ascii(&string[1], ascii_str);
+		printk("%s\n", ascii_str);
+	}
+
+	if (udev->desc.i_product != 0) {
+		memset(string, 0, 128);
+		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_product, string, 2);
+		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_product, string, ((u8 *)string)[0]);
+		unicode_to_ascii(&string[1], ascii_str);
+		printk("%s\n", ascii_str);
+	}
 
 	if (udev->desc.i_serial_number != 0) {
 		memset(string, 0, 128);
 		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_serial_number, string, 2);
 		usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_STRING, udev->desc.i_serial_number, string, ((u8 *)string)[0]);
 		unicode_to_ascii(&string[1], ascii_str);
-		printk("%s", ascii_str);
+		printk("%s\n", ascii_str);
 	}
-	printk("\n");
 	memset(descriptor, 0, 512);
 	usb_get_descriptor(udev, USB_DESCRIPTOR_TYPE_CONFIGURATION, 0, descriptor, sizeof(struct usb_configuration_descriptor));
 	struct usb_configuration_descriptor *conf = descriptor;
@@ -624,7 +625,7 @@ int configure_all_endpoints(struct usb_device *udev)
 			transfer_ring = kmalloc(0x1000, GFP_KERNEL);
 			memset(transfer_ring, 0, 0x1000);
 			//printk("transfer ring:%x\n", transfer_ring);
-			input_context = kmalloc(0x1000, GFP_KERNEL);
+			input_context = xhci->port[udev->port].input_context;
 			memset(input_context, 0, 0x1000);
 			input_context->input_ctrl_context.add_context_flags = (1 << dci);
 			//printk("input_context->input_ctrl_context.add_context_flags = %x\n", input_context->input_ctrl_context.add_context_flags);
@@ -699,7 +700,19 @@ void usb_kbd_irq(struct urb* urb)
 		key_data[7]);
 	usb_interrupt_transfer(urb);
 }
-int usb_kbd_test(struct usb_device *udev)
+
+void usb_mouse_irq(struct urb* urb)
+{
+	char *key_data = urb->transfer_buffer;
+	printk("mouse coordinates recevied.%02x %02x %02x %02x\n", 
+		key_data[0], 
+		key_data[1], 
+		key_data[2], 
+		key_data[3]);
+	usb_interrupt_transfer(urb);
+}
+
+int usb_kbd_test(struct usb_device *udev, int endpoint)
 {
 	u8 *data = kmalloc(0x1000, GFP_KERNEL);
 	struct urb *kbd_cr_urb = kmalloc(sizeof(*kbd_cr_urb), GFP_KERNEL);
@@ -730,7 +743,7 @@ int usb_kbd_test(struct usb_device *udev)
 
 	memset(data, 0, 8);
 	kbd_urb->dev = udev;
-	kbd_urb->pipe = 0x81;
+	kbd_urb->pipe = endpoint;
 	kbd_urb->complete = usb_kbd_irq;
 	kbd_urb->polling_wait = false;
 	kbd_urb->transfer_buffer = data;
@@ -739,27 +752,57 @@ int usb_kbd_test(struct usb_device *udev)
 	usb_interrupt_transfer(kbd_urb);
 }
 
-
-int usb_massstorage_test(struct usb_device *udev)
+int usb_mouse_test(struct usb_device *udev, int endpoint)
 {
-	struct urb bbb_urb;
-	struct urb blkin_urb;
-	struct urb blkout_urb;
-	struct usb_ctrlrequest ureq = {0};
+	u8 *data = kmalloc(0x1000, GFP_KERNEL);
+	struct urb *mouse_cr_urb = kmalloc(sizeof(*mouse_cr_urb), GFP_KERNEL);
+	memset(mouse_cr_urb, 0, sizeof(*mouse_cr_urb));
+	struct urb *mouse_urb = kmalloc(sizeof(*mouse_urb), GFP_KERNEL);
+	memset(mouse_urb, 0, sizeof(*mouse_urb));
+	
+	memset(data, 0, 8);
+	mouse_urb->dev = udev;
+	mouse_urb->pipe = endpoint;
+	mouse_urb->complete = usb_mouse_irq;
+	mouse_urb->polling_wait = false;
+	mouse_urb->transfer_buffer = data;
+	mouse_urb->transfer_buffer_length = 8;
+
+	usb_interrupt_transfer(mouse_urb);
+}
+
+
+void mass_storage_cmd_irq(struct urb* urb)
+{
+	printk("usb mass storage:transfer cmd complete.\n");
+}
+
+void mass_storage_data_irq(struct urb* urb)
+{
+	int i;
+	printk("usb mass storage:transfer data complete.\n");
+	hex_dump(urb->transfer_buffer + 512 - 16, 16);
+}
+
+void mass_storage_status_irq(struct urb* urb)
+{
+	struct usbmassbulk_csw *csw = urb->transfer_buffer;
+	printk("transfer status complete.\n");
+	printk("csw.tag = %x\n", csw->tag);
+	printk("csw.status = %x\n", csw->status);
+}
+
+int usb_mass_storage_read_cap(struct usb_device *udev)
+{
+	struct urb *blkin_data_urb = kmalloc(sizeof(*blkin_data_urb), GFP_KERNEL);
+	struct urb *blkin_status_urb = kmalloc(sizeof(*blkin_status_urb), GFP_KERNEL);
+	struct urb *blkout_urb = kmalloc(sizeof(*blkout_urb), GFP_KERNEL);
 	struct usbmassbulk_cbw *cbw = kmalloc(sizeof(*cbw), GFP_KERNEL);
 	struct usbmassbulk_csw *csw = kmalloc(sizeof(*csw), GFP_KERNEL);
 	struct ufi_cmd scsi_cmd = {0};
 	u8 *disk_buf;
 	u64 cap;
 
-	ureq.bRequest = 0xff;
-	ureq.bRequestType = (1 << 5) | 1;
-	bbb_urb.dev = udev;
-	bbb_urb.pipe = 0;
-	bbb_urb.setup_packet = (char *)&ureq;
-	bbb_urb.polling_wait = true;
-	usb_control_transfer(&bbb_urb);
-	
 	memset(cbw, 0, sizeof(*cbw));
 	memset(csw, 0, sizeof(*csw));
 	cbw->sig = 0x43425355;
@@ -776,37 +819,50 @@ int usb_massstorage_test(struct usb_device *udev)
 	disk_buf = kmalloc(0x2000, GFP_KERNEL);
 	memset(disk_buf, 0, 0x2000);
 
-	blkout_urb.dev = udev;
-	blkout_urb.pipe = 0x2;
-	blkout_urb.setup_packet = NULL;
-	blkout_urb.polling_wait = true;
-	blkout_urb.transfer_buffer = cbw;
-	blkout_urb.transfer_buffer_length = sizeof(*csw);
-	usb_bulk_transfer(&blkout_urb);
+	blkout_urb->dev = udev;
+	blkout_urb->pipe = 0x2;
+	blkout_urb->setup_packet = NULL;
+	blkout_urb->polling_wait = true;
+	blkout_urb->transfer_buffer = cbw;
+	blkout_urb->transfer_buffer_length = sizeof(*cbw);
+	blkout_urb->complete = NULL;
+	usb_bulk_transfer(blkout_urb);
 
-	blkin_urb.dev = udev;
-	blkin_urb.pipe = 0x81;
-	blkin_urb.setup_packet = NULL;
-	blkin_urb.polling_wait = true;
-	blkin_urb.transfer_buffer = disk_buf;
-	blkin_urb.transfer_buffer_length = 8;
-	usb_bulk_transfer(&blkin_urb);
 
-	blkin_urb.dev = udev;
-	blkin_urb.pipe = 0x81;
-	blkin_urb.setup_packet = NULL;
-	blkin_urb.polling_wait = true;
-	blkin_urb.transfer_buffer = csw;
-	blkin_urb.transfer_buffer_length = sizeof(*csw);
-	usb_bulk_transfer(&blkin_urb);
+	blkin_data_urb->dev = udev;
+	blkin_data_urb->pipe = 0x80000000 | 0x81;
+	blkin_data_urb->setup_packet = NULL;
+	blkin_data_urb->polling_wait = true;
+	blkin_data_urb->transfer_buffer = disk_buf;
+	blkin_data_urb->transfer_buffer_length = 8;
+	blkin_data_urb->complete = NULL;
+	usb_bulk_transfer(blkin_data_urb);
 
-	printk("csw.tag = %x\n", csw->tag);
-	printk("csw.status = %x\n", csw->status);
+	blkin_status_urb->dev = udev;
+	blkin_status_urb->pipe = 0x80000000 | 0x81;
+	blkin_status_urb->setup_packet = NULL;
+	blkin_status_urb->polling_wait = true;
+	blkin_status_urb->transfer_buffer = csw;
+	blkin_status_urb->transfer_buffer_length = sizeof(*csw);
+	blkin_status_urb->complete = NULL;
+	usb_bulk_transfer(blkin_status_urb);
+
 	cap = disk_buf[3] | (disk_buf[2] << 8) | (disk_buf[1] << 16) | (disk_buf[0] << 24);
 	cap *= disk_buf[5] | (disk_buf[6] << 8) | (disk_buf[7] << 16) | (disk_buf[8] << 24);
 	printk("CAPACITY:%d GB.\n", cap / 1024 / 1024 / 1024);
+}
 
-	return 0;
+int usb_mass_storage_read_sector(struct usb_device *udev, int sector)
+{
+	struct urb *blkin_data_urb = kmalloc(sizeof(*blkin_data_urb), GFP_KERNEL);
+	struct urb *blkin_status_urb = kmalloc(sizeof(*blkin_status_urb), GFP_KERNEL);
+	struct urb *blkout_urb = kmalloc(sizeof(*blkout_urb), GFP_KERNEL);
+	struct usbmassbulk_cbw *cbw = kmalloc(sizeof(*cbw), GFP_KERNEL);
+	struct usbmassbulk_csw *csw = kmalloc(sizeof(*csw), GFP_KERNEL);
+	struct ufi_cmd scsi_cmd = {0};
+	u8 *disk_buf = kmalloc(0x2000, GFP_KERNEL);;
+	u64 cap;
+
 	memset(cbw, 0, sizeof(*cbw));
 	memset(csw, 0, sizeof(*csw));
 	cbw->sig = 0x43425355;
@@ -814,20 +870,61 @@ int usb_massstorage_test(struct usb_device *udev)
 	cbw->flags = (1 << 7);
 	cbw->length = 0xc;
 	cbw->data_transfer_len = 0x200;
-	scsi_cmd.logical_block_addr = 0;
+	scsi_cmd.logical_block_addr = sector;
 	scsi_cmd.logical_unit_number = 0;
 	scsi_cmd.op_code = SCSI_READ;
 	scsi_cmd.parameter = 0x01000000;
 	memcpy(&cbw->cb, &scsi_cmd, sizeof(scsi_cmd));
 	memset(disk_buf, 0, 0x2000);
-	usb_bulk_transfer(&blkout_urb);
-	blkin_urb.transfer_buffer = disk_buf;
-	blkin_urb.transfer_buffer_length = 0x200;
-	usb_bulk_transfer(&blkin_urb);
-	usb_bulk_transfer(&blkin_urb);
-	hex_dump(disk_buf + 512 - 16, 16);
+	blkout_urb->dev = udev;
+	blkout_urb->pipe = 0x2;
+	blkout_urb->setup_packet = NULL;
+	blkout_urb->polling_wait = true;
+	blkout_urb->transfer_buffer = cbw;
+	blkout_urb->transfer_buffer_length = sizeof(*cbw);
+	blkout_urb->complete = NULL;
+	blkout_urb->polling_wait = false;
+	usb_bulk_transfer(blkout_urb);
 
-	
+	blkin_data_urb->dev = udev;
+	blkin_data_urb->pipe = 0x80000000 | 0x81;
+	blkin_data_urb->setup_packet = NULL;
+	blkin_data_urb->transfer_buffer = disk_buf;
+	blkin_data_urb->transfer_buffer_length = 0x200;
+	blkin_data_urb->polling_wait = false;
+	blkin_data_urb->complete = mass_storage_data_irq;
+	usb_bulk_transfer(blkin_data_urb);
+
+	blkin_status_urb->dev = udev;
+	blkin_status_urb->pipe = 0x80000000 | 0x81;
+	blkin_status_urb->setup_packet = NULL;
+	blkin_status_urb->transfer_buffer = csw;
+	blkin_status_urb->transfer_buffer_length = sizeof(*csw);
+	blkin_status_urb->polling_wait = false;
+	blkin_status_urb->complete = mass_storage_status_irq;
+	usb_bulk_transfer(blkin_status_urb);
+}
+
+
+int usb_massstorage_test(struct usb_device *udev)
+{
+	struct urb *bbb_urb = kmalloc(sizeof(*bbb_urb), GFP_KERNEL);
+	struct usb_ctrlrequest *ureq = kmalloc(sizeof(*ureq), GFP_KERNEL);
+
+	ureq->bRequest = 0xff;
+	ureq->bRequestType = (1 << 5) | 1;
+	ureq->wValue = 0 << 8;
+	ureq->wLength = 0;
+	ureq->wIndex = 0;
+	bbb_urb->dev = udev;
+	bbb_urb->pipe = 1;
+	bbb_urb->setup_packet = (char *)ureq;
+	bbb_urb->transfer_buffer = NULL;
+	bbb_urb->polling_wait = true;
+	usb_control_transfer(bbb_urb);
+
+	usb_mass_storage_read_cap(udev);
+	usb_mass_storage_read_sector(udev, 0);
 }
 
 int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
@@ -858,21 +955,28 @@ int usb_device_init(struct xhci *xhci, int slot_id, int root_hub_port_num, int p
 	configure_all_endpoints(udev);
 
 	struct usb_interface *intf;
+	struct usb_endpoint *endp;
 	list_for_each_entry(intf, &udev->interface_head, list) {
 		if ((intf->desc.b_interface_class == 3) && 
 			(intf->desc.b_interface_subclass == 1) && 
 			(intf->desc.b_interface_protocol == 1)) {
-			usb_kbd_test(udev);
+			list_for_each_entry(endp, &intf->endpoint_list, list) {
+				if (endp->desc.bm_attributes == 3)
+					usb_kbd_test(udev, endp->desc.b_endpoint_addr);
+			}
 		}
 		if ((intf->desc.b_interface_class == 3) && 
 			(intf->desc.b_interface_subclass == 1) && 
 			(intf->desc.b_interface_protocol == 2)) {
-			//usb_mouse_test(udev);
+			list_for_each_entry(endp, &intf->endpoint_list, list) {
+				if (endp->desc.bm_attributes == 3)
+					usb_mouse_test(udev, endp->desc.b_endpoint_addr);
+			}
 		}
 		if ((intf->desc.b_interface_class == 8) && 
 			(intf->desc.b_interface_subclass == 6) && 
 			(intf->desc.b_interface_protocol == 0x50)) {
-			//usb_massstorage_test(udev);
+			usb_massstorage_test(udev);
 		}
 	}
 	return 0;
@@ -954,9 +1058,9 @@ int handle_port_status_change(struct xhci *xhci, struct port_status_change_event
 					break;
 				}
 			}
-			delay(1000);
 		}
 		xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
+		delay(1000);
 		slot = xhci_cmd_enable_slot(xhci);
 		//printk("available slot:%d\n", slot);
 		usb_device_init(xhci, slot, port + 1, (port_status >> 10) & 0xf);

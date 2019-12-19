@@ -89,7 +89,6 @@ struct usb_string_descriptor {
 	u8 b_descriptor_type;
 	u8 b_string[256];
 };
-#pragma pack(0)
 
 struct urb;
 typedef void (*usb_complete_t)(struct urb *);
