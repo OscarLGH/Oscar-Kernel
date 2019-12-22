@@ -384,30 +384,30 @@ void enable_cpu_features()
 	u32 xcr0 = 0;
 	u64 cr4 = read_cr4();
 
-	if (features2 & BIT25) {
+	if ((features2 & BIT25) != 0) {
 		//printk("SSE ");
 		xcr0 |= XCR0_SSE;
 	}
 
-	if (features2 & BIT26) {
+	if ((features2 & BIT26) != 0) {
 		//printk("SSE2 ");
 	}
 
-	if (features1 & BIT0) {
+	if ((features1 & BIT0) != 0) {
 		//printk("SSE3 ");
 	}
 
-	if (features1 & BIT9) {
+	if ((features1 & BIT9) != 0) {
 		//printk("SSSE3 ");
 	}
 
-	if (features1 & BIT26) {
+	if ((features1 & BIT26) != 0) {
 		//printk("OSXSAVE ");
 		cr4 |= CR4_OSXSAVE;
 		xcr0 |= XCR0_X87;
 	}
 
-	if (features2 & BIT24 != 0) {
+	if ((features2 & BIT24) != 0) {
 		cr4 |= (CR4_OSFXSR | CR4_OSXMMEXCPT);
 		//printk("FXSR ");
 	}
@@ -423,22 +423,22 @@ void enable_cpu_features()
 		xcr0 |= (XCR0_OPMASK | XCR0_H16_ZMM | XCR0_ZMM_H256);
 	}
 
-	if (features1 & BIT5 != 0) {
+	if ((features1 & BIT5) != 0) {
 		cr4 |= CR4_VMXE;
 		//printk("VMX ");
 	}
 
-	if (features1 & BIT6 != 0) {
-		//cr4 |= CR4_SMXE;		//Vmware BUG ? Cause #GP here.
+	if ((features1 & BIT6) != 0) {
+		cr4 |= CR4_SMXE;
 		//printk("SMXE ");
 	}
 
-	if (features1 & BIT17 != 0) {
+	if ((features1 & BIT17) != 0) {
 		cr4 |= CR4_PCIDE;
 		//printk("PCIDE ");
 	}
 
-	if (features2 & BIT13) {
+	if ((features2 & BIT13) != 0) {
 		cr4 |= CR4_PGE;
 		//printk("PDE ");
 	}
@@ -615,7 +615,7 @@ void arch_init()
 		start_kernel();
 		task_init();
 		//test_uarch();
-		//vm_init_test();
+		vm_init_test();
 		//x86_pci_hostbridge_init();
 		//instruction_test();
 	} else {

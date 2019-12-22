@@ -16,15 +16,16 @@ int vmx_enable()
 	u64 msr;
 	u64 vmx_msr;
 	cpuid(0x00000001, 0x00000000, &regs[0]);
-	if (regs[2] & CPUID_FEATURES_ECX_VMX == 0) {
+	if ((regs[2] & CPUID_FEATURES_ECX_VMX) == 0) {
 		printk("VMX is unsupported on this CPU!.\n");
 		return -1;
 	}
 
 	msr = rdmsr(MSR_IA32_FEATURE_CONTROL);
-	vmx_msr = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED;
-	if (msr & vmx_msr != vmx_msr) {
-		printk("VMX is supported, but BIOS disabled VMX.\n");
+	vmx_msr = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_VMXON_ENABLED_INSIDE_SMX;
+
+	if ((msr & vmx_msr) == 0) {
+		printk("VMX is supported, but disabled in BIOS.\n");
 		return -2;
 	}
 
@@ -141,7 +142,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	pin_based_vm_exec_ctrl =  PIN_BASED_ALWAYSON_WITHOUT_TRUE_MSR
 		| PIN_BASED_EXT_INTR_MASK
 		| PIN_BASED_POSTED_INTR
-		| PIN_BASED_VMX_PREEMPTION_TIMER
+		//| PIN_BASED_VMX_PREEMPTION_TIMER
 		;
 
 	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, 2100000000 / 128);
@@ -201,7 +202,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		| VM_EXIT_LOAD_IA32_EFER
 		| VM_EXIT_ACK_INTR_ON_EXIT
 		| VM_EXIT_HOST_ADDR_SPACE_SIZE
-		| VM_EXIT_SAVE_VMX_PREEMPTION_TIMER
+		//| VM_EXIT_SAVE_VMX_PREEMPTION_TIMER
 		;
 	if ((vm_exit_ctrl | vm_exit_allow1_mask) != vm_exit_allow1_mask) {
 		printk("Warning:setting vm_exit_controls:%x unsupported.\n", 
@@ -488,9 +489,13 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 	u64 hpa;
 	u64 *virt;
 	struct guest_memory_zone *zone = kmalloc(sizeof(*zone), GFP_KERNEL);
+	if (zone == NULL)
+		return -1;
 	memset(zone, 0, sizeof(*zone));
 	size = roundup(size, 0x1000);
 	virt = kmalloc(size, GFP_KERNEL);
+	if (virt == NULL)
+		return -1;
 	hpa = VIRT2PHYS(virt);
 	zone->hpa = hpa;
 	zone->page_nr = size / 0x1000;
@@ -1325,13 +1330,23 @@ void vm_init_test()
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
 
 	struct vmx_vcpu *vcpu = vmx_preinit();
+	if (vcpu == NULL) {
+		printk("VM preinit failed.Check BIOS settings for enabling VT-x.\n");
+		return;
+	}
 	vmx_init(vcpu);
 	vmx_set_ctrl_state(vcpu);
 	vmx_save_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
-	alloc_guest_memory(vcpu, 0, 0x1000000);
+	ret = alloc_guest_memory(vcpu, 0, 0x1000000);
+	if (ret == -1) {
+		printk("allocate memory for vm failed.\n");
+	}
 	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
-	write_guest_memory_gpa(vcpu, 0x7c00, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
+	ret = write_guest_memory_gpa(vcpu, 0x7c00, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
+	if (ret == -1) {
+		printk("writing guest memory failed.\n");
+	}
 	vmx_set_guest_state(vcpu);
 	ret = vmx_run(vcpu);
 	printk("vm-exit.ret = %d\n", ret);
