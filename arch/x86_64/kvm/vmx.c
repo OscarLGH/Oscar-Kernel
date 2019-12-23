@@ -24,9 +24,14 @@ int vmx_enable()
 	msr = rdmsr(MSR_IA32_FEATURE_CONTROL);
 	vmx_msr = FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_VMXON_ENABLED_INSIDE_SMX;
 
-	if ((msr & vmx_msr) == 0) {
-		printk("VMX is supported, but disabled in BIOS.\n");
-		return -2;
+	if ((msr & FEATURE_CONTROL_LOCKED) == FEATURE_CONTROL_LOCKED) {
+		if ((msr & vmx_msr) == 0) {
+			printk("VMX is supported, but disabled in BIOS.\n");
+			return -2;
+		}
+	} else {
+		msr |= (FEATURE_CONTROL_VMXON_ENABLED_OUTSIDE_SMX | FEATURE_CONTROL_LOCKED);
+		wrmsr(MSR_IA32_FEATURE_CONTROL, msr);
 	}
 
 	cr0_set_bits(CR0_NE | CR0_MP);
@@ -146,7 +151,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		;
 
 	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, 2100000000 / 128);
-	printk("VMX_MISC:0x%x\n", rdmsr(MSR_IA32_VMX_MISC));
+
 	if ((pin_based_vm_exec_ctrl | pin_based_allow1_mask) != pin_based_allow1_mask) {
 		printk("Warning:setting pin_based_vm_exec_control:%x unsupported.\n", 
 			(pin_based_vm_exec_ctrl & pin_based_allow1_mask) ^ pin_based_vm_exec_ctrl);
