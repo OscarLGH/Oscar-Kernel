@@ -1153,7 +1153,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	u64 mmio_base;
 	u32 *mmio_virt;
 	u32 len_version, hcs_params1, hcs_params2, hcs_params3, hcc_params1, hcc_params2;
-	int ret;
+	int ret, i;
 	struct pci_irq_desc *irq_desc;
 	struct xhci *xhci = kmalloc(sizeof(*xhci), GFP_KERNEL);
 	memset(xhci, 0, sizeof(*xhci));
@@ -1217,13 +1217,13 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	xhci_opreg_wr32(xhci, XHCI_HC_CONFIG, xhci->nr_slot);
 
 	xhci->dcbaa = kmalloc(0x1000, GFP_KERNEL);
-	for (int i = 0; i < 256; i++) {
+	for (i = 0; i < 256; i++) {
 		xhci->dcbaa[i] = 0;
 	}
 
 	u64 *scrach_buffer = kmalloc(0x1000, GFP_KERNEL);
 	memset(scrach_buffer, 0, 0x1000);
-	for (int i = 0; i < xhci->max_scratch_buffer_cnt; i++) {
+	for (i = 0; i < xhci->max_scratch_buffer_cnt; i++) {
 		u64 *buffer_sc = kmalloc(0x1000, GFP_KERNEL);
 		memset(buffer_sc, 0, 0x1000);
 		scrach_buffer[i] = VIRT2PHYS(buffer_sc);
@@ -1249,7 +1249,7 @@ int xhci_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	xhci->event_ring_seg_table[0].ring_segment_base_addr = VIRT2PHYS(xhci->event_ring);
 	xhci->event_ring_seg_table[0].ring_segment_size = xhci->event_ring_size / 16;
 	xhci->event_ring_ccs = 1;
-	for (int i = 0; i < xhci->nr_intr; i++) {
+	for (i = 0; i < xhci->nr_intr; i++) {
 		xhci_rtreg_wr32(xhci, XHCI_HC_IR(i) + XHCI_HC_IR_ERSTSZ, 1);
 		xhci_rtreg_wr64(xhci, XHCI_HC_IR(i) + XHCI_HC_IR_ERDP, xhci->event_ring_seg_table[0].ring_segment_base_addr | BIT3);
 		xhci_rtreg_wr64(xhci, XHCI_HC_IR(i) + XHCI_HC_IR_ERSTBA, VIRT2PHYS(xhci->event_ring_seg_table));
