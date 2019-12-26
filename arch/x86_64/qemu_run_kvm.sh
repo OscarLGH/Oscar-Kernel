@@ -34,7 +34,7 @@ sudo losetup -d $free_loop
 
 qemu-system-x86_64 \
 	-enable-kvm \
-	-cpu host \
+	-cpu host\
 	-smp 4,sockets=1,cores=2,threads=2 \
 	-m 1G \
 	-bios OVMF.fd \

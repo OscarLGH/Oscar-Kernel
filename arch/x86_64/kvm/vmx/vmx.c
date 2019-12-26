@@ -220,7 +220,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
-	vmcs_write(EXCEPTION_BITMAP, 0xffffffff);
+	vmcs_write(EXCEPTION_BITMAP, 0x0);
 
 	return 0;
 }
@@ -499,6 +499,7 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 	memset(zone, 0, sizeof(*zone));
 	size = roundup(size, 0x1000);
 	virt = kmalloc(size, GFP_KERNEL);
+	memset(virt, 0, size);
 	if (virt == NULL)
 		return -1;
 	hpa = VIRT2PHYS(virt);
@@ -558,6 +559,7 @@ int vmx_handle_exception(struct vmx_vcpu *vcpu)
 	if (cr0 & CR0_PE == 0) {
 		interruption_info &= (~BIT11);
 	}
+	while (1);
 	//vmcs_write(VM_ENTRY_INTR_INFO_FIELD, interruption_info);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
@@ -755,71 +757,16 @@ int vmx_handle_vmcall(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
-
-int vmx_handle_vmxon(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMXON.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-int vmx_handle_vmxoff(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMXOFF.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-
-int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMCLEAR.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-
-int vmx_handle_vmlaunch(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMLAUNCH.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-int vmx_handle_vmresume(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMRESUME.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMPTRLD.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMPTRST.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-int vmx_handle_vmread(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMREAD.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
-
-int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
-{
-	printk("VM-Exit:VMWRITE.\n");
-	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	return 0;
-}
+int vmx_handle_vmxon(struct vmx_vcpu *vcpu);
+int vmx_handle_vmxoff(struct vmx_vcpu *vcpu);
+int vmx_handle_vmclear(struct vmx_vcpu *vcpu);
+int vmx_handle_vmlaunch(struct vmx_vcpu *vcpu);
+int vmx_handle_vmresume(struct vmx_vcpu *vcpu);
+int vmx_handle_vmptrld(struct vmx_vcpu *vcpu);
+int vmx_handle_vmptrst(struct vmx_vcpu *vcpu);
+int vmx_handle_vmread(struct vmx_vcpu *vcpu);
+int vmx_handle_vmwrite(struct vmx_vcpu *vcpu);
+int handle_vmx_instructions(struct vmx_vcpu *vcpu);
 
 static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
 {

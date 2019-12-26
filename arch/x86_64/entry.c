@@ -645,7 +645,7 @@ void arch_init()
 
 	int irq = alloc_irqs_cpu(get_cpu()->id, 1);
 	request_irq_smp(get_cpu(), irq, task_timer_tick, 0, "lapic-timer", NULL);
-	lapic_set_timer(1, irq + 0x20);
+	//lapic_set_timer(1, irq + 0x20);
 
 	while(1) {
 		asm("hlt");
