@@ -2,6 +2,10 @@
 .global test_guest_end
 .global test_guest_reset_vector
 
+KERNEL_OFFSET = 0xffff800000000000
+
+INIT_MAPPING_ADDR = bsp_entry_64 - KERNEL_OFFSET
+
 .text
 .code16
 test_guest:
@@ -63,10 +67,6 @@ guest_entry_32:
 	movl $0, 4(%eax)
 
 	movl $0x101000, %eax
-	movl $0x102003, (%eax)
-	movl $0, 4(%eax)
-
-	movl $0x102000, %eax
 	movl $0x83, (%eax)
 	movl $0, 4(%eax)
 
@@ -91,8 +91,6 @@ guest_entry_32:
 .code64
 guest_entry_64:
 
-	movabsq $0xffff800001000000, %rsp
-
 	movq %cr4, %rax
 	bts $9, %rax
 	bts $18, %rax
@@ -113,9 +111,9 @@ guest_entry_64:
 	movl $0, %ecx
 	xsetbv
 
-	vmcall
-
-	hlt	
+	movabsq $0x100000, %rsp
+	movabsq $INIT_MAPPING_ADDR, %rax
+	jmpq *%rax
 
 test_guest_end:
 	nop

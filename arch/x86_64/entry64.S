@@ -19,6 +19,7 @@ PDT_BASE = PDPT_BASE + 0x1000
 .global jmp_table
 
 .global bsp_entry_64
+.global setup_init_mapping
 .code64
 .section .text
 

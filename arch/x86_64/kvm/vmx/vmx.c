@@ -220,7 +220,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
-	vmcs_write(EXCEPTION_BITMAP, 0x0);
+	vmcs_write(EXCEPTION_BITMAP, 0xffffffff);
 
 	return 0;
 }
@@ -577,7 +577,8 @@ int vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
 
 int vmx_handle_triple_fault(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:Triple fault.\n");
+	printk("VM-Exit:Triple fault.RIP = %x\n", vcpu->guest_state.rip);
+	while (1);
 	return 0;
 }
 
@@ -877,7 +878,7 @@ int vmx_handle_wrmsr(struct vmx_vcpu *vcpu)
 
 int vmx_handle_mtf(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:Monitor trap.\n");
+	printk("VM-Exit:Monitor trap.RIP = %x\n", vcpu->guest_state.rip);
 	return 0;
 }
 
@@ -921,7 +922,7 @@ int vmx_handle_io(struct vmx_vcpu *vcpu)
 		if (vcpu->guest_state.gr_regs.rcx == 0)
 			vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	}
-	printk("Port = 0x%x\n", port);
+	printk("Port = 0x%x, val = %x\n", port, vcpu->guest_state.gr_regs.rax);
 	return 0;
 }
 
@@ -1279,6 +1280,8 @@ void vm_init_test()
 {
 	int ret;
 	u8 buf[4];
+	u8 buffer[4096];
+	void *code_start, *code_end;
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
 
 	struct vmx_vcpu *vcpu = vmx_preinit();
@@ -1299,6 +1302,15 @@ void vm_init_test()
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");
 	}
+
+	code_start = (void *)PHYS2VIRT(0x200000);
+	code_end = (void *)PHYS2VIRT(0x300000);
+	ret = write_guest_memory_gpa(vcpu, 0x200000, 0x100000, code_start);
+	if (ret == -1) {
+		printk("writing guest memory failed.\n");
+	}
+	read_guest_memory_gpa(vcpu, 0x200000, 0x1000, buffer);
+	hex_dump(buffer, 16);
 	vmx_set_guest_state(vcpu);
 	ret = vmx_run(vcpu);
 	printk("vm-exit.ret = %d\n", ret);
