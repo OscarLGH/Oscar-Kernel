@@ -1,11 +1,13 @@
 #include <mm.h>
 #include <cpu.h>
+#include <string.h>
 
 LIST_HEAD(node_list);
 
 
 void mm_node_init(struct node *node)
 {
+	INIT_LIST_HEAD(&node_list);
 	INIT_LIST_HEAD(&node->cpu_list);
 	INIT_LIST_HEAD(&node->zone_list);	
 }
@@ -53,6 +55,7 @@ void mm_enumate()
 	for (i = 0; i < boot_parm->ardc_cnt; i++) {
 		if (1) {
 			struct zone *zone = kmalloc(sizeof(*zone), GFP_KERNEL);
+			memset(zone, 0, sizeof(*zone));
 			zone->page_size = 0x1000;
 			zone->start_pfn = boot_parm->ardc_array[i].base / zone->page_size;
 			zone->pfn_cnt = boot_parm->ardc_array[i].length / zone->page_size;

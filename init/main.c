@@ -66,8 +66,7 @@ int start_kernel()
 {
 	boot_fb_init();
 	graphic_con_init();
-	fb_test();
-
+	//fb_test();
 	printk("Oscar Kernel init start...\n");
 	printk("Build:%s %s\n", __DATE__, __TIME__);
 	printk("==========================================\n");

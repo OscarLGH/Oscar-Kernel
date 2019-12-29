@@ -791,9 +791,9 @@ void pci_scan()
 	INIT_LIST_HEAD(&pci_device_list);
 	INIT_LIST_HEAD(&pci_driver_list);
 
-	for (b = 0; b < host_bridge->end_bus_number; b++)
-		for (d = 0; d < 32; d++)
-			for (f = 0; f < 8; f++) {
+	for (b = 0; b <= host_bridge->end_bus_number; b++)
+		for (d = 0; d <= 31; d++)
+			for (f = 0; f <= 7; f++) {
 				pdev_test.bus = b;
 				pdev_test.device = d;
 				pdev_test.fun = f;
@@ -810,6 +810,7 @@ void pci_scan()
 					list_add_tail(&pdev->list, &pci_device_list);
 				}
 			}
+		asm("cpuid");
 	//pci_device_print();
 }
 

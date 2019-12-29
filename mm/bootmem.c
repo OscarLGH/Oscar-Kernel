@@ -155,6 +155,10 @@ void bootmem_init()
 		}
 	}
 
+	if (boot_parm->ardc_cnt == 0) {
+		clear_bootmem_bitmap_area(0, 0x2000000);
+	}
+
 	/* Reserve 16MB memory for kernel code & data. */
 	set_bootmem_bitmap_area(0, 0x1000000);
 }

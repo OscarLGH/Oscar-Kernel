@@ -220,7 +220,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
-	vmcs_write(EXCEPTION_BITMAP, 0xffffffff);
+	vmcs_write(EXCEPTION_BITMAP, 0x0);
 
 	return 0;
 }
@@ -590,7 +590,14 @@ int vmx_handle_pending_interrupt(struct vmx_vcpu *vcpu)
 
 int vmx_handle_cpuid(struct vmx_vcpu *vcpu)
 {
+	u32 buffer[4];
 	printk("VM-Exit:cpuid.\n");
+	/* Passthrough host cpuid. */
+	cpuid(vcpu->guest_state.gr_regs.rax, vcpu->guest_state.gr_regs.rcx, buffer);
+	vcpu->guest_state.gr_regs.rax = buffer[0];
+	vcpu->guest_state.gr_regs.rbx = buffer[1];
+	vcpu->guest_state.gr_regs.rcx = buffer[2];
+	vcpu->guest_state.gr_regs.rdx = buffer[3];
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -906,9 +913,9 @@ int vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 
 int vmx_handle_io(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:I/O.\n");
+	//printk("VM-Exit:I/O.\n");
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	u64 port = (exit_qualification >> 16) & 0xff;
+	u64 port = (exit_qualification >> 16) & 0xffff;
 	bool direction = exit_qualification & BIT3;
 	bool is_string = exit_qualification & BIT4;
 	bool is_rep = exit_qualification & BIT5;
@@ -922,7 +929,14 @@ int vmx_handle_io(struct vmx_vcpu *vcpu)
 		if (vcpu->guest_state.gr_regs.rcx == 0)
 			vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	}
-	printk("Port = 0x%x, val = %x\n", port, vcpu->guest_state.gr_regs.rax);
+	//printk("Port = 0x%x, val = %x\n", port, vcpu->guest_state.gr_regs.rax);
+	if (port == 0x3f8) {
+		printk("%c", vcpu->guest_state.gr_regs.rax);
+	}
+
+	if (port == 0xcfc) {
+		vcpu->guest_state.gr_regs.rax = 0xffffffff;
+	}
 	return 0;
 }
 
@@ -1280,7 +1294,7 @@ void vm_init_test()
 {
 	int ret;
 	u8 buf[4];
-	u8 buffer[4096];
+
 	void *code_start, *code_end;
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
 
@@ -1293,10 +1307,16 @@ void vm_init_test()
 	vmx_set_ctrl_state(vcpu);
 	vmx_save_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
-	ret = alloc_guest_memory(vcpu, 0, 0x1000000);
+	ret = alloc_guest_memory(vcpu, 0, 0x10000000);
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
 	}
+
+	ret = alloc_guest_memory(vcpu, 0xfee00000, 0x1000);
+	if (ret == -1) {
+		printk("allocate memory for vm failed.\n");
+	}
+	//memset();
 	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
 	ret = write_guest_memory_gpa(vcpu, 0x7c00, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
 	if (ret == -1) {
@@ -1309,8 +1329,7 @@ void vm_init_test()
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");
 	}
-	read_guest_memory_gpa(vcpu, 0x200000, 0x1000, buffer);
-	hex_dump(buffer, 16);
+
 	vmx_set_guest_state(vcpu);
 	ret = vmx_run(vcpu);
 	printk("vm-exit.ret = %d\n", ret);

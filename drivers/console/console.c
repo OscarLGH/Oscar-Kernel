@@ -2,6 +2,11 @@
 
 LIST_HEAD(con_list);
 
+int console_init()
+{
+	INIT_LIST_HEAD(&con_list);
+	return 0;
+}
 int console_register(struct console *con_ptr)
 {
 	list_add_tail(&con_ptr->list, &con_list);

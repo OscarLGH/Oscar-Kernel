@@ -75,6 +75,7 @@ void boot_fb_imageblit(struct fb_info *info, const struct fb_image *image)
 int boot_fb_init()
 {
 	struct bootloader_parm_block *boot_parm = (void *)SYSTEM_PARM_BASE;
+
 	boot_fb.screen_base = (void *)PHYS2VIRT(boot_parm->frame_buffer_base);
 	boot_fb.screen_size = 0x2000000;
 	boot_fb.var.bits_per_pixel = 32;
@@ -86,14 +87,23 @@ int boot_fb_init()
 	boot_fb.var.xres_virtual = boot_parm->pixels_per_scanline;
 	boot_fb.var.yres = boot_parm->screen_height;
 	boot_fb.var.yres_virtual = boot_parm->screen_height;
-	boot_fb.var.active = 1;
+	
+	if (boot_parm->frame_buffer_base == 0)
+		boot_fb.var.active = 0;
+	else
+		boot_fb.var.active = 1;
 
 	boot_fb.fbops = &bootfb_ops;
 	bootfb_ops.fb_fillrect = boot_fb_fillrect;
 	bootfb_ops.fb_copyarea = boot_fb_copyarea;
 	bootfb_ops.fb_imageblit = boot_fb_imageblit;
 
+	early_fb_init();
+	int console_init();
+	console_init();
+
 	//memset(boot_fb.screen_base, 0x00, 0x400000);
 
 	fb_register(&boot_fb);
+	return 0;
 }

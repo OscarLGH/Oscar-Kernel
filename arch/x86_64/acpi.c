@@ -12,7 +12,7 @@ void *acpi_get_desc(char *name)
 	acpi_addr = PHYS2VIRT(boot_parm->acpi_rsdp);
 	//printk("acpi_addr = %016x\n", (u64)acpi_addr);
 	if (strncmp((u8 *)acpi_addr, "RSD PTR ", 8) != 0) {
-		printk("ACPI Error: ACPI signature not found.\n");
+		//printk("ACPI Error: ACPI signature not found.\n");
 		return NULL;
 	}
 
