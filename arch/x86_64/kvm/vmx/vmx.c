@@ -1264,6 +1264,114 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.ctrl_regs.xcr0 = XCR0_X87;
 }
 
+u64 kvm_reg_read(struct vmx_vcpu *vcpu, int index)
+{
+	switch (index) {
+		case KVM_REG_RAX:
+			return vcpu->guest_state.gr_regs.rax;
+			break;
+		case KVM_REG_RCX:
+			return vcpu->guest_state.gr_regs.rcx;
+			break;
+		case KVM_REG_RDX:
+			return vcpu->guest_state.gr_regs.rdx;
+			break;
+		case KVM_REG_RBX:
+			return vcpu->guest_state.gr_regs.rbx;
+			break;
+		case KVM_REG_RSP:
+			return vcpu->guest_state.gr_regs.rsp;
+			break;
+		case KVM_REG_RBP:
+			return vcpu->guest_state.gr_regs.rbp;
+			break;
+		case KVM_REG_RSI:
+			return vcpu->guest_state.gr_regs.rsi;
+			break;
+		case KVM_REG_RDI:
+			return vcpu->guest_state.gr_regs.rdi;
+			break;
+		case KVM_REG_R8:
+			return vcpu->guest_state.gr_regs.r8;
+			break;
+		case KVM_REG_R9:
+			return vcpu->guest_state.gr_regs.r9;
+			break;
+		case KVM_REG_R10:
+			return vcpu->guest_state.gr_regs.r10;
+			break;
+		case KVM_REG_R11:
+			return vcpu->guest_state.gr_regs.r11;
+			break;
+		case KVM_REG_R12:
+			return vcpu->guest_state.gr_regs.r12;
+			break;
+		case KVM_REG_R13:
+			return vcpu->guest_state.gr_regs.r13;
+			break;
+		case KVM_REG_R14:
+			return vcpu->guest_state.gr_regs.r14;
+			break;
+		case KVM_REG_R15:
+			return vcpu->guest_state.gr_regs.r15;
+			break;
+	}
+}
+
+void kvm_reg_write(struct vmx_vcpu *vcpu, int index, u64 value)
+{
+	switch (index) {
+		case KVM_REG_RAX:
+			vcpu->guest_state.gr_regs.rax = value;
+			break;
+		case KVM_REG_RCX:
+			vcpu->guest_state.gr_regs.rcx = value;
+			break;
+		case KVM_REG_RDX:
+			vcpu->guest_state.gr_regs.rdx = value;
+			break;
+		case KVM_REG_RBX:
+			vcpu->guest_state.gr_regs.rbx = value;
+			break;
+		case KVM_REG_RSP:
+			vcpu->guest_state.gr_regs.rsp = value;
+			break;
+		case KVM_REG_RBP:
+			vcpu->guest_state.gr_regs.rbp = value;
+			break;
+		case KVM_REG_RSI:
+			vcpu->guest_state.gr_regs.rsi = value;
+			break;
+		case KVM_REG_RDI:
+			vcpu->guest_state.gr_regs.rdi = value;
+			break;
+		case KVM_REG_R8:
+			vcpu->guest_state.gr_regs.r8 = value;
+			break;
+		case KVM_REG_R9:
+			vcpu->guest_state.gr_regs.r9 = value;
+			break;
+		case KVM_REG_R10:
+			vcpu->guest_state.gr_regs.r10 = value;
+			break;
+		case KVM_REG_R11:
+			vcpu->guest_state.gr_regs.r11 = value;
+			break;
+		case KVM_REG_R12:
+			vcpu->guest_state.gr_regs.r12 = value;
+			break;
+		case KVM_REG_R13:
+			vcpu->guest_state.gr_regs.r13 = value;
+			break;
+		case KVM_REG_R14:
+			vcpu->guest_state.gr_regs.r14 = value;
+			break;
+		case KVM_REG_R15:
+			vcpu->guest_state.gr_regs.r15 = value;
+			break;
+	}
+}
+
 
 int vmx_run(struct vmx_vcpu *vcpu)
 {	

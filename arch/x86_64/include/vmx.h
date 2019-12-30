@@ -620,6 +620,23 @@ enum vm_instruction_error_number {
 #define EXIT_REASON_XSAVES              63
 #define EXIT_REASON_XRSTORS             64
 
+#define KVM_REG_RAX 0
+#define KVM_REG_RCX 1
+#define KVM_REG_RDX 2
+#define KVM_REG_RBX 3
+#define KVM_REG_RSP 4
+#define KVM_REG_RBP 5
+#define KVM_REG_RSI 6
+#define KVM_REG_RDI 7
+#define KVM_REG_R8 8
+#define KVM_REG_R9 9
+#define KVM_REG_R10 10
+#define KVM_REG_R11 11
+#define KVM_REG_R12 12
+#define KVM_REG_R13 13
+#define KVM_REG_R14 14
+#define KVM_REG_R15 15
+
 struct vmcs {
 	u32 revision_id;
 	u32 abort;
@@ -730,10 +747,10 @@ static inline void vmptr_load(u64 paddr)
 		);
 }
 
-static inline void vmptr_store(u64 *paddr)
+static inline void vmptr_store(u64 paddr)
 {
 	asm volatile("vmptrst (%%rax)"
-		::"a"(paddr), "m"(paddr)
+		::"a"(&paddr), "m"(paddr)
 		);
 }
 
@@ -790,4 +807,10 @@ int vm_launch(void *host_reg, void *guest_reg);
 int vm_resume(void *host_reg, void *guest_reg);
 
 int vm_run(struct vmx_vcpu *vcpu);
+
+u64 kvm_reg_read(struct vmx_vcpu *vcpu, int index);
+void kvm_reg_write(struct vmx_vcpu *vcpu, int index, u64 value);
+int ept_gpa_to_hpa(struct vmx_vcpu *vcpu, gpa_t gpa, hpa_t *hpa);
+int paging64_gva_to_gpa(struct vmx_vcpu *vcpu, gva_t gva, gpa_t *gpa);
+
 #endif

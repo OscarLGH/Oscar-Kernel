@@ -26,7 +26,8 @@
 #define PG_PDPTE_1GB_PAGE (1 << 7)
 #define PG_PDPTE_1GB_GLOBAL (1 << 8)
 #define PG_PDPTE_1GB_PAT (1 << 12)
-#define PG_PDPTE_1GB_OFFSET(x) ((x) & 0xffffffffc0000000)
+#define PG_PDPTE_1GB_PFN(x) ((x) & 0xffffffffc0000000)
+#define PG_PDPTE_1GB_OFFSET(x) ((x) & (~0xffffffffc0000000))
 #define PG_PDPTE_1BG_PROTECTION_KEY(x) ((x & 0xf) << 59)
 #define PG_PDPTE_EXECUTE_DISABLE (1ULL << 63)
 
@@ -42,7 +43,8 @@
 #define PG_PDE_2MB_PAGE (1 << 7)
 #define PG_PDE_2MB_GLOBAL (1 << 8)
 #define PG_PDE_2MB_PAT (1 << 12)
-#define PG_PDE_2MB_OFFSET(x) ((x) & 0xffffffffffe00000)
+#define PG_PDE_2MB_PFN(x) ((x) & 0xffffffffffe00000)
+#define PG_PDE_2MB_OFFSET(x) ((x) & (~0xffffffffffe00000))
 #define PG_PDE_2MB_PROTECTION_KEY(x) ((x & 0xf) << 59)
 #define PG_PDE_EXECUTE_DISABLE (1ULL << 63)
 
@@ -58,7 +60,8 @@
 #define PG_PT_DIRTY_FLAG (1 << 6)
 #define PG_PT_PAT (1 << 7)
 #define PG_PT_GLOBAL (1 << 8)
-#define PG_PT_4KB_OFFSET(x) ((x) & 0xfffffffffffff000)
+#define PG_PT_4KB_PFN(x) ((x) & 0xfffffffffffff000)
+#define PG_PT_4KB_OFFSET(x) ((x) & (~0xfffffffffffff000))
 #define PG_PT_PROTECTION_KEY(x) ((x & 0xf) << 59)
 #define PG_PT_EXECUTE_DISABLE (1ULL << 63)
 
@@ -113,8 +116,8 @@ static inline u64 read_pg(u64 *table, u64 index)
 #define EPT_PDPTE_1GB_PAGE (1 << 7)
 #define EPT_PDPTE_ACCESS_FLAG (1 << 8)
 #define EPT_PDPTE_DIRTY_FLAG (1 << 9)
-#define EPT_PDPTE_1GB_OFFSET(x) ((x) & 0xffffffffc0000000)
-
+#define EPT_PDPTE_1GB_PFN(x) ((x) & 0xffffffffc0000000)
+#define EPT_PDPTE_1GB_OFFSET(x) ((x) & (~0xffffffffc0000000))
 
 #define EPT_PDE_READ (1 << 0)
 #define EPT_PDE_WRITE (1 << 1)
@@ -128,8 +131,8 @@ static inline u64 read_pg(u64 *table, u64 index)
 #define EPT_PDE_2MB_PAGE (1 << 7)
 #define EPT_PDE_ACCESS_FLAG (1 << 8)
 #define EPT_PDE_DIRTY_FLAG (1 << 9)
-#define EPT_PDE_2MB_OFFSET(x) ((x) & 0xffffffffffe00000)
-
+#define EPT_PDE_2MB_PFN(x) ((x) & 0xffffffffffe00000)
+#define EPT_PDE_2MB_OFFSET(x) ((x) & (~0xffffffffffe00000))
 
 #define EPT_PTE_READ (1 << 0)
 #define EPT_PTE_WRITE (1 << 1)
@@ -142,6 +145,7 @@ static inline u64 read_pg(u64 *table, u64 index)
 #define EPT_PTE_CACHE_IGNORE_PAT (1 << 6)
 #define EPT_PTE_ACCESS_FLAG (1 << 8)
 #define EPT_PTE_DIRTY_FLAG (1 << 9)
-#define EPT_PT_4KB_OFFSET(x) ((x) & 0xfffffffffffff000)
+#define EPT_PT_4KB_PFN(x) ((x) & 0xfffffffffffff000)
+#define EPT_PT_4KB_OFFSET(x) ((x) & (~0xfffffffffffff000))
 
 #endif
