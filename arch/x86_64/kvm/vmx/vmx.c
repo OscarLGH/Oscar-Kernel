@@ -499,9 +499,10 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 	memset(zone, 0, sizeof(*zone));
 	size = roundup(size, 0x1000);
 	virt = kmalloc(size, GFP_KERNEL);
-	memset(virt, 0, size);
+	printk("vm virt = %x\n", virt);
 	if (virt == NULL)
 		return -1;
+	memset(virt, 0, size);
 	hpa = VIRT2PHYS(virt);
 	zone->hpa = hpa;
 	zone->page_nr = size / 0x1000;
@@ -774,6 +775,7 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu);
 int vmx_handle_vmptrst(struct vmx_vcpu *vcpu);
 int vmx_handle_vmread(struct vmx_vcpu *vcpu);
 int vmx_handle_vmwrite(struct vmx_vcpu *vcpu);
+int vmx_handle_invept(struct vmx_vcpu *vcpu);
 int handle_vmx_instructions(struct vmx_vcpu *vcpu);
 
 static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
@@ -1135,6 +1137,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_EPT_MISCONFIG:
 			break;
 		case EXIT_REASON_INVEPT:
+			ret = vmx_handle_invept(vcpu);
 			break;
 		case EXIT_REASON_RDTSCP:
 			ret = vmx_handle_rdtscp(vcpu);
@@ -1418,13 +1421,17 @@ void vm_init_test()
 	ret = alloc_guest_memory(vcpu, 0, 0x10000000);
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
+		ret = alloc_guest_memory(vcpu, 0, 0x800000);
+		if (ret == -1) {
+			printk("allocate memory for vm failed.exiting...\n");
+			return;
+		}
 	}
 
 	ret = alloc_guest_memory(vcpu, 0xfee00000, 0x1000);
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
 	}
-	//memset();
 	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
 	ret = write_guest_memory_gpa(vcpu, 0x7c00, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
 	if (ret == -1) {

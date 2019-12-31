@@ -60,6 +60,7 @@ int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 int vmx_handle_vmlaunch(struct vmx_vcpu *vcpu)
 {
 	printk("VM-Exit:VMLAUNCH.\n");
+	while (1);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -166,6 +167,27 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	u64 *virt;
 	int ret;
 	printk("VM-Exit:VMWRITE.base reg:%d(0x%x), reg2:%d(0x%x)\n",
+		base_reg,
+		kvm_reg_read(vcpu, base_reg),
+		reg2,
+		kvm_reg_read(vcpu, reg2));
+
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
+}
+
+int vmx_handle_invept(struct vmx_vcpu *vcpu)
+{
+	u32 instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
+	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	int base_reg = (instruction_info >> 23) & 0xf;
+	int reg2 = (instruction_info >> 28) & 0xf;
+	u64 gva;
+	u64 gpa;
+	u64 hpa;
+	u64 *virt;
+	int ret;
+	printk("VM-Exit:INVEPT.base reg:%d(0x%x), reg2:%d(0x%x)\n",
 		base_reg,
 		kvm_reg_read(vcpu, base_reg),
 		reg2,

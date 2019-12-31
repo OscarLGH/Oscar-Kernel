@@ -125,6 +125,8 @@ void *bootmem_alloc(u64 size)
 		}
 	}
 	spin_unlock_irqrestore(&bootmem.spin_lock, flags);
+	if (paddr == -1)
+		return 0;
 	vaddr = (void *)PHYS2VIRT(paddr);
 	return vaddr;
 }
