@@ -58,6 +58,13 @@ static inline u64 ffs(u64 num)
 #define min(a,b) ((a)<(b)?(a):(b))
 #define max(a,b) ((a)>=(b)?(a):(b))
 
+static inline s64 sign_extend64(u64 value, int index)
+{
+	u8 shift = 63 - index;
+	return (s64)(value << shift) >> shift;
+}
+
+
 
 #endif
 
