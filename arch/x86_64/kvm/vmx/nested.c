@@ -10,18 +10,46 @@
 #include <list.h>
 #include <fpu.h>
 
+
+int decode_mem_address(struct vmx_vcpu *vcpu, unsigned long exit_qualification,
+			u32 vmx_instruction_info, gva_t *gva)
+{
+	gva_t off;
+	bool exn;
+	int  scaling = vmx_instruction_info & 3;
+	int  addr_size = (vmx_instruction_info >> 7) & 7;
+	bool is_reg = vmx_instruction_info & (1u << 10);
+	int  seg_reg = (vmx_instruction_info >> 15) & 7;
+	int  index_reg = (vmx_instruction_info >> 18) & 0xf;
+	bool index_is_valid = !(vmx_instruction_info & (1u << 22));
+	int  base_reg       = (vmx_instruction_info >> 23) & 0xf;
+	bool base_is_valid  = !(vmx_instruction_info & (1u << 27));
+
+	off = exit_qualification; /* holds the displacement */
+	if (addr_size == 1)
+		off = (gva_t)sign_extend64(off, 31);
+	else if (addr_size == 0)
+		off = (gva_t)sign_extend64(off, 15);
+	if (base_is_valid)
+		off += kvm_reg_read(vcpu, base_reg);
+	if (index_is_valid)
+		off += kvm_reg_read(vcpu, index_reg)<<scaling;
+
+	*gva = off;
+
+	return 0;
+}
 int vmx_handle_vmxon(struct vmx_vcpu *vcpu)
 {
 	u32 instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	int base_reg = (instruction_info >> 23) & 0xf;
-	u64 gva;
-	u64 gpa;
-	u64 hpa;
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
 	u64 *virt;
 	int ret;
 
-	gva = kvm_reg_read(vcpu, base_reg);
+	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
 		printk("transfer gva to gpa failed.\n");
@@ -51,7 +79,35 @@ int vmx_handle_vmxoff(struct vmx_vcpu *vcpu)
 
 int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:VMCLEAR.\n");
+	u32 instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
+	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
+	u64 *virt;
+	u64 vmcs12_phys;
+	int ret;
+
+	vmclear(vcpu->vmcs01_phys);
+	vcpu->state = 0;
+	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
+	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
+	if (ret) {
+		printk("transfer gva to gpa failed.\n");
+		return 0;
+	}
+
+	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+	if (ret) {
+		printk("transfer gpa to hpa failed.\n");
+		return 0;
+	}
+
+	virt = (void *)PHYS2VIRT(hpa);
+	vmcs12_phys = *virt;
+	vmclear(vmcs12_phys);
+	printk("VM-Exit:VMCLEAR.Region:0x%x\n", *virt);
+	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -76,14 +132,16 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 {
 	u32 instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	int base_reg = (instruction_info >> 23) & 0xf;
-	u64 gva;
-	u64 gpa;
-	u64 hpa;
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
 	u64 *virt;
 	int ret;
 
-	gva = kvm_reg_read(vcpu, base_reg);
+	vmclear(vcpu->vmcs01_phys);
+	vcpu->state = 0;
+
+	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
 		printk("transfer gva to gpa failed.\n");
@@ -95,10 +153,11 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 		printk("transfer gpa to hpa failed.\n");
 		return 0;
 	}
-
+	vcpu->vmcs12_phys = hpa;
 	virt = (void *)PHYS2VIRT(hpa);
+	vcpu->vmcs12 = (void *)virt;
 	printk("VM-Exit:VMPTRLD.Region:0x%x\n", *virt);
-
+	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -107,14 +166,16 @@ int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
 {
 	u32 instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	int base_reg = (instruction_info >> 23) & 0xf;
-	u64 gva;
-	u64 gpa;
-	u64 hpa;
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
 	u64 *virt;
 	int ret;
 
-	gva = kvm_reg_read(vcpu, base_reg);
+	vmclear(vcpu->vmcs01_phys);
+	vcpu->state = 0;
+
+	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
 		printk("transfer gva to gpa failed.\n");
@@ -129,7 +190,9 @@ int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	printk("VM-Exit:VMPTRST.Region:0x%x\n", *virt);
+	*virt = vcpu->vmcs12_phys;
 
+	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -140,17 +203,23 @@ int vmx_handle_vmread(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	int base_reg = (instruction_info >> 23) & 0xf;
 	int reg2 = (instruction_info >> 28) & 0xf;
-	u64 gva;
-	u64 gpa;
-	u64 hpa;
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
 	u64 *virt;
 	int ret;
+
+	vmclear(vcpu->vmcs01_phys);
+	vcpu->state = 0;
+	vmptr_load(vcpu->vmcs12_phys);
 	printk("VM-Exit:VMREAD.base reg:%d(0x%x), reg2:%d(0x%x)\n",
 		base_reg,
 		kvm_reg_read(vcpu, base_reg),
 		reg2,
 		kvm_reg_read(vcpu, reg2));
-
+	kvm_reg_write(vcpu, reg2, vmcs_read(kvm_reg_read(vcpu, base_reg)));
+	vmclear(vcpu->vmcs12_phys);
+	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -161,17 +230,23 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	int base_reg = (instruction_info >> 23) & 0xf;
 	int reg2 = (instruction_info >> 28) & 0xf;
-	u64 gva;
-	u64 gpa;
-	u64 hpa;
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
 	u64 *virt;
 	int ret;
+
+	vmclear(vcpu->vmcs01_phys);
+	vcpu->state = 0;
+	vmptr_load(vcpu->vmcs12_phys);
 	printk("VM-Exit:VMWRITE.base reg:%d(0x%x), reg2:%d(0x%x)\n",
 		base_reg,
 		kvm_reg_read(vcpu, base_reg),
 		reg2,
 		kvm_reg_read(vcpu, reg2));
-
+	vmcs_write(kvm_reg_read(vcpu, reg2), kvm_reg_read(vcpu, base_reg));
+	vmclear(vcpu->vmcs12_phys);
+	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -180,19 +255,67 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 {
 	u32 instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	int base_reg = (instruction_info >> 23) & 0xf;
 	int reg2 = (instruction_info >> 28) & 0xf;
-	u64 gva;
-	u64 gpa;
-	u64 hpa;
+	gva_t gva;
+	gpa_t gpa;
+	hpa_t hpa;
+	hpa_t eptp_hpa;
 	u64 *virt;
 	int ret;
-	printk("VM-Exit:INVEPT.base reg:%d(0x%x), reg2:%d(0x%x)\n",
-		base_reg,
-		kvm_reg_read(vcpu, base_reg),
-		reg2,
-		kvm_reg_read(vcpu, reg2));
+	struct {
+		u64 eptp, gpa;
+	} *invept_context = NULL;
 
+	vmclear(vcpu->vmcs01_phys);
+	vcpu->state = 0;
+	vmptr_load(vcpu->vmcs12_phys);
+	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
+	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
+	if (ret) {
+		printk("transfer gva to gpa failed.\n");
+		return 0;
+	}
+
+	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+	if (ret) {
+		printk("transfer gpa to hpa failed.\n");
+		return 0;
+	}
+
+	invept_context = (void *)PHYS2VIRT(hpa);
+
+	printk("VM-Exit:INVEPT.reg2:%d(0x%x) eptp = %x gpa = %x\n",
+		reg2,
+		kvm_reg_read(vcpu, reg2),
+		invept_context->eptp,
+		invept_context->gpa);
+	ret = ept_gpa_to_hpa(vcpu, invept_context->eptp, &eptp_hpa);
+	if (ret) {
+		printk("transfer gpa to hpa failed.\n");
+		return 0;
+	}
+	invept(kvm_reg_read(vcpu, reg2), eptp_hpa, 0);
+	vmclear(vcpu->vmcs12_phys);
+	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
+
+int nested_vmx_run(struct vmx_vcpu *vcpu)
+{	
+	int ret0 = 0, ret1 = 0;
+
+	while (1) {
+		if (vcpu->state == 0) {
+			//printk("VM LAUNCH.\n");
+			ret0 = vm_launch(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
+			if (ret0 == 0) {
+				vcpu->state = 1;
+			}
+		} else {
+			//printk("VM RESUME.\n");
+			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
+		}
+	}
+}
+
