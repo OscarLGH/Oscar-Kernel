@@ -106,7 +106,6 @@ int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	vmcs12_phys = *virt;
-	//vmclear(vmcs12_phys);
 	printk("VM-Exit:VMCLEAR.Region:0x%x\n", *virt);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -154,8 +153,10 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 		printk("transfer gpa to hpa failed.\n");
 		return 0;
 	}
+
 	virt = (void *)PHYS2VIRT(hpa);
 	vcpu->vmcs12 = (void *)PHYS2VIRT(*virt);
+
 	printk("VM-Exit:VMPTRLD.Region:0x%x\n", *virt);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -190,6 +191,7 @@ int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	printk("VM-Exit:VMPTRST.Region:0x%x\n", *virt);
+
 	*virt = VIRT2PHYS(vcpu->vmcs12);
 
 	vmptr_load(vcpu->vmcs01_phys);
@@ -212,7 +214,6 @@ int vmx_handle_vmread(struct vmx_vcpu *vcpu)
 	vmcs12_read_any(vcpu->vmcs12, field, &value);
 	printk("VM-Exit:VMREAD.field:0x%x, value:0x%x\n", field, value);
 	kvm_reg_write(vcpu, reg2, value);
-
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
@@ -271,12 +272,14 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 		reg2,
 		kvm_reg_read(vcpu, reg2),
 		invept_context->eptp);
+
 	ret = ept_gpa_to_hpa(vcpu, invept_context->eptp, &eptp_hpa);
 	if (ret) {
 		printk("transfer gpa to hpa failed.\n");
 		return 0;
 	}
 	invept(kvm_reg_read(vcpu, reg2), eptp_hpa, 0);
+
 	vmclear(vcpu->vmcs02_phys);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
