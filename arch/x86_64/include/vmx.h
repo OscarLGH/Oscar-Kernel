@@ -204,7 +204,9 @@ enum vmcs_field {
 	EPTP_LIST_ADDRESS               = 0x00002024,
 	EPTP_LIST_ADDRESS_HIGH          = 0x00002025,
 	VMREAD_BITMAP                   = 0x00002026,
+	VMREAD_BITMAP_HIGH              = 0x00002027,
 	VMWRITE_BITMAP                  = 0x00002028,
+	VMWRITE_BITMAP_HIGH             = 0x00002029,
 	XSS_EXIT_BITMAP                 = 0x0000202C,
 	XSS_EXIT_BITMAP_HIGH            = 0x0000202D,
 	TSC_MULTIPLIER                  = 0x00002032,
@@ -637,11 +639,25 @@ enum vm_instruction_error_number {
 #define KVM_REG_R14 14
 #define KVM_REG_R15 15
 
-struct vmcs {
+struct vmcs_hdr {
 	u32 revision_id;
 	u32 abort;
 	char data[0];
 };
+
+enum vmcs_field_width {
+	VMCS_FIELD_WIDTH_U16 = 0,
+	VMCS_FIELD_WIDTH_U64 = 1,
+	VMCS_FIELD_WIDTH_U32 = 2,
+	VMCS_FIELD_WIDTH_NATURAL_WIDTH = 3
+};
+
+static inline int vmcs_field_width(unsigned long field)
+{
+	if (0x1 & field)
+		return VMCS_FIELD_WIDTH_U32;
+	return (field >> 13) & 0x3;
+}
 
 struct ctrl_regs {
 	u64 cr0;
@@ -678,18 +694,17 @@ struct guest_memory_zone {
 	struct list_head list;
 };
 
-
+struct vmcs12;
 struct vmx_vcpu {
 	u64 state;
 	u64 virtual_processor_id;
-	struct vmcs *vmxon_region;
+	struct vmcs_hdr *vmxon_region;
 	u64 vmxon_region_phys;
-	struct vmcs *vmcs01;
-	struct vmcs *vmcs12;
-	struct vmcs *vmcs02;
+	struct vmcs_hdr *vmcs01;
+	struct vmcs12 *vmcs12;
+	struct vmcs_hdr *vmcs02;
 	u64 vmcs01_phys;
 	u64 vmcs02_phys;
-	u64 vmcs12_phys;
 	u64 *io_bitmap_a;
 	u64 *io_bitmap_b;
 	u64 *vapic_page;

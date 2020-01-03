@@ -1,4 +1,5 @@
 #include <vmx.h>
+#include "vmcs12.h"
 #include <cpuid.h>
 #include <paging.h>
 #include <msr.h>
@@ -105,7 +106,7 @@ int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	vmcs12_phys = *virt;
-	vmclear(vmcs12_phys);
+	//vmclear(vmcs12_phys);
 	printk("VM-Exit:VMCLEAR.Region:0x%x\n", *virt);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -153,9 +154,8 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 		printk("transfer gpa to hpa failed.\n");
 		return 0;
 	}
-	vcpu->vmcs12_phys = hpa;
 	virt = (void *)PHYS2VIRT(hpa);
-	vcpu->vmcs12 = (void *)virt;
+	vcpu->vmcs12 = (void *)PHYS2VIRT(*virt);
 	printk("VM-Exit:VMPTRLD.Region:0x%x\n", *virt);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -190,7 +190,7 @@ int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	printk("VM-Exit:VMPTRST.Region:0x%x\n", *virt);
-	*virt = vcpu->vmcs12_phys;
+	*virt = VIRT2PHYS(vcpu->vmcs12);
 
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -203,22 +203,16 @@ int vmx_handle_vmread(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	int base_reg = (instruction_info >> 23) & 0xf;
 	int reg2 = (instruction_info >> 28) & 0xf;
-	gva_t gva;
-	gpa_t gpa;
-	hpa_t hpa;
-	u64 *virt;
+	u32 field = kvm_reg_read(vcpu, base_reg);
 	int ret;
+	u64 value;
 
 	vmclear(vcpu->vmcs01_phys);
 	vcpu->state = 0;
-	vmptr_load(vcpu->vmcs12_phys);
-	printk("VM-Exit:VMREAD.base reg:%d(0x%x), reg2:%d(0x%x)\n",
-		base_reg,
-		kvm_reg_read(vcpu, base_reg),
-		reg2,
-		kvm_reg_read(vcpu, reg2));
-	kvm_reg_write(vcpu, reg2, vmcs_read(kvm_reg_read(vcpu, base_reg)));
-	vmclear(vcpu->vmcs12_phys);
+	vmcs12_read_any(vcpu->vmcs12, field, &value);
+	printk("VM-Exit:VMREAD.field:0x%x, value:0x%x\n", field, value);
+	kvm_reg_write(vcpu, reg2, value);
+
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
@@ -230,23 +224,12 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	int base_reg = (instruction_info >> 23) & 0xf;
 	int reg2 = (instruction_info >> 28) & 0xf;
-	gva_t gva;
-	gpa_t gpa;
-	hpa_t hpa;
-	u64 *virt;
+	u32 field = kvm_reg_read(vcpu, reg2);
+	u32 value = kvm_reg_read(vcpu, base_reg);
 	int ret;
 
-	vmclear(vcpu->vmcs01_phys);
-	vcpu->state = 0;
-	vmptr_load(vcpu->vmcs12_phys);
-	printk("VM-Exit:VMWRITE.base reg:%d(0x%x), reg2:%d(0x%x)\n",
-		base_reg,
-		kvm_reg_read(vcpu, base_reg),
-		reg2,
-		kvm_reg_read(vcpu, reg2));
-	vmcs_write(kvm_reg_read(vcpu, reg2), kvm_reg_read(vcpu, base_reg));
-	vmclear(vcpu->vmcs12_phys);
-	vmptr_load(vcpu->vmcs01_phys);
+	printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
+	vmcs12_write_any(vcpu->vmcs12, field, value);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -268,7 +251,7 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 
 	vmclear(vcpu->vmcs01_phys);
 	vcpu->state = 0;
-	vmptr_load(vcpu->vmcs12_phys);
+	vmptr_load(vcpu->vmcs02_phys);
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
@@ -284,18 +267,17 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 
 	invept_context = (void *)PHYS2VIRT(hpa);
 
-	printk("VM-Exit:INVEPT.reg2:%d(0x%x) eptp = %x gpa = %x\n",
+	printk("VM-Exit:INVEPT.reg2:%d(0x%x) eptp = %x\n",
 		reg2,
 		kvm_reg_read(vcpu, reg2),
-		invept_context->eptp,
-		invept_context->gpa);
+		invept_context->eptp);
 	ret = ept_gpa_to_hpa(vcpu, invept_context->eptp, &eptp_hpa);
 	if (ret) {
 		printk("transfer gpa to hpa failed.\n");
 		return 0;
 	}
 	invept(kvm_reg_read(vcpu, reg2), eptp_hpa, 0);
-	vmclear(vcpu->vmcs12_phys);
+	vmclear(vcpu->vmcs02_phys);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;

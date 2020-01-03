@@ -40,6 +40,7 @@ struct list_head {
 	struct list_head *next, *prev;
 };
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 #define  BIT0     0x00000001
 #define  BIT1     0x00000002

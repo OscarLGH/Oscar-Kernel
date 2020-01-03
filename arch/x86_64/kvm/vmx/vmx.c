@@ -57,13 +57,10 @@ struct vmx_vcpu *vmx_preinit()
 	vcpu_ptr->vmxon_region_phys = VIRT2PHYS(vcpu_ptr->vmxon_region);
 	vcpu_ptr->vmcs01 = kmalloc(0x1000, GFP_KERNEL);
 	vcpu_ptr->vmcs01_phys = VIRT2PHYS(vcpu_ptr->vmcs01);
-	memset(vcpu_ptr->vmcs02, 0, 0x1000);
+	memset(vcpu_ptr->vmcs01, 0, 0x1000);
 	vcpu_ptr->vmcs02 = kmalloc(0x1000, GFP_KERNEL);
 	vcpu_ptr->vmcs02_phys = VIRT2PHYS(vcpu_ptr->vmcs02);
 	memset(vcpu_ptr->vmcs02, 0, 0x1000);
-	vcpu_ptr->vmcs12 = kmalloc(0x1000, GFP_KERNEL);
-	vcpu_ptr->vmcs12_phys = VIRT2PHYS(vcpu_ptr->vmcs12);
-	memset(vcpu_ptr->vmcs12, 0, 0x1000);
 	vcpu_ptr->virtual_processor_id = ++vcpu_cnt;
 
 	ret = vmx_enable();
@@ -74,7 +71,6 @@ struct vmx_vcpu *vmx_preinit()
 	vcpu_ptr->vmxon_region->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
 	vcpu_ptr->vmcs01->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
 	vcpu_ptr->vmcs02->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
-	vcpu_ptr->vmcs12->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
 	vmx_on(vcpu_ptr->vmxon_region_phys);
 	vmclear(vcpu_ptr->vmcs01_phys);
 	vmclear(vcpu_ptr->vmcs02_phys);
