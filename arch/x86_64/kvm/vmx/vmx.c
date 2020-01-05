@@ -98,6 +98,8 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	memset(vcpu->guest_state.fp_regs, 0, 0x1000);
 	vcpu->guest_state.msr = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.msr, 0, 0x1000);
+	vcpu->posted_intr_addr = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu->posted_intr_addr, 0, 0x1000);
 
 	return 0;
 }
@@ -221,7 +223,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		vm_exit_ctrl &= vm_exit_allow1_mask;
 	}
 	vmcs_write(VM_EXIT_CONTROLS, vm_exit_ctrl);
-
+	vmcs_write(POSTED_INTR_DESC_ADDR, VIRT2PHYS(vcpu->posted_intr_addr));
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
@@ -397,7 +399,7 @@ int vmx_resume_host_state(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
-int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 attribute)
+int ept_map_page(u64 *eptp_base, u64 gpa, u64 hpa, u64 page_size, u64 attribute)
 {
 	//printk("ept map:gpa = %x hpa = %x page_size = %x\n", gpa, hpa, page_size);
 	u64 index1, index2, index3, index4, offset_1g, offset_2m, offset_4k;
@@ -409,7 +411,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 	pdpte_attr = EPT_PDPTE_READ | EPT_PDPTE_WRITE | EPT_PDPTE_EXECUTE | EPT_PDPTE_ACCESS_FLAG;
 	pde_attr = EPT_PDE_READ | EPT_PDE_WRITE | EPT_PDE_EXECUTE | EPT_PDE_ACCESS_FLAG;
 	pte_attr = EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_ACCESS_FLAG;
-	pml4t = (u64 *)vcpu->eptp_base;
+	pml4t = eptp_base;
 
 	index1 = (gpa >> 39) & 0x1ff;
 	index2 = (gpa >> 30) & 0x1ff;
@@ -431,7 +433,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 
 	if (page_size == 0x40000000) {
 		pdpt[index2] = hpa | attribute | EPT_PDPTE_1GB_PAGE;
-		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(vcpu->eptp_base), 0);
+		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(eptp_base), 0);
 		return 0;
 	}
 
@@ -441,14 +443,12 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 		pdpt[index2] = VIRT2PHYS(virt) | pdpte_attr;
 	}
 
-	
-
 	pdt = (u64 *)(PHYS2VIRT(pdpt[index2] & ~0xfffULL));
 	pde = pdt[index3];
 
 	if (page_size == 0x200000) {
 		pdt[index3] = hpa | attribute | EPT_PDE_2MB_PAGE;
-		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(vcpu->eptp_base), 0);
+		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(eptp_base), 0);
 		return 0;
 	}
 
@@ -463,7 +463,7 @@ int ept_map_page(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 page_size, u64 att
 
 	if (page_size == 0x1000) {
 		pt[index4] = hpa | attribute;
-		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(vcpu->eptp_base), 0);
+		invept(VMX_EPT_EXTENT_CONTEXT, VIRT2PHYS(eptp_base), 0);
 		return 0;
 	}
 	
@@ -486,7 +486,7 @@ int map_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 hpa, u64 len, u64 attr)
 		//	gpa += 0x200000;
 		//	hpa += 0x200000;
 		//} else {
-			ept_map_page(vcpu, gpa, hpa, 0x1000, attr);
+			ept_map_page(vcpu->eptp_base, gpa, hpa, 0x1000, attr);
 			remain_len -= 0x1000;
 			gpa += 0x1000;
 			hpa += 0x1000;
