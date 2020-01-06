@@ -115,11 +115,11 @@ int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 int nested_vmx_run(struct vmx_vcpu *vcpu);
 int vmx_handle_vmlaunch(struct vmx_vcpu *vcpu)
 {
-	vmclear(vcpu->vmcs01_phys);
 	vcpu->state = 0;
 	printk("VM-Exit:VMLAUNCH.\n");
-	nested_vmx_run(vcpu);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	vmclear(vcpu->vmcs01_phys);
+	nested_vmx_run(vcpu);
 	return 0;
 }
 
@@ -128,8 +128,9 @@ int vmx_handle_vmresume(struct vmx_vcpu *vcpu)
 	vmclear(vcpu->vmcs01_phys);
 	vcpu->state = 0;
 	printk("VM-Exit:VMRESUME.\n");
-	nested_vmx_run(vcpu);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	vmclear(vcpu->vmcs01_phys);
+	nested_vmx_run(vcpu);
 	return 0;
 }
 
@@ -238,7 +239,7 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	if (field == GUEST_CR0) {
 		printk("vmwrite guest cr0:value:%x\n", value);
 	}
-	//printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
+	printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -355,9 +356,11 @@ int nested_vmx_set_ctrl_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	}
 	vmcs_write(VIRTUAL_APIC_PAGE_ADDR, hpa);
 
-	ept_pointer = kmalloc(0x1000, GFP_KERNEL);
-	memset(ept_pointer, 0, 0x1000);
-	vmcs_write(EPT_POINTER, VIRT2PHYS(ept_pointer) | 0x5e);
+	if (PT_ENTRY_ADDR(vmcs_read(EPT_POINTER)) == 0) {
+		ept_pointer = kmalloc(0x1000, GFP_KERNEL);
+		memset(ept_pointer, 0, 0x1000);
+		vmcs_write(EPT_POINTER, VIRT2PHYS(ept_pointer) | 0x5e);
+	}
 
 	gpa = vmcs12->posted_intr_desc_addr;
 	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
@@ -504,13 +507,14 @@ int nested_vmx_set_guest_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 
 	vmcs_write(GUEST_INTERRUPTIBILITY_INFO, vmcs12->guest_interruptibility_info);
 	vmcs_write(VM_ENTRY_INTR_INFO_FIELD, vmcs12->vm_entry_intr_info_field);
-	printk("VM_ENTRY_INTR_INFO_FIELD = %x\n", vmcs12->vm_entry_intr_info_field);
 	vmcs_write(GUEST_PENDING_DBG_EXCEPTIONS, vmcs12->guest_pending_dbg_exceptions);
 	vmcs_write(GUEST_BNDCFGS, vmcs12->guest_bndcfgs);
 
 	vmcs_write(VMCS_LINK_POINTER, vmcs12->vmcs_link_pointer);
 
 	vmcs_write(APIC_ACCESS_ADDR, vmcs12->apic_access_addr);
+
+	vmcs_write(VM_ENTRY_CONTROLS, vmcs12->vm_entry_controls);
 
 	//xsetbv(0, vcpu->guest_state.ctrl_regs.xcr0);
 	//xrstor(vcpu->guest_state.fp_regs, vcpu->guest_state.ctrl_regs.xcr0);
@@ -528,13 +532,15 @@ int prepare_vmcs02(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	vmptr_load(vcpu->vmcs02_phys);
 	nested_vmx_set_ctrl_state(vcpu, vmcs12);
 	nested_vmx_save_host_state(vcpu);
+	memset(&vcpu->l2_guest_state, 0, sizeof(vcpu->l2_guest_state));
 	nested_vmx_set_guest_state(vcpu, vmcs12);
 }
 
 int sync_vmcs12(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 {
 	vmcs12->guest_rflags = vmcs_read(GUEST_RFLAGS);
-
+	vmcs12->guest_rip = vmcs_read(GUEST_RIP);
+	vmcs12->guest_rsp = vmcs_read(GUEST_RSP);
 	vmcs12->guest_es_selector = vmcs_read(GUEST_ES_SELECTOR);
 	vmcs12->guest_cs_selector = vmcs_read(GUEST_CS_SELECTOR);
 	vmcs12->guest_ss_selector = vmcs_read(GUEST_SS_SELECTOR);
@@ -576,6 +582,14 @@ int sync_vmcs12(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 		vmcs_read(GUEST_INTERRUPTIBILITY_INFO);
 	vmcs12->guest_pending_dbg_exceptions =
 		vmcs_read(GUEST_PENDING_DBG_EXCEPTIONS);
+
+	vmcs12->guest_cr0 = vmcs_read(GUEST_CR0);
+	vmcs12->guest_cr4 = vmcs_read(GUEST_CR4);
+	vmcs12->cr0_read_shadow = vmcs_read(CR0_READ_SHADOW);
+	vmcs12->cr4_read_shadow = vmcs_read(CR4_READ_SHADOW);
+	vmcs12->vm_exit_reason = vmcs_read(VM_EXIT_REASON);
+	vmcs12->exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	vmcs12->guest_ia32_efer = vmcs_read(GUEST_IA32_EFER);
 }
 
 int nested_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
@@ -590,7 +604,7 @@ int nested_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
 
 int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:EPT Volation.\n");
+	printk("nested VM-Exit:EPT Volation.\n");
 	gpa_t l2gpa = vmcs_read(GUEST_PHYSICAL_ADDRESS);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	gpa_t l1gpa;
@@ -608,19 +622,38 @@ int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 	}
 	printk("hpa = 0x%x\n", hpa);
 	ept_map_page(ept_pointer, l2gpa, hpa, 0x1000, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
-
+	//vcpu->vmcs12->guest_rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
+}
+
+int vmx_run(struct vmx_vcpu *vcpu);
+int nested_vm_exit_to_l1(struct vmx_vcpu *vcpu)
+{
+	vmclear(vcpu->vmcs02_phys);
+	vcpu->state = 0;
+	vcpu->guest_state.rip = vcpu->vmcs12->host_rip;
+	vmptr_load(vcpu->vmcs01_phys);
+	vcpu->guest_state.gr_regs.rsp = vcpu->vmcs12->host_rsp;
+	vmcs_write(GUEST_RIP, vcpu->guest_state.rip);
+	vmcs_write(GUEST_RSP, vcpu->guest_state.gr_regs.rsp);
+	vmcs_write(VM_EXIT_REASON, vcpu->vmcs12->vm_exit_reason);
+	vmcs_write(EXIT_QUALIFICATION, vcpu->vmcs12->exit_qualification);
+	vmcs_write(VM_EXIT_INSTRUCTION_LEN, vcpu->vmcs12->vm_exit_instruction_len);
+	printk("vmx:return L1 from L0\n");
+	memcpy(&vcpu->guest_state.gr_regs, &vcpu->l2_guest_state.gr_regs, sizeof(vcpu->guest_state.gr_regs));
+	vmx_run(vcpu);
 }
 
 int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 {
-	int ret = 0;
+	int ret = 1;
 	u32 exit_reason = vmcs_read(VM_EXIT_REASON);
 	u32 instruction_error = vmcs_read(VM_INSTRUCTION_ERROR);
-	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
-	vcpu->guest_state.gr_regs.rsp = vmcs_read(GUEST_RSP);
 	//printk("vm_exit reason:%d\n", exit_reason);
 	//printk("Guest RIP:%x\n", vcpu->guest_state.rip);
+	vcpu->vmcs12->vm_exit_reason = exit_reason;
+	vcpu->vmcs12->exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	vcpu->vmcs12->vm_exit_instruction_len = vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	if (exit_reason & 0x80000000) {
 		nested_handle_vm_entry_failed(vcpu);
 		while (1);
@@ -711,6 +744,7 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 			ret = nested_vmx_handle_ept_volation(vcpu);
 			break;
 		case EXIT_REASON_EPT_MISCONFIG:
+			while(1);
 			break;
 		case EXIT_REASON_INVEPT:
 			break;
@@ -748,29 +782,34 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 		}
 	}
 	//printk("Next RIP:%x\n", vcpu->guest_state.rip);
-	vmcs_write(GUEST_RIP, vcpu->guest_state.rip);
+	if (ret == 0) {
+		vmcs_write(GUEST_RIP, vcpu->vmcs12->guest_rip);
+	} else {
+		nested_vm_exit_to_l1(vcpu);
+	}
 	return ret;
 }
 
 int nested_vmx_run(struct vmx_vcpu *vcpu)
-{	
+{
 	int ret0 = 0, ret1 = 0;
-	prepare_vmcs02(vcpu, vcpu->vmcs12);	
+	printk("vmx:enter L2 from L1\n");
 	while (1) {
 		if (vcpu->state == 0) {
+			prepare_vmcs02(vcpu, vcpu->vmcs12);	
 			//printk("VM LAUNCH.\n");
-			ret0 = vm_launch(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
+			ret0 = vm_launch(&vcpu->host_state.gr_regs, &vcpu->l2_guest_state.gr_regs);
 			if (ret0 == 0) {
 				vcpu->state = 1;
 				vcpu->guest_mode = 1;
 			}
 		} else {
 			//printk("VM RESUME.\n");
-			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
+			nested_vmx_set_guest_state(vcpu, vcpu->vmcs12);
+			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->l2_guest_state.gr_regs);
 		}
-
+		sync_vmcs12(vcpu, vcpu->vmcs12);
 		if (ret0 == 0) {
-			//sync_vmcs12(vcpu);
 			nested_vm_exit_handler(vcpu);
 		} else {
 			printk("nested vmx:fail invalid.\n");

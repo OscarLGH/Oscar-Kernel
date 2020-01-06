@@ -593,11 +593,11 @@ int vmx_handle_pending_interrupt(struct vmx_vcpu *vcpu)
 	printk("VM-Exit:pending interrupt.\n");
 	return 0;
 }
-
+void delay(u64);
 int vmx_handle_cpuid(struct vmx_vcpu *vcpu)
 {
 	u32 buffer[4];
-	printk("VM-Exit:cpuid.\n");
+	printk("VM-Exit:cpuid.rip = 0x%x\n", vcpu->guest_state.rip);
 	/* Passthrough host cpuid. */
 	cpuid(vcpu->guest_state.gr_regs.rax, vcpu->guest_state.gr_regs.rcx, buffer);
 	vcpu->guest_state.gr_regs.rax = buffer[0];
@@ -795,6 +795,7 @@ static int vmx_enter_longmode(struct vmx_vcpu *vcpu)
 		vmcs_read(VM_ENTRY_CONTROLS) | VM_ENTRY_IA32E_MODE
 		);
 	vmcs_write(GUEST_IA32_EFER, efer | 0x500);
+	printk("vmx:enter long mode.\n");
 	return 0;
 }
 
@@ -860,6 +861,7 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 	if (cr == 0) {
 		vcpu->guest_state.cr0_read_shadow = val;
 		vmcs_write(CR0_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
+		printk("GUEST_IA32_EFER:%x\n", vmcs_read(GUEST_IA32_EFER));
 		if ((val & CR0_PG) && (vmcs_read(GUEST_IA32_EFER) & BIT8)) {
 			vmx_enter_longmode(vcpu);
 		}
@@ -944,6 +946,10 @@ int vmx_handle_io(struct vmx_vcpu *vcpu)
 	if (port == 0xcfc) {
 		vcpu->guest_state.gr_regs.rax = 0xffffffff;
 	}
+
+	if (port != 0x3f8 && port != 0xcfc && port != 0xcf8) {
+		printk("Port = 0x%x, val = %x\n", port, vcpu->guest_state.gr_regs.rax);
+	}
 	return 0;
 }
 
@@ -1026,7 +1032,7 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	u32 instruction_error = vmcs_read(VM_INSTRUCTION_ERROR);
 	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
 	vcpu->guest_state.gr_regs.rsp = vmcs_read(GUEST_RSP);
-	//printk("vm_exit reason:%d\n", exit_reason);
+	//printk("L1 vm_exit reason:%d\n", exit_reason);
 	//printk("Guest RIP:%x\n", vcpu->guest_state.rip);
 	if (exit_reason & 0x80000000) {
 		printk("vm entry failed.\n");
@@ -1401,6 +1407,8 @@ int vmx_run(struct vmx_vcpu *vcpu)
 			ret1 = vm_exit_handler(vcpu);
 			if (ret1 != 0)
 				return -1;
+		} else {
+			printk("vm entry failed.\n");
 		}
 	}
 }

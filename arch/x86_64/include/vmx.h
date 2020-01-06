@@ -743,7 +743,7 @@ struct vmx_vcpu {
 		u64 pdpte1;
 		u64 pdpte2;
 		u64 pdpte3;
-	} guest_state;
+	} guest_state, l2_guest_state;
 
 	struct list_head guest_memory_list;
 };
