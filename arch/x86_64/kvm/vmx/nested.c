@@ -53,13 +53,13 @@ int vmx_handle_vmxon(struct vmx_vcpu *vcpu)
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
-		printk("transfer gva to gpa failed.\n");
+		printk("transfer gva 0x%x to gpa failed.\n", gva);
 		return 0;
 	}
 
 	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer gpa 0x%x to hpa failed.\n", gpa);
 		return 0;
 	}
 
@@ -94,13 +94,13 @@ int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
-		printk("transfer gva to gpa failed.\n");
+		printk("transfer gva 0x%x to gpa failed.\n", gva);
 		return 0;
 	}
 
 	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer gpa 0x%x to hpa failed.\n", gpa);
 		return 0;
 	}
 
@@ -150,13 +150,13 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
-		printk("transfer gva to gpa failed.\n");
+		printk("transfer gva 0x%x to gpa failed.\n", gva);
 		return 0;
 	}
 
 	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer gpa 0x%x to hpa failed.\n", gpa);
 		return 0;
 	}
 
@@ -185,13 +185,13 @@ int vmx_handle_vmptrst(struct vmx_vcpu *vcpu)
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
-		printk("transfer gva to gpa failed.\n");
+		printk("transfer gva 0x%x to gpa failed.\n", gva);
 		return 0;
 	}
 
 	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer gpa 0x%x to hpa failed.\n", gpa);
 		return 0;
 	}
 
@@ -218,7 +218,7 @@ int vmx_handle_vmread(struct vmx_vcpu *vcpu)
 	vmclear(vcpu->vmcs01_phys);
 	vcpu->state = 0;
 	vmcs12_read_any(vcpu->vmcs12, field, &value);
-	printk("VM-Exit:VMREAD.field:0x%x, value:0x%x\n", field, value);
+	//printk("VM-Exit:VMREAD.field:0x%x, value:0x%x\n", field, value);
 	kvm_reg_write(vcpu, base_reg, value);
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -236,10 +236,7 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	int ret;
 
 	vmcs12_write_any(vcpu->vmcs12, field, value);
-	if (field == GUEST_CR0) {
-		printk("vmwrite guest cr0:value:%x\n", value);
-	}
-	printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
+	//printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -265,13 +262,13 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
-		printk("transfer gva to gpa failed.\n");
+		printk("transfer gva 0x%x to gpa failed.\n", gva);
 		return 0;
 	}
 
 	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer gpa 0x%x to hpa failed.\n", gpa);
 		return 0;
 	}
 
@@ -284,7 +281,7 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 
 	ret = ept_gpa_to_hpa(vcpu, invept_context->eptp, &eptp_hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer gpa 0x%x to hpa failed.\n", gpa);
 		return 0;
 	}
 	//invept(kvm_reg_read(vcpu, reg2), VIRT2PHYS(eptp_hpa), 0);
@@ -532,7 +529,7 @@ int prepare_vmcs02(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	vmptr_load(vcpu->vmcs02_phys);
 	nested_vmx_set_ctrl_state(vcpu, vmcs12);
 	nested_vmx_save_host_state(vcpu);
-	memset(&vcpu->l2_guest_state, 0, sizeof(vcpu->l2_guest_state));
+	//memset(&vcpu->l2_guest_state, 0, sizeof(vcpu->l2_guest_state));
 	nested_vmx_set_guest_state(vcpu, vmcs12);
 }
 
@@ -584,12 +581,18 @@ int sync_vmcs12(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 		vmcs_read(GUEST_PENDING_DBG_EXCEPTIONS);
 
 	vmcs12->guest_cr0 = vmcs_read(GUEST_CR0);
+	vmcs12->guest_cr3 = vmcs_read(GUEST_CR3);
 	vmcs12->guest_cr4 = vmcs_read(GUEST_CR4);
 	vmcs12->cr0_read_shadow = vmcs_read(CR0_READ_SHADOW);
 	vmcs12->cr4_read_shadow = vmcs_read(CR4_READ_SHADOW);
 	vmcs12->vm_exit_reason = vmcs_read(VM_EXIT_REASON);
 	vmcs12->exit_qualification = vmcs_read(EXIT_QUALIFICATION);
+	vmcs12->vm_exit_intr_info = vmcs_read(VM_EXIT_INTR_INFO);
 	vmcs12->guest_ia32_efer = vmcs_read(GUEST_IA32_EFER);
+	vmcs12->vm_exit_instruction_len = vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	vmcs12->vm_exit_intr_error_code = vmcs_read(VM_EXIT_INTR_ERROR_CODE);
+	vmcs12->guest_physical_address = vmcs_read(GUEST_PHYSICAL_ADDRESS);
+	vmcs12->guest_linear_address = vmcs_read(GUEST_LINEAR_ADDRESS);
 }
 
 int nested_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
@@ -604,25 +607,22 @@ int nested_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
 
 int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 {
-	printk("nested VM-Exit:EPT Volation.\n");
+	//printk("nested VM-Exit:EPT Volation.\n");
 	gpa_t l2gpa = vmcs_read(GUEST_PHYSICAL_ADDRESS);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	gpa_t l1gpa;
 	hpa_t hpa;
 	u64 *ept_pointer = (u64 *)PHYS2VIRT(PT_ENTRY_ADDR(vmcs_read(EPT_POINTER)));
 	int ret;
-	printk("l2gpa = 0x%x\n", l2gpa);
-	printk("exit qualification:0x%x\n", exit_qualification);
+	//printk("exit qualification:0x%x\n", exit_qualification);
 	nested_ept_l2gpa_to_l1gpa(vcpu, vcpu->vmcs12, l2gpa, &l1gpa);
-	printk("l1gpa = 0x%x\n", l1gpa);
 	ret = ept_gpa_to_hpa(vcpu, l1gpa, &hpa);
 	if (ret) {
-		printk("transfer gpa to hpa failed.\n");
+		printk("transfer l1gpa 0x%x to hpa failed.\n", l1gpa);
 		return 0;
 	}
-	printk("hpa = 0x%x\n", hpa);
-	ept_map_page(ept_pointer, l2gpa, hpa, 0x1000, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
-	//vcpu->vmcs12->guest_rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	//printk("shadow EPT:0x%x -> 0x%x -> 0x%x ===>>> 0x%x -> 0x%x\n", l2gpa, l1gpa, hpa, l2gpa, hpa);
+	ept_map_page(ept_pointer, l2gpa, PT_ENTRY_ADDR(hpa), 0x1000, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
 	return 0;
 }
 
@@ -658,7 +658,8 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 		nested_handle_vm_entry_failed(vcpu);
 		while (1);
 	} else {
-		printk("nested vm-exit.reason = %d rip = 0x%x\n", exit_reason, vmcs_read(GUEST_RIP));
+		if (exit_reason != EXIT_REASON_EPT_VIOLATION)
+			printk("nested vm-exit.reason = %d rip = 0x%x\n", exit_reason, vmcs_read(GUEST_RIP));
 		switch (exit_reason & 0xff) {
 		case EXIT_REASON_EXCEPTION_NMI:
 			break;
@@ -790,6 +791,20 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 	return ret;
 }
 
+int nested_vmx_save_guest_state(struct vmx_vcpu *vcpu)
+{
+	vcpu->l2_guest_state.rip = vmcs_read(GUEST_RIP);
+	vcpu->l2_guest_state.ctrl_regs.cr0 = vmcs_read(GUEST_CR0);
+	vcpu->l2_guest_state.ctrl_regs.cr2 = read_cr2();
+	vcpu->l2_guest_state.ctrl_regs.cr3 = vmcs_read(GUEST_CR3);
+	vcpu->l2_guest_state.ctrl_regs.cr4 = vmcs_read(GUEST_CR4);
+	vcpu->l2_guest_state.ctrl_regs.cr8 = read_cr8();
+	vcpu->l2_guest_state.ctrl_regs.xcr0 = xgetbv(0);
+	xsave(vcpu->guest_state.fp_regs, vcpu->l2_guest_state.ctrl_regs.xcr0);
+	memcpy(&vcpu->guest_state, &vcpu->l2_guest_state, sizeof(vcpu->l2_guest_state));
+	return 0;
+}
+
 int nested_vmx_run(struct vmx_vcpu *vcpu)
 {
 	int ret0 = 0, ret1 = 0;
@@ -805,9 +820,10 @@ int nested_vmx_run(struct vmx_vcpu *vcpu)
 			}
 		} else {
 			//printk("VM RESUME.\n");
-			nested_vmx_set_guest_state(vcpu, vcpu->vmcs12);
+			prepare_vmcs02(vcpu, vcpu->vmcs12);	
 			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->l2_guest_state.gr_regs);
 		}
+		nested_vmx_save_guest_state(vcpu);
 		sync_vmcs12(vcpu, vcpu->vmcs12);
 		if (ret0 == 0) {
 			nested_vm_exit_handler(vcpu);

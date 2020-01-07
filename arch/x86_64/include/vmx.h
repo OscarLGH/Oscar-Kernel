@@ -832,6 +832,7 @@ int vm_run(struct vmx_vcpu *vcpu);
 u64 kvm_reg_read(struct vmx_vcpu *vcpu, int index);
 void kvm_reg_write(struct vmx_vcpu *vcpu, int index, u64 value);
 int ept_gpa_to_hpa(struct vmx_vcpu *vcpu, gpa_t gpa, hpa_t *hpa);
+int ept_gpa_to_hpa_any(u64 *eptp_base, gpa_t gpa, hpa_t *hpa);
 int paging64_gva_to_gpa(struct vmx_vcpu *vcpu, gva_t gva, gpa_t *gpa);
 int nested_ept_l2gpa_to_l1gpa(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12, gpa_t l2gpa, gpa_t *l1gpa);
 int ept_map_page(u64 *eptp_base, u64 gpa, u64 hpa, u64 page_size, u64 attribute);

@@ -377,8 +377,8 @@ int printk(const char *fmt, ...)
 		write_console(buf[j]);
 
 		/* early vmware/qemu debug purpose.remove when boot code is ready. */
-		if (buf[j] == '\n')
-			out8(0x3f8, '\r');
+		//if (buf[j] == '\n')
+		//	out8(0x3f8, '\r');
 		out8(0x3f8, buf[j]);
 		//uart_out
 	}

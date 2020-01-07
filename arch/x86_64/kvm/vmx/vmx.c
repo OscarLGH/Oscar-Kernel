@@ -227,7 +227,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
-	vmcs_write(EXCEPTION_BITMAP, 0x0);
+	vmcs_write(EXCEPTION_BITMAP, 0xffffffff);
 
 	return 0;
 }
@@ -565,6 +565,7 @@ int vmx_handle_exception(struct vmx_vcpu *vcpu)
 	if (cr0 & CR0_PE == 0) {
 		interruption_info &= (~BIT11);
 	}
+
 	while (1);
 	//vmcs_write(VM_ENTRY_INTR_INFO_FIELD, interruption_info);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -861,7 +862,6 @@ int vmx_handle_cr_access(struct vmx_vcpu *vcpu)
 	if (cr == 0) {
 		vcpu->guest_state.cr0_read_shadow = val;
 		vmcs_write(CR0_READ_SHADOW, vcpu->guest_state.cr0_read_shadow);
-		printk("GUEST_IA32_EFER:%x\n", vmcs_read(GUEST_IA32_EFER));
 		if ((val & CR0_PG) && (vmcs_read(GUEST_IA32_EFER) & BIT8)) {
 			vmx_enter_longmode(vcpu);
 		}
@@ -1402,6 +1402,7 @@ int vmx_run(struct vmx_vcpu *vcpu)
 			//printk("VM RESUME.\n");
 			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->guest_state.gr_regs);
 		}
+		
 		if (ret0 == 0) {
 			vmx_save_guest_state(vcpu);
 			ret1 = vm_exit_handler(vcpu);
