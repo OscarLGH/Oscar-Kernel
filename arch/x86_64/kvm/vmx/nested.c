@@ -621,7 +621,7 @@ int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 		printk("transfer l1gpa 0x%x to hpa failed.\n", l1gpa);
 		return 0;
 	}
-	//printk("shadow EPT:0x%x -> 0x%x -> 0x%x ===>>> 0x%x -> 0x%x\n", l2gpa, l1gpa, hpa, l2gpa, hpa);
+	printk("shadow EPT:0x%x -> 0x%x -> 0x%x ===>>> 0x%x -> 0x%x rip = 0x%x\n", l2gpa, l1gpa, hpa, l2gpa, hpa, vmcs_read(GUEST_RIP));
 	ept_map_page(ept_pointer, l2gpa, PT_ENTRY_ADDR(hpa), 0x1000, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
 	return 0;
 }
@@ -644,6 +644,16 @@ int nested_vm_exit_to_l1(struct vmx_vcpu *vcpu)
 	vmx_run(vcpu);
 }
 
+int nested_vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
+{
+	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
+	u8 vector = interruption_info & 0xff;
+	printk("nested VM-Exit:External interrupt (%d)\n", vector);
+	soft_irq_call(vector);
+	asm("sti");
+	return 1;
+}
+
 int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 {
 	int ret = 1;
@@ -664,6 +674,7 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_EXCEPTION_NMI:
 			break;
 		case EXIT_REASON_EXTERNAL_INTERRUPT:
+			ret = nested_vmx_handle_external_interrupt(vcpu);
 			break;
 		case EXIT_REASON_TRIPLE_FAULT:
 			while (1);

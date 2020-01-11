@@ -917,6 +917,7 @@ int vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
 	printk("gpa = 0x%x\n", gpa);
 	printk("exit qualification:0x%x\n", exit_qualification);
+	while (1);
 	return 0;
 }
 
@@ -1418,7 +1419,7 @@ int vmx_run(struct vmx_vcpu *vcpu)
 void vm_init_test()
 {
 	int ret;
-	u8 buf[4];
+	u8 buf[0x1000];
 
 	void *code_start, *code_end;
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
@@ -1435,7 +1436,7 @@ void vm_init_test()
 	ret = alloc_guest_memory(vcpu, 0, 0x10000000);
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
-		ret = alloc_guest_memory(vcpu, 0, 0x800000);
+		ret = alloc_guest_memory(vcpu, 0, 0x4000000);
 		if (ret == -1) {
 			printk("allocate memory for vm failed.exiting...\n");
 			return;
@@ -1446,15 +1447,22 @@ void vm_init_test()
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
 	}
+
+	code_start = (void *)PHYS2VIRT(0x200000);
+	code_end = (void *)PHYS2VIRT(0x400000);
+	ret = write_guest_memory_gpa(vcpu, 0x200000, 0x400000, code_start);
+	if (ret == -1) {
+		printk("writing guest memory failed.\n");
+	}
+
 	//alloc_guest_memory(vcpu, 0xff000000, 0x1000000);
 	ret = write_guest_memory_gpa(vcpu, 0x7c00, (u64)&test_guest_end - (u64)&test_guest, &test_guest);
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");
 	}
 
-	code_start = (void *)PHYS2VIRT(0x200000);
-	code_end = (void *)PHYS2VIRT(0x300000);
-	ret = write_guest_memory_gpa(vcpu, 0x200000, 0x100000, code_start);
+	memset(buf, 0, 0x1000);
+	ret = write_guest_memory_gpa(vcpu, 0x10000, 0x4000, buf);
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");
 	}
