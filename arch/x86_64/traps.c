@@ -338,6 +338,7 @@ err_exit:
 	back_trace(stack);
 	asm("hlt");
 exit:
+	write_cr2(0);
 	cpu->status = cpu_status;
 }
 

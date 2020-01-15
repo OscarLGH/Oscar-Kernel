@@ -555,12 +555,13 @@ int vmx_handle_exception(struct vmx_vcpu *vcpu)
 	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
 	u64 err_code = vmcs_read(VM_EXIT_INTR_ERROR_CODE);
 	u64 cr0 = vmcs_read(GUEST_CR0);
-	printk("VM-Exit:Guest exception (%d) @ 0x%x.type:%d error code:%x\n", 
+	printk("VM-Exit:Guest exception (%d) @ 0x%x.type:%d error code:%x CR2 = 0x%x\n", 
 		interruption_info & 0xff,
 		vcpu->guest_state.rip,
 		(interruption_info >> 8) & 0x7,
-		err_code);
-
+		err_code,
+		vcpu->guest_state.ctrl_regs.cr2);
+	//printk("rax = 0x%x\n", vcpu->guest_state.gr_regs.rax);
 		/* real mode never use error code */
 	if (cr0 & CR0_PE == 0) {
 		interruption_info &= (~BIT11);
@@ -605,6 +606,7 @@ int vmx_handle_cpuid(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.gr_regs.rbx = buffer[1];
 	vcpu->guest_state.gr_regs.rcx = buffer[2];
 	vcpu->guest_state.gr_regs.rdx = buffer[3];
+	printk("eax = 0x%x, ebx = 0x%x ecx = 0x%x edx = 0x%x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -1261,6 +1263,7 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 	vcpu->guest_state.idtr.limit = 0xffff;
 	
 	vcpu->guest_state.ctrl_regs.cr0 = 0;
+	vcpu->guest_state.ctrl_regs.cr2 = 0;
 	vcpu->guest_state.ctrl_regs.cr3 = 0;
 	vcpu->guest_state.ctrl_regs.cr4 = 0;
 
@@ -1450,7 +1453,7 @@ void vm_init_test()
 
 	code_start = (void *)PHYS2VIRT(0x200000);
 	code_end = (void *)PHYS2VIRT(0x400000);
-	ret = write_guest_memory_gpa(vcpu, 0x200000, 0x400000, code_start);
+	ret = write_guest_memory_gpa(vcpu, 0x200000, 0x100000, code_start);
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");
 	}
@@ -1466,6 +1469,7 @@ void vm_init_test()
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");
 	}
+	//printk("boot_parm->acpi_rsdp = %x\n", boot_parm->acpi_rsdp);
 
 	vmx_set_guest_state(vcpu);
 	ret = vmx_run(vcpu);

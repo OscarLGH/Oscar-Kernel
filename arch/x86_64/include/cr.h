@@ -115,6 +115,13 @@ static inline u64 read_cr2()
 	return cr2;
 }
 
+static inline void write_cr2(u64 cr2)
+{
+	asm volatile("movq %0, %%cr2\n\t"
+				: : "rdi"(cr2)
+		);
+}
+
 static inline u64 read_cr0()
 {
 	u64 cr0;

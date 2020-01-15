@@ -529,7 +529,6 @@ int prepare_vmcs02(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	vmptr_load(vcpu->vmcs02_phys);
 	nested_vmx_set_ctrl_state(vcpu, vmcs12);
 	nested_vmx_save_host_state(vcpu);
-	//memset(&vcpu->l2_guest_state, 0, sizeof(vcpu->l2_guest_state));
 	nested_vmx_set_guest_state(vcpu, vmcs12);
 }
 
@@ -595,16 +594,6 @@ int sync_vmcs12(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	vmcs12->guest_linear_address = vmcs_read(GUEST_LINEAR_ADDRESS);
 }
 
-int nested_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
-{
-	u32 instruction_error = vmcs_read(VM_INSTRUCTION_ERROR);
-	u32 exit_reason = vmcs_read(VM_EXIT_REASON);
-	printk("VM-Entry failed.\n");
-	printk("vm instruction error:%d\n", instruction_error);
-	printk("exit reason:%d\n", exit_reason & 0x7fffffff);
-	return 0;
-}
-
 int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 {
 	//printk("nested VM-Exit:EPT Volation.\n");
@@ -615,12 +604,19 @@ int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 	u64 *ept_pointer = (u64 *)PHYS2VIRT(PT_ENTRY_ADDR(vmcs_read(EPT_POINTER)));
 	int ret;
 	//printk("exit qualification:0x%x\n", exit_qualification);
-	nested_ept_l2gpa_to_l1gpa(vcpu, vcpu->vmcs12, l2gpa, &l1gpa);
+	ret = nested_ept_l2gpa_to_l1gpa(vcpu, vcpu->vmcs12, l2gpa, &l1gpa);
+	if (ret) {
+		delay(1000000);
+		printk("transfer l2gpa 0x%x to l1gpa failed.\n", l2gpa);
+		printk("rip = 0x%x\n", vmcs_read(GUEST_RIP));
+		return 0;
+	}
 	ret = ept_gpa_to_hpa(vcpu, l1gpa, &hpa);
 	if (ret) {
 		printk("transfer l1gpa 0x%x to hpa failed.\n", l1gpa);
 		return 0;
 	}
+
 	printk("shadow EPT:0x%x -> 0x%x -> 0x%x ===>>> 0x%x -> 0x%x rip = 0x%x\n", l2gpa, l1gpa, hpa, l2gpa, hpa, vmcs_read(GUEST_RIP));
 	ept_map_page(ept_pointer, l2gpa, PT_ENTRY_ADDR(hpa), 0x1000, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
 	return 0;
@@ -631,6 +627,7 @@ int nested_vm_exit_to_l1(struct vmx_vcpu *vcpu)
 {
 	vmclear(vcpu->vmcs02_phys);
 	vcpu->state = 0;
+	vcpu->guest_mode = 0;
 	vcpu->guest_state.rip = vcpu->vmcs12->host_rip;
 	vmptr_load(vcpu->vmcs01_phys);
 	vcpu->guest_state.gr_regs.rsp = vcpu->vmcs12->host_rsp;
@@ -642,6 +639,12 @@ int nested_vm_exit_to_l1(struct vmx_vcpu *vcpu)
 	printk("vmx:return L1 from L0\n");
 	memcpy(&vcpu->guest_state.gr_regs, &vcpu->l2_guest_state.gr_regs, sizeof(vcpu->guest_state.gr_regs));
 	vmx_run(vcpu);
+}
+
+int nested_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
+{
+	nested_vm_exit_to_l1(vcpu);
+	return 0;
 }
 
 int nested_vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
@@ -666,7 +669,6 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 	vcpu->vmcs12->vm_exit_instruction_len = vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	if (exit_reason & 0x80000000) {
 		nested_handle_vm_entry_failed(vcpu);
-		while (1);
 	} else {
 		if (exit_reason != EXIT_REASON_EPT_VIOLATION)
 			printk("nested vm-exit.reason = %d rip = 0x%x\n", exit_reason, vmcs_read(GUEST_RIP));
@@ -821,8 +823,8 @@ int nested_vmx_run(struct vmx_vcpu *vcpu)
 	int ret0 = 0, ret1 = 0;
 	printk("vmx:enter L2 from L1\n");
 	while (1) {
+		prepare_vmcs02(vcpu, vcpu->vmcs12);	
 		if (vcpu->state == 0) {
-			prepare_vmcs02(vcpu, vcpu->vmcs12);	
 			//printk("VM LAUNCH.\n");
 			ret0 = vm_launch(&vcpu->host_state.gr_regs, &vcpu->l2_guest_state.gr_regs);
 			if (ret0 == 0) {
@@ -831,7 +833,6 @@ int nested_vmx_run(struct vmx_vcpu *vcpu)
 			}
 		} else {
 			//printk("VM RESUME.\n");
-			prepare_vmcs02(vcpu, vcpu->vmcs12);	
 			ret0 = vm_resume(&vcpu->host_state.gr_regs, &vcpu->l2_guest_state.gr_regs);
 		}
 		nested_vmx_save_guest_state(vcpu);
