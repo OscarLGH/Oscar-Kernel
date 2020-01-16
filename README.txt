@@ -4,12 +4,30 @@ This is a bare metal kernel that can run on x86_64 physical machine with UEFI su
 Support features:
 
 	branch "refactor":
-		running on x86 long-mode
-		SMP support
+		running on x86_64 long-mode.
+		SMP support.
 		Process support with multi-core scheduling.
-		PCI driver with MSI interrupt
-		ACPI support
-		Simple virtual machine on Intel CPUs (VMX)
+		ACPI support.
+		Simple virtual machine on Intel CPUs:
+			Nested virtualization supported.
+			EPT enabled.
+		PCIe drivers:
+			MSI/MSI-X support.
+			simple NVIDIA GK104/GP104/GP102 driver
+				on board IOMMU support.
+				hardware accelerated framebuffer copy.
+			XHCI:
+				basic support for USB host controller.
+			IOMMU (TBD)
+		USB drivers:
+			USB Keyboard (WIP)
+			USB mouse (WIP)
+			USB removable disk (WIP)
+		Memory manager:
+			bootmem
+			slab (TBD)
+			buddy system (TBD)
+		VFS (TBD)
 
 	branch "master"
 		running on x86 long-mode.
@@ -28,10 +46,11 @@ Guide:
 		1. cd arch/x86_64
 		2. make -j4
 	Run on qemu:
-		1.install qemu and ovmf bios:
-			apt install qemu ovmf
+		1.install dependences:
+			apt install qemu-system-x86 ovmf kpartx
 		2.run kernel:
-			sudo ./run_qemu.sh
+			vt-x enabled: sudo ./qemu_run_kvm.sh
+			otherwise: sudo ./qemu_run_tcg.sh
 		3.after choosing resolution,the kernel starts to run.
 	Run on a real machine:
 		1.find a removable disk, and format it with FAT32.
