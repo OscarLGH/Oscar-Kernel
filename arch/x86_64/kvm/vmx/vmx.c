@@ -96,6 +96,8 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	memset(vcpu->host_state.msr, 0, 0x1000);
 	vcpu->guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.fp_regs, 0, 0x1000);
+	vcpu->l2_guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu->l2_guest_state.fp_regs, 0, 0x1000);
 	vcpu->guest_state.msr = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.msr, 0, 0x1000);
 	vcpu->posted_intr_addr = kmalloc(0x1000, GFP_KERNEL);
@@ -595,7 +597,7 @@ int vmx_handle_pending_interrupt(struct vmx_vcpu *vcpu)
 	printk("VM-Exit:pending interrupt.\n");
 	return 0;
 }
-void delay(u64);
+
 int vmx_handle_cpuid(struct vmx_vcpu *vcpu)
 {
 	u32 buffer[4];
@@ -1277,7 +1279,7 @@ void vmx_set_bist_state(struct vmx_vcpu *vcpu)
 
 	vcpu->guest_state.rip = 0x7c00;
 	vcpu->guest_state.rflags = BIT1;
-	vcpu->guest_state.gr_regs.rsp = 0;
+	memset(&vcpu->guest_state.gr_regs, 0, sizeof(struct general_regs));
 
 	vcpu->guest_state.ctrl_regs.xcr0 = XCR0_X87;
 }
@@ -1436,10 +1438,10 @@ void vm_init_test()
 	vmx_set_ctrl_state(vcpu);
 	vmx_save_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
-	ret = alloc_guest_memory(vcpu, 0, 0x10000000);
+	ret = alloc_guest_memory(vcpu, 0, 0x40000000);
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
-		ret = alloc_guest_memory(vcpu, 0, 0x4000000);
+		ret = alloc_guest_memory(vcpu, 0, 0x8000000);
 		if (ret == -1) {
 			printk("allocate memory for vm failed.exiting...\n");
 			return;

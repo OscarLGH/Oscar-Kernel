@@ -105,6 +105,7 @@ int page_fault_mm(u64 addr, u64 err_code, int cpl)
 {
 	int ret;
 	struct task_struct *task_ptr = get_current_task();
+	printk("handle page fault @0x%x error code 0x%x cpl = %d\n", addr, err_code, cpl);
 	/* Checking addr */
 	ret = address_check(addr, cpl);
 	if (ret) {

@@ -46,7 +46,7 @@ vm_launch:
 	movq 0x68(%rsi), %r13
 	movq 0x70(%rsi), %r14
 	movq 0x78(%rsi), %r15
-
+	movq 0x20(%rsi), %rsi
 	vmlaunch
 
 	popq %rsi
@@ -115,7 +115,7 @@ vm_resume:
 	movq 0x68(%rsi), %r13
 	movq 0x70(%rsi), %r14
 	movq 0x78(%rsi), %r15
-
+	movq 0x20(%rsi), %rsi
 	vmresume
 
 	popq %rsi
