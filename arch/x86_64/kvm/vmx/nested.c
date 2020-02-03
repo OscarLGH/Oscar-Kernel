@@ -593,6 +593,30 @@ int sync_vmcs12(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	vmcs12->guest_physical_address = vmcs_read(GUEST_PHYSICAL_ADDRESS);
 	vmcs12->guest_linear_address = vmcs_read(GUEST_LINEAR_ADDRESS);
 }
+void delay(u64);
+int nested_vmx_handle_cpuid(struct vmx_vcpu *vcpu)
+{
+	u32 buffer[4];
+	u32 eax, ecx;
+	//printk("VM-Exit:cpuid.rip = 0x%x\n", vcpu->guest_state.rip);
+	eax = vcpu->l2_guest_state.gr_regs.rax;
+	ecx = vcpu->l2_guest_state.gr_regs.rcx;
+
+	if (eax == 0x1 && ecx == 0x0) {
+		/* Passthrough host cpuid. */
+		cpuid(vcpu->l2_guest_state.gr_regs.rax, vcpu->l2_guest_state.gr_regs.rcx, buffer);
+		vcpu->l2_guest_state.gr_regs.rax = buffer[0];
+		vcpu->l2_guest_state.gr_regs.rbx = buffer[1];
+		vcpu->l2_guest_state.gr_regs.rcx = buffer[2];
+		vcpu->l2_guest_state.gr_regs.rdx = buffer[3];
+		vcpu->l2_guest_state.gr_regs.rcx = 0;
+		printk("eax = 0x%x, ebx = 0x%x ecx = 0x%x edx = 0x%x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
+		//vcpu->l2_guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+		return 0;
+	}
+	vcpu->l2_guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 1;
+}
 
 int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 {
@@ -687,6 +711,7 @@ int nested_vm_exit_handler(struct vmx_vcpu *vcpu)
 		case EXIT_REASON_TASK_SWITCH:
 			break;
 		case EXIT_REASON_CPUID:
+			ret = nested_vmx_handle_cpuid(vcpu);
 			break;
 		case EXIT_REASON_HLT:
 			break;

@@ -298,7 +298,7 @@ int vmx_set_guest_state(struct vmx_vcpu *vcpu)
 	u64 cr0, cr4;
 	cr0 = vcpu->guest_state.ctrl_regs.cr0 | rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1);
 
-	if (vmcs_read(SECONDARY_VM_EXEC_CONTROL) & SECONDARY_EXEC_UNRESTRICTED_GUEST != 0) {
+	if ((vmcs_read(SECONDARY_VM_EXEC_CONTROL) & SECONDARY_EXEC_UNRESTRICTED_GUEST) != 0) {
 		cr0 &= 0x7ffffffe;
 	}
 
@@ -1443,8 +1443,10 @@ void vm_init_test()
 		printk("allocate memory for vm failed.\n");
 		ret = alloc_guest_memory(vcpu, 0, 0x8000000);
 		if (ret == -1) {
-			printk("allocate memory for vm failed.exiting...\n");
-			return;
+			printk("allocate memory for vm failed.\n");
+			ret = alloc_guest_memory(vcpu, 0, 0x4000000);
+			if (ret == -1)
+				printk("allocate memory for vm failed.exiting...\n");
 		}
 	}
 

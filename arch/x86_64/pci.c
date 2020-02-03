@@ -87,7 +87,7 @@ void x86_pci_hostbridge_init()
 		printk("PCI: No 'MCFG' structure found in ACPI.\n");
 		x86_host_bridge.segment_number = 0;
 		x86_host_bridge.start_bus_number = 0;
-		x86_host_bridge.end_bus_number = 255;
+		x86_host_bridge.end_bus_number = 5;
 		x86_host_bridge.pci_read_config = x86_pci_read_config_pio;
 		x86_host_bridge.pci_write_config = x86_pci_write_config_pio;
 		x86_host_bridge.pci_msi_entry_build = x86_pci_msi_entry_build;
