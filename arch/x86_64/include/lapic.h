@@ -190,6 +190,7 @@ inline static void lapic_enable()
 	wrmsr(MSR_IA32_APICBASE, value);
 
 	/* Software enable APIC. */
+	/* some old version kvm (3.10.0) fail to emulate APIC_REG_SVR. */
 	value = lapic_reg_read32(APIC_REG_SVR);
 	value |= BIT8;
 	lapic_reg_write32(APIC_REG_SVR, value);
