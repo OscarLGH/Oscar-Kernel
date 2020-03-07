@@ -743,7 +743,7 @@ struct vmx_vcpu {
 		u64 pdpte1;
 		u64 pdpte2;
 		u64 pdpte3;
-	} guest_state, l2_guest_state;
+	} guest_state;
 
 	struct list_head guest_memory_list;
 };
@@ -836,6 +836,11 @@ int ept_gpa_to_hpa_any(u64 *eptp_base, gpa_t gpa, hpa_t *hpa);
 int paging64_gva_to_gpa(struct vmx_vcpu *vcpu, gva_t gva, gpa_t *gpa);
 int nested_ept_l2gpa_to_l1gpa(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12, gpa_t l2gpa, gpa_t *l1gpa);
 int ept_map_page(u64 *eptp_base, u64 gpa, u64 hpa, u64 page_size, u64 attribute);
+int nested_vm_exit_reflected(struct vmx_vcpu *vcpu, u32 exit_reason);
+int nested_vmx_reflect_vmexit(struct vmx_vcpu *vcpu, u32 exit_reason);
+int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu);
+
+
 
 
 #endif

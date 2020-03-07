@@ -96,8 +96,6 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	memset(vcpu->host_state.msr, 0, 0x1000);
 	vcpu->guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.fp_regs, 0, 0x1000);
-	vcpu->l2_guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->l2_guest_state.fp_regs, 0, 0x1000);
 	vcpu->guest_state.msr = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->guest_state.msr, 0, 0x1000);
 	vcpu->posted_intr_addr = kmalloc(0x1000, GFP_KERNEL);
@@ -521,26 +519,22 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 
 int read_guest_memory_gpa(struct vmx_vcpu *vcpu, u64 gpa, u64 size, void *buffer)
 {
-	struct guest_memory_zone *zone; 
-	list_for_each_entry(zone, &vcpu->guest_memory_list, list) {
-		if (gpa >= zone->gpa && gpa < zone->gpa + zone->page_nr * 0x1000) {
-			memcpy(buffer, (void *)PHYS2VIRT(zone->hpa + gpa - zone->gpa), size);
-			return 0;
-		}
-	}
-	return -1;
+	hpa_t hpa;
+	int ret = 0;
+	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+	if (ret)
+		return ret;
+	memcpy(buffer, (void *)PHYS2VIRT(hpa), size);
 }
 
 int write_guest_memory_gpa(struct vmx_vcpu *vcpu, u64 gpa, u64 size, void *buffer)
 {
-	struct guest_memory_zone *zone; 
-	list_for_each_entry(zone, &vcpu->guest_memory_list, list) {
-		if (gpa >= zone->gpa && gpa < zone->gpa + zone->page_nr * 0x1000) {
-			memcpy((void *)PHYS2VIRT(zone->hpa + gpa - zone->gpa), buffer, size);
-			return 0;
-		}
-	}
-	return -1;
+	hpa_t hpa;
+	int ret = 0;
+	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+	if (ret)
+		return ret;
+	memcpy((void *)PHYS2VIRT(hpa), buffer, size);
 }
 
 int vmx_handle_vm_entry_failed(struct vmx_vcpu *vcpu)
@@ -601,14 +595,14 @@ int vmx_handle_pending_interrupt(struct vmx_vcpu *vcpu)
 int vmx_handle_cpuid(struct vmx_vcpu *vcpu)
 {
 	u32 buffer[4];
-	printk("VM-Exit:cpuid.rip = 0x%x\n", vcpu->guest_state.rip);
+	//printk("VM-Exit:cpuid.rip = 0x%x\n", vcpu->guest_state.rip);
 	/* Passthrough host cpuid. */
 	cpuid(vcpu->guest_state.gr_regs.rax, vcpu->guest_state.gr_regs.rcx, buffer);
 	vcpu->guest_state.gr_regs.rax = buffer[0];
 	vcpu->guest_state.gr_regs.rbx = buffer[1];
 	vcpu->guest_state.gr_regs.rcx = buffer[2];
 	vcpu->guest_state.gr_regs.rdx = buffer[3];
-	printk("eax = 0x%x, ebx = 0x%x ecx = 0x%x edx = 0x%x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
+	//printk("eax = 0x%x, ebx = 0x%x ecx = 0x%x edx = 0x%x\n", buffer[0], buffer[1], buffer[2], buffer[3]);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -916,12 +910,24 @@ int vmx_handle_eoi(struct vmx_vcpu *vcpu)
 
 int vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:EPT Volation.\n");
+	//printk("VM-Exit:EPT Volation.\n");
 	u64 gpa = vmcs_read(GUEST_PHYSICAL_ADDRESS);
 	u64 exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	printk("gpa = 0x%x\n", gpa);
-	printk("exit qualification:0x%x\n", exit_qualification);
-	while (1);
+	void *page;
+	//printk("gpa = 0x%x\n", gpa);
+	//printk("exit qualification:0x%x\n", exit_qualification);
+	if (vcpu->guest_mode)
+		return nested_vmx_handle_ept_volation(vcpu);
+	else {
+		/*TODO: check gpa */
+		page = kmalloc(0x1000, GFP_KERNEL);
+		return ept_map_page(vcpu->eptp_base,
+								gpa,
+								VIRT2PHYS(page),
+								0x1000,
+								EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
+	}
+
 	return 0;
 }
 
@@ -1037,160 +1043,163 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 	u32 instruction_error = vmcs_read(VM_INSTRUCTION_ERROR);
 	vcpu->guest_state.rip = vmcs_read(GUEST_RIP);
 	vcpu->guest_state.gr_regs.rsp = vmcs_read(GUEST_RSP);
-	//printk("L1 vm_exit reason:%d\n", exit_reason);
-	//printk("Guest RIP:%x\n", vcpu->guest_state.rip);
-	if (exit_reason & 0x80000000) {
-		printk("vm entry failed.\n");
-		vmx_handle_vm_entry_failed(vcpu);
-	} else {
-		switch(exit_reason & 0xff) {
-		case EXIT_REASON_EXCEPTION_NMI:
-			ret = vmx_handle_exception(vcpu);
-			break;
-		case EXIT_REASON_EXTERNAL_INTERRUPT:
-			ret = vmx_handle_external_interrupt(vcpu);
-			break;
-		case EXIT_REASON_TRIPLE_FAULT:
-			ret = vmx_handle_triple_fault(vcpu);
-			break;
-		case EXIT_REASON_PENDING_INTERRUPT:
-			ret = vmx_handle_pending_interrupt(vcpu);
-			break;
-		case EXIT_REASON_NMI_WINDOW:
-			break;
-		case EXIT_REASON_TASK_SWITCH:
-			break;
-		case EXIT_REASON_CPUID:
-			ret = vmx_handle_cpuid(vcpu);
-			break;
-		case EXIT_REASON_HLT:
-			break;
-		case EXIT_REASON_INVD:
-			break;
-		case EXIT_REASON_INVLPG:
-			break;
-		case EXIT_REASON_RDPMC:
-			ret = vmx_handle_rdpmc(vcpu);
-			break;
-		case EXIT_REASON_RDTSC:
-			ret = vmx_handle_rdtsc(vcpu);
-			break;
-		case EXIT_REASON_VMCALL:
-			ret = vmx_handle_vmcall(vcpu);
-			break;
-		case EXIT_REASON_VMCLEAR:
-			ret = vmx_handle_vmclear(vcpu);
-			break;
-		case EXIT_REASON_VMLAUNCH:
-			ret = vmx_handle_vmlaunch(vcpu);
-			break;
-		case EXIT_REASON_VMPTRLD:
-			ret = vmx_handle_vmptrld(vcpu);
-			break;
-		case EXIT_REASON_VMPTRST:
-			ret = vmx_handle_vmptrst(vcpu);
-			break;
-		case EXIT_REASON_VMREAD:
-			ret = vmx_handle_vmread(vcpu);
-			break;
-		case EXIT_REASON_VMRESUME:
-			ret = vmx_handle_vmresume(vcpu);
-			break;
-		case EXIT_REASON_VMWRITE:
-			ret = vmx_handle_vmwrite(vcpu);
-			break;
-		case EXIT_REASON_VMOFF:
-			ret = vmx_handle_vmxoff(vcpu);
-			break;
-		case EXIT_REASON_VMON:
-			ret = vmx_handle_vmxon(vcpu);
-			break;
-		case EXIT_REASON_CR_ACCESS:
-			ret = vmx_handle_cr_access(vcpu);
-			break;
-		case EXIT_REASON_DR_ACCESS:
-			break;
-		case EXIT_REASON_IO_INSTRUCTION:
-			ret = vmx_handle_io(vcpu);
-			break;
-		case EXIT_REASON_MSR_READ:
-			ret = vmx_handle_rdmsr(vcpu);
-			break;
-		case EXIT_REASON_MSR_WRITE:
-			ret = vmx_handle_wrmsr(vcpu);
-			break;
-		case EXIT_REASON_INVALID_STATE:
-			printk("VM Exit:Invalid Guest State.\n");
-			break;
-		case EXIT_REASON_MSR_LOAD_FAIL:
-			break;
-		case EXIT_REASON_MWAIT_INSTRUCTION:
-			break;
-		case EXIT_REASON_MONITOR_TRAP_FLAG:
-			ret = vmx_handle_mtf(vcpu);
-			break;
-		case EXIT_REASON_MONITOR_INSTRUCTION:
-			break;
-		case EXIT_REASON_PAUSE_INSTRUCTION:
-			break;
-		case EXIT_REASON_MCE_DURING_VMENTRY:
-			break;
-		case EXIT_REASON_TPR_BELOW_THRESHOLD:
-			break;
-		case EXIT_REASON_APIC_ACCESS:
-			ret = vmx_handle_apic_access(vcpu);
-			break;
-		case EXIT_REASON_EOI_INDUCED:
-			ret = vmx_handle_eoi(vcpu);
-			break;
-		case EXIT_REASON_GDTR_IDTR:
-			break;
-		case EXIT_REASON_LDTR_TR:
-			break;
-		case EXIT_REASON_EPT_VIOLATION:
-			ret = vmx_handle_ept_volation(vcpu);
-			break;
-		case EXIT_REASON_EPT_MISCONFIG:
-			break;
-		case EXIT_REASON_INVEPT:
-			ret = vmx_handle_invept(vcpu);
-			break;
-		case EXIT_REASON_RDTSCP:
-			ret = vmx_handle_rdtscp(vcpu);
-			break;
-		case EXIT_REASON_PREEMPTION_TIMER:
-			ret = vmx_handle_preemption_timer(vcpu);
-			break;
-		case EXIT_REASON_INVVPID:
-			break;
-		case EXIT_REASON_WBINVD:
-			break;
-		case EXIT_REASON_XSETBV:
-			ret = vmx_handle_xsetbv(vcpu);
-			break;
-		case EXIT_REASON_APIC_WRITE:
-			break;
-		case EXIT_REASON_RDRAND:
-			break;
-		case EXIT_REASON_INVPCID:
-			break;
-		case EXIT_REASON_VMFUNC:
-			break;
-		case EXIT_REASON_ENCLS:
-			break;
-		case EXIT_REASON_RDSEED:
-			break;
-		case EXIT_REASON_PML_FULL:
-			break;
-		case EXIT_REASON_XSAVES:
-			ret = vmx_handle_xsaves(vcpu);
-			break;
-		case EXIT_REASON_XRSTORS:
-			ret = vmx_handle_xrstors(vcpu);
-			break;
-		default:
-			printk("VM-Exit:Unhandled exit reason:%d\n", exit_reason & 0xff);
-			break;
+
+	if (vcpu->guest_mode && nested_vm_exit_reflected(vcpu, exit_reason))
+		return nested_vmx_reflect_vmexit(vcpu, exit_reason);
+	else {
+		if (exit_reason & 0x80000000) {
+			printk("vm entry failed.\n");
+			vmx_handle_vm_entry_failed(vcpu);
+		} else {
+			switch(exit_reason & 0xff) {
+			case EXIT_REASON_EXCEPTION_NMI:
+				ret = vmx_handle_exception(vcpu);
+				break;
+			case EXIT_REASON_EXTERNAL_INTERRUPT:
+				ret = vmx_handle_external_interrupt(vcpu);
+				break;
+			case EXIT_REASON_TRIPLE_FAULT:
+				ret = vmx_handle_triple_fault(vcpu);
+				break;
+			case EXIT_REASON_PENDING_INTERRUPT:
+				ret = vmx_handle_pending_interrupt(vcpu);
+				break;
+			case EXIT_REASON_NMI_WINDOW:
+				break;
+			case EXIT_REASON_TASK_SWITCH:
+				break;
+			case EXIT_REASON_CPUID:
+				ret = vmx_handle_cpuid(vcpu);
+				break;
+			case EXIT_REASON_HLT:
+				break;
+			case EXIT_REASON_INVD:
+				break;
+			case EXIT_REASON_INVLPG:
+				break;
+			case EXIT_REASON_RDPMC:
+				ret = vmx_handle_rdpmc(vcpu);
+				break;
+			case EXIT_REASON_RDTSC:
+				ret = vmx_handle_rdtsc(vcpu);
+				break;
+			case EXIT_REASON_VMCALL:
+				ret = vmx_handle_vmcall(vcpu);
+				break;
+			case EXIT_REASON_VMCLEAR:
+				ret = vmx_handle_vmclear(vcpu);
+				break;
+			case EXIT_REASON_VMLAUNCH:
+				ret = vmx_handle_vmlaunch(vcpu);
+				break;
+			case EXIT_REASON_VMPTRLD:
+				ret = vmx_handle_vmptrld(vcpu);
+				break;
+			case EXIT_REASON_VMPTRST:
+				ret = vmx_handle_vmptrst(vcpu);
+				break;
+			case EXIT_REASON_VMREAD:
+				ret = vmx_handle_vmread(vcpu);
+				break;
+			case EXIT_REASON_VMRESUME:
+				ret = vmx_handle_vmresume(vcpu);
+				break;
+			case EXIT_REASON_VMWRITE:
+				ret = vmx_handle_vmwrite(vcpu);
+				break;
+			case EXIT_REASON_VMOFF:
+				ret = vmx_handle_vmxoff(vcpu);
+				break;
+			case EXIT_REASON_VMON:
+				ret = vmx_handle_vmxon(vcpu);
+				break;
+			case EXIT_REASON_CR_ACCESS:
+				ret = vmx_handle_cr_access(vcpu);
+				break;
+			case EXIT_REASON_DR_ACCESS:
+				break;
+			case EXIT_REASON_IO_INSTRUCTION:
+				ret = vmx_handle_io(vcpu);
+				break;
+			case EXIT_REASON_MSR_READ:
+				ret = vmx_handle_rdmsr(vcpu);
+				break;
+			case EXIT_REASON_MSR_WRITE:
+				ret = vmx_handle_wrmsr(vcpu);
+				break;
+			case EXIT_REASON_INVALID_STATE:
+				printk("VM Exit:Invalid Guest State.\n");
+				break;
+			case EXIT_REASON_MSR_LOAD_FAIL:
+				break;
+			case EXIT_REASON_MWAIT_INSTRUCTION:
+				break;
+			case EXIT_REASON_MONITOR_TRAP_FLAG:
+				ret = vmx_handle_mtf(vcpu);
+				break;
+			case EXIT_REASON_MONITOR_INSTRUCTION:
+				break;
+			case EXIT_REASON_PAUSE_INSTRUCTION:
+				break;
+			case EXIT_REASON_MCE_DURING_VMENTRY:
+				break;
+			case EXIT_REASON_TPR_BELOW_THRESHOLD:
+				break;
+			case EXIT_REASON_APIC_ACCESS:
+				ret = vmx_handle_apic_access(vcpu);
+				break;
+			case EXIT_REASON_EOI_INDUCED:
+				ret = vmx_handle_eoi(vcpu);
+				break;
+			case EXIT_REASON_GDTR_IDTR:
+				break;
+			case EXIT_REASON_LDTR_TR:
+				break;
+			case EXIT_REASON_EPT_VIOLATION:
+				ret = vmx_handle_ept_volation(vcpu);
+				break;
+			case EXIT_REASON_EPT_MISCONFIG:
+				break;
+			case EXIT_REASON_INVEPT:
+				ret = vmx_handle_invept(vcpu);
+				break;
+			case EXIT_REASON_RDTSCP:
+				ret = vmx_handle_rdtscp(vcpu);
+				break;
+			case EXIT_REASON_PREEMPTION_TIMER:
+				ret = vmx_handle_preemption_timer(vcpu);
+				break;
+			case EXIT_REASON_INVVPID:
+				break;
+			case EXIT_REASON_WBINVD:
+				break;
+			case EXIT_REASON_XSETBV:
+				ret = vmx_handle_xsetbv(vcpu);
+				break;
+			case EXIT_REASON_APIC_WRITE:
+				break;
+			case EXIT_REASON_RDRAND:
+				break;
+			case EXIT_REASON_INVPCID:
+				break;
+			case EXIT_REASON_VMFUNC:
+				break;
+			case EXIT_REASON_ENCLS:
+				break;
+			case EXIT_REASON_RDSEED:
+				break;
+			case EXIT_REASON_PML_FULL:
+				break;
+			case EXIT_REASON_XSAVES:
+				ret = vmx_handle_xsaves(vcpu);
+				break;
+			case EXIT_REASON_XRSTORS:
+				ret = vmx_handle_xrstors(vcpu);
+				break;
+			default:
+				printk("VM-Exit:Unhandled exit reason:%d\n", exit_reason & 0xff);
+				break;
+			}
 		}
 	}
 	//printk("Next RIP:%x\n", vcpu->guest_state.rip);
@@ -1416,6 +1425,7 @@ int vmx_run(struct vmx_vcpu *vcpu)
 				return -1;
 		} else {
 			printk("vm entry failed.\n");
+			return -1;
 		}
 	}
 }
