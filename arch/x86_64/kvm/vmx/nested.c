@@ -105,7 +105,7 @@ int vmx_handle_vmclear(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	vmcs12_phys = *virt;
-	printk("VM-Exit:VMCLEAR.Region:0x%x\n", *virt);
+	//printk("VM-Exit:VMCLEAR.Region:0x%x\n", *virt);
 
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
@@ -115,7 +115,7 @@ int nested_vmx_run(struct vmx_vcpu *vcpu);
 
 int vmx_handle_vmlaunch(struct vmx_vcpu *vcpu)
 {
-	printk("VM-Exit:VMLAUNCH.\n");
+	//printk("VM-Exit:VMLAUNCH.\n");
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	nested_vmx_run(vcpu);
 	return 0;
@@ -140,7 +140,7 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 	u64 *virt;
 	int ret;
 
-	printk("VM-Exit:VMPTRLD\n");
+	//printk("VM-Exit:VMPTRLD\n");
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
@@ -157,7 +157,7 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 	virt = (void *)PHYS2VIRT(hpa);
 	vcpu->vmcs12 = (void *)PHYS2VIRT(*virt);
 
-	printk("VM-Exit:VMPTRLD.Region:0x%x\n", *virt);
+	//printk("VM-Exit:VMPTRLD.Region:0x%x\n", *virt);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
 }
@@ -242,7 +242,8 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 		u64 eptp, gpa;
 	} *invept_context = NULL;
 	//printk("VM-Exit:INVEPT\n");
-
+	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
+	return 0;
 	decode_mem_address(vcpu, exit_qualification, instruction_info, &gva);
 	ret = paging64_gva_to_gpa(vcpu, gva, &gpa);
 	if (ret) {
@@ -341,12 +342,12 @@ int nested_vmx_set_ctrl_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 		vmcs_write(EPT_POINTER, VIRT2PHYS(ept_pointer) | 0x5e);
 	}
 
-	gpa = vmcs12->posted_intr_desc_addr;
-	ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
-	if (ret) {
-		printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
-		return -1;
-	}
+	//gpa = vmcs12->posted_intr_desc_addr;
+	//ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+	//if (ret) {
+	//	printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
+	//	return -1;
+	//}
 	//vmcs_write(POSTED_INTR_DESC_ADDR, hpa);
 
 	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, vmcs12->vmx_preemption_timer_value);
@@ -622,7 +623,7 @@ int nested_vmx_handle_ept_volation(struct vmx_vcpu *vcpu)
 		return 1;
 	}
 
-	printk("shadow EPT:0x%x -> 0x%x -> 0x%x ===>>> 0x%x -> 0x%x rip = 0x%x\n", l2gpa, l1gpa, hpa, l2gpa, hpa, vmcs_read(GUEST_RIP));
+	//printk("shadow EPT:0x%x -> 0x%x -> 0x%x ===>>> 0x%x -> 0x%x rip = 0x%x\n", l2gpa, l1gpa, hpa, l2gpa, hpa, vmcs_read(GUEST_RIP));
 	ept_map_page(ept_pointer, l2gpa, PT_ENTRY_ADDR(hpa), 0x1000, EPT_PTE_READ | EPT_PTE_WRITE | EPT_PTE_EXECUTE | EPT_PTE_CACHE_WB);
 	return 0;
 }
@@ -667,6 +668,9 @@ int nested_vm_exit_reflected(struct vmx_vcpu *vcpu, u32 exit_reason)
 		case EXIT_REASON_INVVPID:
 			if (vcpu->guest_mode)
 				return 1;
+			else
+				return 0;
+			break;
 		default:
 			return 1;
 	}

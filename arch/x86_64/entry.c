@@ -621,7 +621,7 @@ void arch_init()
 	} else {
 
 	}
-	
+
 	if (is_bsp()) {
 		wakeup_all_processors();
 		//set_memory_type();

@@ -36,7 +36,7 @@ qemu-system-x86_64 \
 	-enable-kvm \
 	-cpu host\
 	-smp 4,sockets=1,cores=2,threads=2 \
-	-m 1G \
+	-m 8G \
 	-bios OVMF.fd \
 	-hda vdisk.img \
 	-serial stdio

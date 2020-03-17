@@ -61,7 +61,12 @@ struct vmx_vcpu *vmx_preinit()
 	vcpu_ptr->vmcs02 = kmalloc(0x1000, GFP_KERNEL);
 	vcpu_ptr->vmcs02_phys = VIRT2PHYS(vcpu_ptr->vmcs02);
 	memset(vcpu_ptr->vmcs02, 0, 0x1000);
+	vcpu_ptr->shadow_vmcs = kmalloc(0x1000, GFP_KERNEL);
+	vcpu_ptr->shadow_vmcs_phys = VIRT2PHYS(vcpu_ptr->shadow_vmcs);
+	memset(vcpu_ptr->shadow_vmcs, 0, 0x1000);
+	vcpu_ptr->shadow_vmcs->revision_id = 0x80000000;
 	vcpu_ptr->virtual_processor_id = ++vcpu_cnt;
+
 
 	ret = vmx_enable();
 	if (ret) {
@@ -88,6 +93,12 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	memset(vcpu->io_bitmap_b, 0, 0x1000);
 	vcpu->msr_bitmap = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->msr_bitmap, 0, 0x1000);
+	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu->eptp_base, 0, 0x1000);
+	vcpu->vmread_bitmap = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu->vmread_bitmap, 0, 0x1000);
+	vcpu->vmwrite_bitmap = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu->vmwrite_bitmap, 0, 0x1000);
 	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->eptp_base, 0, 0x1000);
 	vcpu->host_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
@@ -189,6 +200,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		| SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES
 		| SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY
 		| SECONDARY_EXEC_APIC_REGISTER_VIRT
+		//| SECONDARY_EXEC_SHADOW_VMCS
 		;
 	if ((cpu_based_vm_exec_ctrl2 | cpu_based2_allow1_mask) != cpu_based2_allow1_mask) {
 		printk("Warning:setting secondary_vm_exec_control:%x unsupported.\n", 
@@ -197,6 +209,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		cpu_based_vm_exec_ctrl2 &= cpu_based2_allow1_mask;
 	}
 	vmcs_write(SECONDARY_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrl2);
+	vmcs_write(VMCS_LINK_POINTER, vcpu->shadow_vmcs_phys);
 
 	vm_entry_ctrl = VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR
 		| VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL
@@ -507,7 +520,7 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 	printk("vm virt = %x\n", virt);
 	if (virt == NULL)
 		return -1;
-	memset(virt, 0, size);
+	//memset(virt, 0, size);
 	hpa = VIRT2PHYS(virt);
 	zone->hpa = hpa;
 	zone->page_nr = size / 0x1000;
@@ -573,7 +586,7 @@ int vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
 {
 	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
 	u8 vector = interruption_info & 0xff;
-	printk("VM-Exit:External interrupt (%d)\n", vector);
+	printk("VM-Exit:External interrupt (%d). RIP = 0x%x\n", vector, vcpu->guest_state.rip);
 	soft_irq_call(vector);
 	asm("sti");
 	return 0;
@@ -1435,6 +1448,7 @@ void vm_init_test()
 {
 	int ret;
 	u8 buf[0x1000];
+	u64 vm_mem_size;
 
 	void *code_start, *code_end;
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
@@ -1448,13 +1462,17 @@ void vm_init_test()
 	vmx_set_ctrl_state(vcpu);
 	vmx_save_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
-	ret = alloc_guest_memory(vcpu, 0, 0x40000000);
+
+	vm_mem_size = 0x10000000;
+	ret = alloc_guest_memory(vcpu, 0, vm_mem_size);
 	if (ret == -1) {
 		printk("allocate memory for vm failed.\n");
-		ret = alloc_guest_memory(vcpu, 0, 0x8000000);
+		vm_mem_size >>= 1;
+		ret = alloc_guest_memory(vcpu, 0, vm_mem_size);
 		if (ret == -1) {
 			printk("allocate memory for vm failed.\n");
-			ret = alloc_guest_memory(vcpu, 0, 0x4000000);
+			vm_mem_size >>= 1;
+			ret = alloc_guest_memory(vcpu, 0, vm_mem_size);
 			if (ret == -1)
 				printk("allocate memory for vm failed.exiting...\n");
 		}
@@ -1479,6 +1497,11 @@ void vm_init_test()
 	}
 
 	memset(buf, 0, 0x1000);
+	struct bootloader_parm_block *vm_boot_parm = (struct bootloader_parm_block *)buf;
+	vm_boot_parm->ardc_cnt = 1;
+	vm_boot_parm->ardc_array[0].base = 0x100000;
+	vm_boot_parm->ardc_array[0].length = vm_mem_size;
+	vm_boot_parm->ardc_array[0].type = 1;
 	ret = write_guest_memory_gpa(vcpu, 0x10000, 0x4000, buf);
 	if (ret == -1) {
 		printk("writing guest memory failed.\n");

@@ -703,9 +703,13 @@ struct vmx_vcpu {
 	u64 vmxon_region_phys;
 	struct vmcs_hdr *vmcs01;
 	struct vmcs12 *vmcs12;
+	struct vmcs_hdr *shadow_vmcs;
 	struct vmcs_hdr *vmcs02;
 	u64 vmcs01_phys;
 	u64 vmcs02_phys;
+	u64 shadow_vmcs_phys;
+	u64 *vmread_bitmap;
+	u64 *vmwrite_bitmap;
 	u64 *io_bitmap_a;
 	u64 *io_bitmap_b;
 	u64 *vapic_page;
