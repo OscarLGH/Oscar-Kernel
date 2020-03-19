@@ -156,7 +156,7 @@ int vmx_handle_vmptrld(struct vmx_vcpu *vcpu)
 
 	virt = (void *)PHYS2VIRT(hpa);
 	vcpu->vmcs12 = (void *)PHYS2VIRT(*virt);
-
+	//vmcs_write(VMCS_LINK_POINTER, *virt);
 	//printk("VM-Exit:VMPTRLD.Region:0x%x\n", *virt);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
@@ -204,7 +204,7 @@ int vmx_handle_vmread(struct vmx_vcpu *vcpu)
 	int ret;
 	u64 value;
 
-	//printk("VM-Exit:VMREAD.field:0x%x, value:0x%x\n", field, value);
+	printk("VM-Exit:VMREAD.field:0x%x, value:0x%x\n", field, value);
 	vmcs12_read_any(vcpu->vmcs12, field, &value);
 	kvm_reg_write(vcpu, base_reg, value);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
@@ -221,7 +221,7 @@ int vmx_handle_vmwrite(struct vmx_vcpu *vcpu)
 	u64 value = kvm_reg_read(vcpu, base_reg);
 	int ret;
 
-	//printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
+	printk("VM-Exit:VMWRITE.field:0x%x, value:0x%x\n", field, value);
 	vmcs12_write_any(vcpu->vmcs12, field, value);
 	vcpu->guest_state.rip += vmcs_read(VM_EXIT_INSTRUCTION_LEN);
 	return 0;
@@ -342,13 +342,45 @@ int nested_vmx_set_ctrl_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 		vmcs_write(EPT_POINTER, VIRT2PHYS(ept_pointer) | 0x5e);
 	}
 
-	//gpa = vmcs12->posted_intr_desc_addr;
-	//ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
-	//if (ret) {
-	//	printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
-	//	return -1;
-	//}
-	//vmcs_write(POSTED_INTR_DESC_ADDR, hpa);
+	if (vmcs12->pin_based_vm_exec_control & PIN_BASED_POSTED_INTR) {
+		gpa = vmcs12->posted_intr_desc_addr;
+		ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+		if (ret) {
+			printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
+			return -1;
+		}
+		vmcs_write(POSTED_INTR_DESC_ADDR, hpa);
+	}
+
+	vmcs_write(VMCS_LINK_POINTER, vmcs12->vmcs_link_pointer);
+	if (vmcs12->secondary_vm_exec_control & SECONDARY_EXEC_SHADOW_VMCS) {
+
+		if (vmcs12->vmcs_link_pointer != 0xffffffffffffffff) {
+			gpa = vmcs12->vmcs_link_pointer;
+			ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+			if (ret) {
+				printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
+				return -1;
+			}
+			vmcs_write(VMCS_LINK_POINTER, hpa);
+		}
+
+		gpa = vmcs12->vmread_bitmap;
+		ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+		if (ret) {
+			printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
+			return -1;
+		}
+		vmcs_write(VMREAD_BITMAP, hpa);
+
+		gpa = vmcs12->vmwrite_bitmap;
+		ret = ept_gpa_to_hpa(vcpu, gpa, &hpa);
+		if (ret) {
+			printk("transfer gpa to hpa failed.gpa = %x LINE = %d\n", gpa, __LINE__);
+			return -1;
+		}
+		vmcs_write(VMWRITE_BITMAP, hpa);
+	}
 
 	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, vmcs12->vmx_preemption_timer_value);
 	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, vmcs12->pin_based_vm_exec_control);
@@ -361,8 +393,6 @@ int nested_vmx_set_ctrl_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 	vmcs_write(CR0_GUEST_HOST_MASK, vmcs12->cr0_guest_host_mask);
 	vmcs_write(CR4_GUEST_HOST_MASK, vmcs12->cr4_guest_host_mask);
 	vmcs_write(EXCEPTION_BITMAP, vmcs12->exception_bitmap);
-
-	vmcs_write(VMCS_LINK_POINTER, vmcs12->vmcs_link_pointer);
 
 	return 0;
 }
@@ -411,6 +441,15 @@ int nested_vmx_save_host_state(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
+int copy_vmcs12_to_shadow(struct vmx_vcpu *vcpu)
+{
+	
+}
+
+int copy_shadow_to_vmcs12(struct vmx_vcpu *vcpu)
+{
+	
+}
 
 int nested_vmx_set_guest_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 {

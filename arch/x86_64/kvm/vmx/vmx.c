@@ -61,10 +61,6 @@ struct vmx_vcpu *vmx_preinit()
 	vcpu_ptr->vmcs02 = kmalloc(0x1000, GFP_KERNEL);
 	vcpu_ptr->vmcs02_phys = VIRT2PHYS(vcpu_ptr->vmcs02);
 	memset(vcpu_ptr->vmcs02, 0, 0x1000);
-	vcpu_ptr->shadow_vmcs = kmalloc(0x1000, GFP_KERNEL);
-	vcpu_ptr->shadow_vmcs_phys = VIRT2PHYS(vcpu_ptr->shadow_vmcs);
-	memset(vcpu_ptr->shadow_vmcs, 0, 0x1000);
-	vcpu_ptr->shadow_vmcs->revision_id = 0x80000000;
 	vcpu_ptr->virtual_processor_id = ++vcpu_cnt;
 
 
@@ -96,9 +92,9 @@ int vmx_init(struct vmx_vcpu * vcpu)
 	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->eptp_base, 0, 0x1000);
 	vcpu->vmread_bitmap = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->vmread_bitmap, 0, 0x1000);
+	memset(vcpu->vmread_bitmap, 0xff, 0x1000);
 	vcpu->vmwrite_bitmap = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->vmwrite_bitmap, 0, 0x1000);
+	memset(vcpu->vmwrite_bitmap, 0xff, 0x1000);
 	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu->eptp_base, 0, 0x1000);
 	vcpu->host_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
@@ -177,6 +173,11 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		pin_based_vm_exec_ctrl &= pin_based_allow1_mask;
 	}
 	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrl);
+	
+	if (pin_based_vm_exec_ctrl & PIN_BASED_POSTED_INTR) {
+		vmcs_write(POSTED_INTR_DESC_ADDR, VIRT2PHYS(vcpu->posted_intr_addr));
+	}
+
 	cpu_based_vm_exec_ctrl = CPU_BASED_FIXED_ONES
 		| CPU_BASED_ACTIVATE_SECONDARY_CONTROLS
 		//| CPU_BASED_USE_IO_BITMAPS
@@ -200,7 +201,7 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		| SECONDARY_EXEC_VIRTUALIZE_APIC_ACCESSES
 		| SECONDARY_EXEC_VIRTUAL_INTR_DELIVERY
 		| SECONDARY_EXEC_APIC_REGISTER_VIRT
-		//| SECONDARY_EXEC_SHADOW_VMCS
+		| SECONDARY_EXEC_SHADOW_VMCS
 		;
 	if ((cpu_based_vm_exec_ctrl2 | cpu_based2_allow1_mask) != cpu_based2_allow1_mask) {
 		printk("Warning:setting secondary_vm_exec_control:%x unsupported.\n", 
@@ -209,7 +210,10 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		cpu_based_vm_exec_ctrl2 &= cpu_based2_allow1_mask;
 	}
 	vmcs_write(SECONDARY_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrl2);
-	vmcs_write(VMCS_LINK_POINTER, vcpu->shadow_vmcs_phys);
+	if (cpu_based_vm_exec_ctrl2 & SECONDARY_EXEC_SHADOW_VMCS) {
+		vmcs_write(VMREAD_BITMAP, VIRT2PHYS(vcpu->vmread_bitmap));
+		vmcs_write(VMWRITE_BITMAP, VIRT2PHYS(vcpu->vmwrite_bitmap));
+	}
 
 	vm_entry_ctrl = VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR
 		| VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL
@@ -236,7 +240,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		vm_exit_ctrl &= vm_exit_allow1_mask;
 	}
 	vmcs_write(VM_EXIT_CONTROLS, vm_exit_ctrl);
-	vmcs_write(POSTED_INTR_DESC_ADDR, VIRT2PHYS(vcpu->posted_intr_addr));
 	vmcs_write(CR3_TARGET_COUNT, 0);
 	vmcs_write(CR0_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR0_FIXED0) & rdmsr(MSR_IA32_VMX_CR0_FIXED1) & 0xfffffffe);
 	vmcs_write(CR4_GUEST_HOST_MASK, rdmsr(MSR_IA32_VMX_CR4_FIXED0) & rdmsr(MSR_IA32_VMX_CR4_FIXED1));
