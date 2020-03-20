@@ -15,6 +15,7 @@
  */
 
 #include <types.h>
+#include <kernel.h>
 typedef unsigned long  gva_t;
 typedef u64            gpa_t;
 typedef u64            gfn_t;
@@ -700,14 +701,11 @@ struct vmx_vcpu {
 	u64 guest_mode;
 	u64 virtual_processor_id;
 	struct vmcs_hdr *vmxon_region;
-	u64 vmxon_region_phys;
 	struct vmcs_hdr *vmcs01;
 	struct vmcs12 *vmcs12;
-	struct vmcs_hdr *shadow_vmcs;
 	struct vmcs_hdr *vmcs02;
-	u64 vmcs01_phys;
-	u64 vmcs02_phys;
-	u64 shadow_vmcs_phys;
+	struct vmcs_hdr *shadow_vmcs;
+	u64 shadow_vmcs_enabled;
 	u64 *vmread_bitmap;
 	u64 *vmwrite_bitmap;
 	u64 *io_bitmap_a;
@@ -772,10 +770,10 @@ static inline void vmptr_load(u64 paddr)
 		);
 }
 
-static inline void vmptr_store(u64 paddr)
+static inline void vmptr_store(u64 *paddr)
 {
-	asm volatile("vmptrst (%%rax)"
-		::"a"(&paddr), "m"(paddr)
+	asm volatile("vmptrst (%0)"
+		::"r"(paddr)
 		);
 }
 
@@ -798,9 +796,22 @@ static inline u64 vmcs_read(u64 field)
 
 static inline void vmcs_write(u64 field, u64 value)
 {
+	u64 rflags;
 	asm volatile("vmwrite %%rsi, %%rdi\n\t"
-		::"rdi"(field), "rsi"(value)
+		"pushf \n\t"
+		"pop %0"
+		:"=r"(rflags)
+		:"rdi"(field), "rsi"(value)
 		);
+
+	if (rflags & BIT0) {
+		printk("writing vmcs field %x failed.\n", field);
+		while (1);
+	}
+	if (rflags & BIT6) {
+		printk("writing vmcs field %x failed.\n", field);
+		while (1);
+	}
 }
 
 static inline void invvpid(unsigned long ext, u16 vpid, gva_t gva)

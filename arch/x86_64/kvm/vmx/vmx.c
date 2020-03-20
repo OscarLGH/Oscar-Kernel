@@ -46,7 +46,7 @@ int vmx_disable()
 }
 
 u64 vcpu_cnt = 0;
-struct vmx_vcpu *vmx_preinit()
+struct vmx_vcpu *vmx_init()
 {
 	int ret;
 	struct vmx_vcpu *vcpu_ptr = kmalloc(sizeof(*vcpu_ptr), GFP_KERNEL);
@@ -54,15 +54,11 @@ struct vmx_vcpu *vmx_preinit()
 	INIT_LIST_HEAD(&vcpu_ptr->guest_memory_list);
 	vcpu_ptr->vmxon_region = kmalloc(0x1000, GFP_KERNEL);
 	memset(vcpu_ptr->vmxon_region, 0, 0x1000);
-	vcpu_ptr->vmxon_region_phys = VIRT2PHYS(vcpu_ptr->vmxon_region);
 	vcpu_ptr->vmcs01 = kmalloc(0x1000, GFP_KERNEL);
-	vcpu_ptr->vmcs01_phys = VIRT2PHYS(vcpu_ptr->vmcs01);
 	memset(vcpu_ptr->vmcs01, 0, 0x1000);
 	vcpu_ptr->vmcs02 = kmalloc(0x1000, GFP_KERNEL);
-	vcpu_ptr->vmcs02_phys = VIRT2PHYS(vcpu_ptr->vmcs02);
 	memset(vcpu_ptr->vmcs02, 0, 0x1000);
 	vcpu_ptr->virtual_processor_id = ++vcpu_cnt;
-
 
 	ret = vmx_enable();
 	if (ret) {
@@ -72,43 +68,16 @@ struct vmx_vcpu *vmx_preinit()
 	vcpu_ptr->vmxon_region->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
 	vcpu_ptr->vmcs01->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
 	vcpu_ptr->vmcs02->revision_id = rdmsr(MSR_IA32_VMX_BASIC);
-	vmx_on(vcpu_ptr->vmxon_region_phys);
-	vmclear(vcpu_ptr->vmcs01_phys);
-	vmclear(vcpu_ptr->vmcs02_phys);
-	vmptr_load(vcpu_ptr->vmcs01_phys);
+	vmx_on(VIRT2PHYS(vcpu_ptr->vmxon_region));
+	vmclear(VIRT2PHYS(vcpu_ptr->vmcs01));
+	vmclear(VIRT2PHYS(vcpu_ptr->vmcs02));
+	vmptr_load(VIRT2PHYS(vcpu_ptr->vmcs01));
+
+	vcpu_ptr->host_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu_ptr->host_state.fp_regs, 0, 0x1000);
+	vcpu_ptr->guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
+	memset(vcpu_ptr->guest_state.fp_regs, 0, 0x1000);
 	return vcpu_ptr;
-}
-
-int vmx_init(struct vmx_vcpu * vcpu)
-{
-	vcpu->vapic_page = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->vapic_page, 0, 0x1000);
-	vcpu->io_bitmap_a = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->io_bitmap_a, 0, 0x1000);
-	vcpu->io_bitmap_b = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->io_bitmap_b, 0, 0x1000);
-	vcpu->msr_bitmap = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->msr_bitmap, 0, 0x1000);
-	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->eptp_base, 0, 0x1000);
-	vcpu->vmread_bitmap = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->vmread_bitmap, 0xff, 0x1000);
-	vcpu->vmwrite_bitmap = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->vmwrite_bitmap, 0xff, 0x1000);
-	vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->eptp_base, 0, 0x1000);
-	vcpu->host_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->host_state.fp_regs, 0, 0x1000);
-	vcpu->host_state.msr = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->host_state.msr, 0, 0x1000);
-	vcpu->guest_state.fp_regs = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->guest_state.fp_regs, 0, 0x1000);
-	vcpu->guest_state.msr = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->guest_state.msr, 0, 0x1000);
-	vcpu->posted_intr_addr = kmalloc(0x1000, GFP_KERNEL);
-	memset(vcpu->posted_intr_addr, 0, 0x1000);
-
-	return 0;
 }
 
 int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
@@ -131,15 +100,6 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 	u32 vm_exit_allow0_mask;
 
 	vmcs_write(VIRTUAL_PROCESSOR_ID, vcpu->virtual_processor_id);
-	vmcs_write(IO_BITMAP_A, VIRT2PHYS(vcpu->io_bitmap_a));
-	vmcs_write(IO_BITMAP_B, VIRT2PHYS(vcpu->io_bitmap_b));
-	vmcs_write(MSR_BITMAP, VIRT2PHYS(vcpu->msr_bitmap));
-	vmcs_write(VM_ENTRY_MSR_LOAD_ADDR, VIRT2PHYS(vcpu->guest_state.msr));
-	vmcs_write(VM_EXIT_MSR_STORE_ADDR, VIRT2PHYS(vcpu->guest_state.msr));
-	vmcs_write(VM_EXIT_MSR_LOAD_ADDR, VIRT2PHYS(vcpu->host_state.msr));
-
-	vmcs_write(VIRTUAL_APIC_PAGE_ADDR, VIRT2PHYS(vcpu->vapic_page));
-	vmcs_write(EPT_POINTER, VIRT2PHYS(vcpu->eptp_base) | 0x5e);
 
 	pin_based_vm_exec_ctrl = rdmsr(MSR_IA32_VMX_PINBASED_CTLS);
 	cpu_based_vm_exec_ctrl = rdmsr(MSR_IA32_VMX_PROCBASED_CTLS);
@@ -172,11 +132,14 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		pin_based_vm_exec_ctrl |= pin_based_allow0_mask;
 		pin_based_vm_exec_ctrl &= pin_based_allow1_mask;
 	}
-	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrl);
-	
+
 	if (pin_based_vm_exec_ctrl & PIN_BASED_POSTED_INTR) {
+		vcpu->posted_intr_addr = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->posted_intr_addr, 0, 0x1000);
 		vmcs_write(POSTED_INTR_DESC_ADDR, VIRT2PHYS(vcpu->posted_intr_addr));
 	}
+
+	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, pin_based_vm_exec_ctrl);
 
 	cpu_based_vm_exec_ctrl = CPU_BASED_FIXED_ONES
 		| CPU_BASED_ACTIVATE_SECONDARY_CONTROLS
@@ -193,6 +156,29 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		cpu_based_vm_exec_ctrl |= cpu_based_allow0_mask;
 		cpu_based_vm_exec_ctrl &= cpu_based_allow1_mask;
 	}
+
+	if (cpu_based_vm_exec_ctrl & CPU_BASED_USE_IO_BITMAPS) {
+		vcpu->io_bitmap_a = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->io_bitmap_a, 0, 0x1000);
+		vmcs_write(IO_BITMAP_A, VIRT2PHYS(vcpu->io_bitmap_a));
+		vcpu->io_bitmap_b = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->io_bitmap_b, 0, 0x1000);
+		vmcs_write(IO_BITMAP_B, VIRT2PHYS(vcpu->io_bitmap_b));
+	}
+
+	if (cpu_based_vm_exec_ctrl & CPU_BASED_USE_MSR_BITMAPS) {
+		vcpu->msr_bitmap = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->msr_bitmap, 0, 0x1000);
+		vmcs_write(MSR_BITMAP, VIRT2PHYS(vcpu->msr_bitmap));
+		vcpu->host_state.msr = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->host_state.msr, 0, 0x1000);
+		vmcs_write(VM_EXIT_MSR_LOAD_ADDR, VIRT2PHYS(vcpu->host_state.msr));
+		vcpu->guest_state.msr = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->guest_state.msr, 0, 0x1000);
+		vmcs_write(VM_ENTRY_MSR_LOAD_ADDR, VIRT2PHYS(vcpu->guest_state.msr));
+		vmcs_write(VM_EXIT_MSR_STORE_ADDR, VIRT2PHYS(vcpu->guest_state.msr));
+	}
+	
 	vmcs_write(CPU_BASED_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrl);
 
 	cpu_based_vm_exec_ctrl2 = SECONDARY_EXEC_UNRESTRICTED_GUEST
@@ -210,13 +196,30 @@ int vmx_set_ctrl_state(struct vmx_vcpu *vcpu)
 		cpu_based_vm_exec_ctrl2 &= cpu_based2_allow1_mask;
 	}
 	vmcs_write(SECONDARY_VM_EXEC_CONTROL, cpu_based_vm_exec_ctrl2);
+	if (cpu_based_vm_exec_ctrl2 & SECONDARY_EXEC_ENABLE_EPT) {
+		vcpu->eptp_base = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->eptp_base, 0, 0x1000);
+		vmcs_write(EPT_POINTER, VIRT2PHYS(vcpu->eptp_base) | 0x5e);
+	}
+
+	if (cpu_based_vm_exec_ctrl2 & SECONDARY_EXEC_APIC_REGISTER_VIRT) {
+		vcpu->vapic_page = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->vapic_page, 0, 0x1000);
+		vmcs_write(VIRTUAL_APIC_PAGE_ADDR, VIRT2PHYS(vcpu->vapic_page));
+	}
+
 	if (cpu_based_vm_exec_ctrl2 & SECONDARY_EXEC_SHADOW_VMCS) {
+		vcpu->shadow_vmcs_enabled = true;
+		vcpu->vmread_bitmap = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->vmread_bitmap, 0x0, 0x1000);
 		vmcs_write(VMREAD_BITMAP, VIRT2PHYS(vcpu->vmread_bitmap));
+		vcpu->vmwrite_bitmap = kmalloc(0x1000, GFP_KERNEL);
+		memset(vcpu->vmwrite_bitmap, 0x0, 0x1000);
 		vmcs_write(VMWRITE_BITMAP, VIRT2PHYS(vcpu->vmwrite_bitmap));
 	}
 
 	vm_entry_ctrl = VM_ENTRY_ALWAYSON_WITHOUT_TRUE_MSR
-		| VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL
+		//| VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL
 		| VM_ENTRY_LOAD_IA32_EFER;
 	if ((vm_entry_ctrl | vm_entry_allow1_mask) != vm_entry_allow1_mask) {
 		printk("Warning:setting vm_entry_controls:%x unsupported.\n", 
@@ -523,7 +526,7 @@ int alloc_guest_memory(struct vmx_vcpu *vcpu, u64 gpa, u64 size)
 	printk("vm virt = %x\n", virt);
 	if (virt == NULL)
 		return -1;
-	//memset(virt, 0, size);
+	memset(virt, 0, size);
 	hpa = VIRT2PHYS(virt);
 	zone->hpa = hpa;
 	zone->page_nr = size / 0x1000;
@@ -1064,7 +1067,9 @@ int vm_exit_handler(struct vmx_vcpu *vcpu)
 		return nested_vmx_reflect_vmexit(vcpu, exit_reason);
 	else {
 		if (exit_reason & 0x80000000) {
-			printk("vm entry failed.\n");
+			printk("vm entry failed.reason = %x, exit_qualification = %x, rip = %x\n", 
+				exit_reason, vmcs_read(EXIT_QUALIFICATION), vcpu->guest_state.rip);
+
 			vmx_handle_vm_entry_failed(vcpu);
 		} else {
 			switch(exit_reason & 0xff) {
@@ -1456,12 +1461,12 @@ void vm_init_test()
 	void *code_start, *code_end;
 	extern u64 test_guest, test_guest_end, test_guest_reset_vector;
 
-	struct vmx_vcpu *vcpu = vmx_preinit();
+	struct vmx_vcpu *vcpu = vmx_init();
 	if (vcpu == NULL) {
 		printk("VM preinit failed.Check BIOS settings for enabling VT-x.\n");
 		return;
 	}
-	vmx_init(vcpu);
+
 	vmx_set_ctrl_state(vcpu);
 	vmx_save_host_state(vcpu);
 	vmx_set_bist_state(vcpu);
@@ -1480,6 +1485,7 @@ void vm_init_test()
 				printk("allocate memory for vm failed.exiting...\n");
 		}
 	}
+	printk("Guest memory size = %dMB.\n", vm_mem_size >> 20);
 
 	ret = alloc_guest_memory(vcpu, 0xfee00000, 0x1000);
 	if (ret == -1) {
