@@ -637,10 +637,19 @@ void arch_init()
 		//asm("int $0x20");
 		//asm("int $0x21");
 		//create_task(test_task, 3, 0x10000, 1, -1);
+		//create_task(vm_init_test, 1, 0x10000, 1, -1);
+		//create_task(vm_init_test, 1, 0x10000, 1, -1);
+		//create_task(vm_init_test, 1, 0x10000, 1, -1);
+		//create_task(vm_init_test, 1, 0x10000, 1, -1);
+		//create_task(test_task, 3, 0x10000, 1, -1);
+		//create_task(test_task, 3, 0x10000, 1, -1);
+		//create_task(test_task, 3, 0x10000, 1, -1);
+		//create_task(test_task, 3, 0x10000, 1, -1);
+		//create_task(test_task, 3, 0x10000, 1, -1);
 	}
 
-	create_task(test_task, 3, 0x10000, 1, -1);
-	create_task(test_task, 1, 0x10000, 1, -1);
+	//create_task(test_task, 3, 0x10000, 1, -1);
+	//create_task(test_task, 1, 0x10000, 1, -1);
 	//create_task(vm_init_test, 1, 0x10000, 1, -1);
 
 	int irq = alloc_irqs_cpu(get_cpu()->id, 1);

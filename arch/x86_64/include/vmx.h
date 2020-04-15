@@ -151,6 +151,7 @@ typedef u64            hfn_t;
 enum vmcs_field {
 	VIRTUAL_PROCESSOR_ID            = 0x00000000,
 	POSTED_INTR_NV                  = 0x00000002,
+	EPTP_INDEX                      = 0x00000004,
 	GUEST_ES_SELECTOR               = 0x00000800,
 	GUEST_CS_SELECTOR               = 0x00000802,
 	GUEST_SS_SELECTOR               = 0x00000804,
@@ -208,8 +209,9 @@ enum vmcs_field {
 	VMREAD_BITMAP_HIGH              = 0x00002027,
 	VMWRITE_BITMAP                  = 0x00002028,
 	VMWRITE_BITMAP_HIGH             = 0x00002029,
-	XSS_EXIT_BITMAP                 = 0x0000202C,
-	XSS_EXIT_BITMAP_HIGH            = 0x0000202D,
+	XSS_EXIT_BITMAP                 = 0x0000202c,
+	XSS_EXIT_BITMAP_HIGH            = 0x0000202d,
+	ENCLS_EXITING_BITMAP            = 0x0000202e,
 	TSC_MULTIPLIER                  = 0x00002032,
 	TSC_MULTIPLIER_HIGH             = 0x00002033,
 	GUEST_PHYSICAL_ADDRESS          = 0x00002400,
@@ -234,6 +236,7 @@ enum vmcs_field {
 	GUEST_PDPTR3_HIGH               = 0x00002811,
 	GUEST_BNDCFGS                   = 0x00002812,
 	GUEST_BNDCFGS_HIGH              = 0x00002813,
+	GUEST_IA32_RTIT_CTL             = 0x00002814,
 	HOST_IA32_PAT			= 0x00002c00,
 	HOST_IA32_PAT_HIGH		= 0x00002c01,
 	HOST_IA32_EFER			= 0x00002c02,
@@ -298,6 +301,10 @@ enum vmcs_field {
 	CR3_TARGET_VALUE2               = 0x0000600c,
 	CR3_TARGET_VALUE3               = 0x0000600e,
 	EXIT_QUALIFICATION              = 0x00006400,
+	IO_RCX                          = 0x00006402,
+	IO_RSI                          = 0x00006404,
+	IO_RDI                          = 0x00006406,
+	IO_RIP                          = 0x00006408,
 	GUEST_LINEAR_ADDRESS            = 0x0000640a,
 	GUEST_CR0                       = 0x00006800,
 	GUEST_CR3                       = 0x00006802,
@@ -805,12 +812,10 @@ static inline void vmcs_write(u64 field, u64 value)
 		);
 
 	if (rflags & BIT0) {
-		printk("writing vmcs field %x failed.\n", field);
-		while (1);
+		//printk("writing vmcs field %x failed.\n", field);
 	}
 	if (rflags & BIT6) {
-		printk("writing vmcs field %x failed.\n", field);
-		while (1);
+		//printk("writing vmcs field %x failed.\n", field);
 	}
 }
 

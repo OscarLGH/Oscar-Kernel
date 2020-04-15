@@ -592,7 +592,7 @@ int vmx_handle_external_interrupt(struct vmx_vcpu *vcpu)
 {
 	u64 interruption_info = vmcs_read(VM_EXIT_INTR_INFO);
 	u8 vector = interruption_info & 0xff;
-	printk("VM-Exit:External interrupt (%d). RIP = 0x%x\n", vector, vcpu->guest_state.rip);
+	//printk("VM-Exit:External interrupt (%d). RIP = 0x%x\n", vector, vcpu->guest_state.rip);
 	soft_irq_call(vector);
 	asm("sti");
 	return 0;
@@ -1455,7 +1455,7 @@ int vmx_run(struct vmx_vcpu *vcpu)
 void vm_init_test()
 {
 	int ret;
-	u8 buf[0x1000];
+	u8 *buf;
 	u64 vm_mem_size;
 
 	void *code_start, *code_end;
@@ -1505,6 +1505,7 @@ void vm_init_test()
 		printk("writing guest memory failed.\n");
 	}
 
+	buf = kmalloc(0x1000, GFP_KERNEL);
 	memset(buf, 0, 0x1000);
 	struct bootloader_parm_block *vm_boot_parm = (struct bootloader_parm_block *)buf;
 	vm_boot_parm->ardc_cnt = 1;

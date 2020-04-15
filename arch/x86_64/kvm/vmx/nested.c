@@ -296,6 +296,207 @@ int vmx_handle_invept(struct vmx_vcpu *vcpu)
 	return 0;
 }
 
+u64 vmcs_16bit_ctrl_fields[] = {
+	VIRTUAL_PROCESSOR_ID,
+	POSTED_INTR_NV,
+	EPTP_INDEX
+};
+
+u64 vmcs_16bit_guest_state_fields[] = {
+	GUEST_ES_SELECTOR,
+	GUEST_CS_SELECTOR,
+	GUEST_SS_SELECTOR,
+	GUEST_DS_SELECTOR,
+	GUEST_FS_SELECTOR,
+	GUEST_GS_SELECTOR,
+	GUEST_LDTR_SELECTOR,
+	GUEST_TR_SELECTOR,
+	GUEST_INTR_STATUS,
+	GUEST_PML_INDEX
+};
+
+u64 vmcs_16bit_host_state_fields[] = {
+	HOST_ES_SELECTOR,
+	HOST_CS_SELECTOR,
+	HOST_SS_SELECTOR,
+	HOST_DS_SELECTOR,
+	HOST_FS_SELECTOR,
+	HOST_GS_SELECTOR,
+	HOST_TR_SELECTOR
+};
+
+u64 vmcs_64bit_ctrl_fields[] = {
+	IO_BITMAP_A,
+	IO_BITMAP_B,
+	MSR_BITMAP,
+	VM_EXIT_MSR_STORE_ADDR,
+	VM_EXIT_MSR_LOAD_ADDR,
+	VM_ENTRY_MSR_LOAD_ADDR,
+	PML_ADDRESS,
+	TSC_OFFSET,
+	VIRTUAL_APIC_PAGE_ADDR,
+	APIC_ACCESS_ADDR,
+	POSTED_INTR_DESC_ADDR,
+	VM_FUNCTION_CONTROL,
+	EPT_POINTER,
+	EOI_EXIT_BITMAP0,
+	EOI_EXIT_BITMAP1,
+	EOI_EXIT_BITMAP2,
+	EOI_EXIT_BITMAP3,
+	EPTP_LIST_ADDRESS,
+	VMREAD_BITMAP,
+	VMWRITE_BITMAP,
+	XSS_EXIT_BITMAP,
+	ENCLS_EXITING_BITMAP,
+	TSC_MULTIPLIER
+};
+
+u64 vmcs_64bit_readonly_fields[] = {
+	GUEST_PHYSICAL_ADDRESS
+};
+
+u64 vmcs_64bit_guest_state_fields[] = {
+	VMCS_LINK_POINTER,
+	GUEST_IA32_DEBUGCTL,
+	GUEST_IA32_PAT,
+	GUEST_IA32_EFER,
+	GUEST_IA32_PERF_GLOBAL_CTRL,
+	GUEST_PDPTR0,
+	GUEST_PDPTR1,
+	GUEST_PDPTR2,
+	GUEST_PDPTR3,
+	GUEST_BNDCFGS,
+	//GUEST_IA32_RTIT_CTL
+};
+
+u64 vmcs_64bit_host_state_fields[] = {
+	HOST_IA32_PAT,
+	HOST_IA32_PAT_HIGH,
+	HOST_IA32_EFER,
+	HOST_IA32_EFER_HIGH,
+	HOST_IA32_PERF_GLOBAL_CTRL,
+	HOST_IA32_PERF_GLOBAL_CTRL_HIGH
+};
+
+u64 vmcs_32bit_ctrl_fields[] = {
+	PIN_BASED_VM_EXEC_CONTROL,
+	CPU_BASED_VM_EXEC_CONTROL,
+	EXCEPTION_BITMAP,
+	PAGE_FAULT_ERROR_CODE_MASK,
+	PAGE_FAULT_ERROR_CODE_MATCH,
+	CR3_TARGET_COUNT,
+	VM_EXIT_CONTROLS,
+	VM_EXIT_MSR_STORE_COUNT,
+	VM_EXIT_MSR_LOAD_COUNT,
+	VM_ENTRY_CONTROLS,
+	VM_ENTRY_MSR_LOAD_COUNT,
+	VM_ENTRY_INTR_INFO_FIELD,
+	VM_ENTRY_EXCEPTION_ERROR_CODE,
+	VM_ENTRY_INSTRUCTION_LEN,
+	TPR_THRESHOLD,
+	SECONDARY_VM_EXEC_CONTROL,
+	PLE_GAP,
+	PLE_WINDOW
+};
+
+u64 vmcs_32bit_readonly_fields[] = {
+	VM_INSTRUCTION_ERROR,
+	VM_EXIT_REASON,
+	VM_EXIT_INTR_INFO,
+	VM_EXIT_INTR_ERROR_CODE,
+	IDT_VECTORING_INFO_FIELD,
+	IDT_VECTORING_ERROR_CODE,
+	VM_EXIT_INSTRUCTION_LEN,
+	VMX_INSTRUCTION_INFO
+};
+
+u64 vmcs_32bit_guest_state_fields[] = {
+	GUEST_ES_LIMIT,
+	GUEST_CS_LIMIT,
+	GUEST_SS_LIMIT,
+	GUEST_DS_LIMIT,
+	GUEST_FS_LIMIT,
+	GUEST_GS_LIMIT,
+	GUEST_LDTR_LIMIT,
+	GUEST_TR_LIMIT,
+	GUEST_GDTR_LIMIT,
+	GUEST_IDTR_LIMIT,
+	GUEST_ES_AR_BYTES,
+	GUEST_CS_AR_BYTES,
+	GUEST_SS_AR_BYTES,
+	GUEST_DS_AR_BYTES,
+	GUEST_FS_AR_BYTES,
+	GUEST_GS_AR_BYTES,
+	GUEST_LDTR_AR_BYTES,
+	GUEST_TR_AR_BYTES,
+	GUEST_INTERRUPTIBILITY_INFO,
+	GUEST_ACTIVITY_STATE,
+	GUEST_SYSENTER_CS,
+	VMX_PREEMPTION_TIMER_VALUE
+};
+
+u64 vmcs_32bit_host_state_field[] = {
+	HOST_IA32_SYSENTER_CS
+};
+
+u64 vmcs_natural_width_ctrl_fields[] = {
+	CR0_GUEST_HOST_MASK,
+	CR4_GUEST_HOST_MASK,
+	CR0_READ_SHADOW,
+	CR4_READ_SHADOW,
+	CR3_TARGET_VALUE0,
+	CR3_TARGET_VALUE1,
+	CR3_TARGET_VALUE2,
+	CR3_TARGET_VALUE3
+};
+
+u64 vmcs_natural_width_readonly_fields[] = {
+	EXIT_QUALIFICATION,
+	IO_RCX,
+	IO_RSI,
+	IO_RDI,
+	IO_RIP,
+	GUEST_LINEAR_ADDRESS
+};
+
+u64 vmcs_natural_width_guest_state_fields[] = {
+	GUEST_CR0,
+	GUEST_CR3,
+	GUEST_CR4,
+	GUEST_ES_BASE,
+	GUEST_CS_BASE,
+	GUEST_SS_BASE,
+	GUEST_DS_BASE,
+	GUEST_FS_BASE,
+	GUEST_GS_BASE,
+	GUEST_LDTR_BASE,
+	GUEST_TR_BASE,
+	GUEST_GDTR_BASE,
+	GUEST_IDTR_BASE,
+	GUEST_DR7,
+	GUEST_RSP,
+	GUEST_RIP,
+	GUEST_RFLAGS,
+	GUEST_PENDING_DBG_EXCEPTIONS,
+	GUEST_SYSENTER_ESP,
+	GUEST_SYSENTER_EIP,
+};
+
+u64 vmcs_natural_width_host_state_fields[] = {
+	HOST_CR0,
+	HOST_CR3,
+	HOST_CR4,
+	HOST_FS_BASE,
+	HOST_GS_BASE,
+	HOST_TR_BASE,
+	HOST_GDTR_BASE,
+	HOST_IDTR_BASE,
+	HOST_IA32_SYSENTER_ESP,
+	HOST_IA32_SYSENTER_EIP,
+	HOST_RSP,
+	HOST_RIP	
+};
+
 int nested_vmx_set_ctrl_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 {
 	u64 gpa, hpa;
@@ -466,86 +667,38 @@ int nested_vmx_save_host_state(struct vmx_vcpu *vcpu)
 
 int nested_vmx_set_guest_state(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 {
-	vmcs_write(GUEST_CR0, vmcs12->guest_cr0);
+	int i;
+	u64 field, value;
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_16bit_guest_state_fields); i++) {
+		field = vmcs_16bit_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_guest_state_fields); i++) {
+		field = vmcs_32bit_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_guest_state_fields); i++) {
+		field = vmcs_64bit_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_guest_state_fields); i++) {
+		field = vmcs_natural_width_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
+
 	vmcs_write(CR0_READ_SHADOW, vmcs12->cr0_read_shadow);
-	vmcs_write(GUEST_CR3, vmcs12->guest_cr3);
-	vmcs_write(GUEST_CR4, vmcs12->guest_cr4);
 	vmcs_write(CR4_READ_SHADOW, vmcs12->cr4_read_shadow);
 
-	vmcs_write(GUEST_RIP, vmcs12->guest_rip);
-	vmcs_write(GUEST_RFLAGS, vmcs12->guest_rflags);
-	
-	vmcs_write(GUEST_RSP, vmcs12->guest_rsp);
-	vmcs_write(GUEST_DR7, vmcs12->guest_dr7);
-	vmcs_write(GUEST_IA32_DEBUGCTL, vmcs12->guest_ia32_debugctl);
-
-	vmcs_write(GUEST_CS_SELECTOR, vmcs12->guest_cs_selector);
-	vmcs_write(GUEST_CS_BASE, vmcs12->guest_cs_base);
-	vmcs_write(GUEST_CS_LIMIT, vmcs12->guest_cs_limit);
-	vmcs_write(GUEST_CS_AR_BYTES, vmcs12->guest_cs_ar_bytes);
-
-	vmcs_write(GUEST_DS_SELECTOR, vmcs12->guest_ds_selector);
-	vmcs_write(GUEST_DS_BASE, vmcs12->guest_ds_base);
-	vmcs_write(GUEST_DS_LIMIT, vmcs12->guest_ds_limit);
-	vmcs_write(GUEST_DS_AR_BYTES, vmcs12->guest_ds_ar_bytes);
-
-	vmcs_write(GUEST_ES_SELECTOR, vmcs12->guest_es_selector);
-	vmcs_write(GUEST_ES_BASE, vmcs12->guest_es_base);
-	vmcs_write(GUEST_ES_LIMIT, vmcs12->guest_es_limit);
-	vmcs_write(GUEST_ES_AR_BYTES, vmcs12->guest_es_ar_bytes);
-
-	vmcs_write(GUEST_FS_SELECTOR, vmcs12->guest_fs_selector);
-	vmcs_write(GUEST_FS_BASE, vmcs12->guest_fs_base);
-	vmcs_write(GUEST_FS_LIMIT, vmcs12->guest_fs_limit);
-	vmcs_write(GUEST_FS_AR_BYTES, vmcs12->guest_fs_ar_bytes);
-
-	vmcs_write(GUEST_GS_SELECTOR, vmcs12->guest_gs_selector);
-	vmcs_write(GUEST_GS_BASE, vmcs12->guest_gs_base);
-	vmcs_write(GUEST_GS_LIMIT, vmcs12->guest_gs_limit);
-	vmcs_write(GUEST_GS_AR_BYTES, vmcs12->guest_gs_ar_bytes);
-
-	vmcs_write(GUEST_SS_SELECTOR, vmcs12->guest_ss_selector);
-	vmcs_write(GUEST_SS_BASE, vmcs12->guest_ss_base);
-	vmcs_write(GUEST_SS_LIMIT, vmcs12->guest_ss_limit);
-	vmcs_write(GUEST_SS_AR_BYTES, vmcs12->guest_ss_ar_bytes);	
-
-	vmcs_write(GUEST_TR_SELECTOR, vmcs12->guest_tr_selector);
-	vmcs_write(GUEST_TR_BASE, vmcs12->guest_tr_base);
-	vmcs_write(GUEST_TR_LIMIT, vmcs12->guest_tr_limit);
-	vmcs_write(GUEST_TR_AR_BYTES, vmcs12->guest_tr_ar_bytes);
-	
-	vmcs_write(GUEST_LDTR_SELECTOR, vmcs12->guest_ldtr_selector);
-	vmcs_write(GUEST_LDTR_BASE, vmcs12->guest_ldtr_base);
-	vmcs_write(GUEST_LDTR_LIMIT, vmcs12->guest_ldtr_limit);
-	vmcs_write(GUEST_LDTR_AR_BYTES, vmcs12->guest_ldtr_ar_bytes);
-
-	vmcs_write(GUEST_GDTR_BASE, vmcs12->guest_gdtr_base);
-	vmcs_write(GUEST_GDTR_LIMIT, vmcs12->guest_gdtr_limit);
-	vmcs_write(GUEST_IDTR_BASE, vmcs12->guest_idtr_base);
-	vmcs_write(GUEST_IDTR_LIMIT, vmcs12->guest_idtr_limit);
-
-	vmcs_write(GUEST_SYSENTER_ESP, vmcs12->guest_sysenter_esp);
-	vmcs_write(GUEST_SYSENTER_EIP, vmcs12->guest_sysenter_eip);
-	vmcs_write(GUEST_SYSENTER_CS, vmcs12->guest_sysenter_cs);
-	vmcs_write(GUEST_IA32_DEBUGCTL, vmcs12->guest_ia32_debugctl);
-	vmcs_write(GUEST_IA32_PERF_GLOBAL_CTRL, vmcs12->guest_ia32_perf_global_ctrl);
-	vmcs_write(GUEST_IA32_EFER, vmcs12->guest_ia32_efer);
-	vmcs_write(GUEST_IA32_PAT, vmcs12->guest_ia32_pat);
-	
-	vmcs_write(GUEST_ACTIVITY_STATE, vmcs12->guest_activity_state);
-
-	vmcs_write(GUEST_PDPTR0, vmcs12->guest_pdptr0);
-	vmcs_write(GUEST_PDPTR1, vmcs12->guest_pdptr1);
-	vmcs_write(GUEST_PDPTR2, vmcs12->guest_pdptr2);
-	vmcs_write(GUEST_PDPTR3, vmcs12->guest_pdptr3);
-
-	vmcs_write(GUEST_INTERRUPTIBILITY_INFO, vmcs12->guest_interruptibility_info);
-	vmcs_write(VM_ENTRY_INTR_INFO_FIELD, vmcs12->vm_entry_intr_info_field);
-	vmcs_write(GUEST_PENDING_DBG_EXCEPTIONS, vmcs12->guest_pending_dbg_exceptions);
-	vmcs_write(GUEST_BNDCFGS, vmcs12->guest_bndcfgs);
-
 	vmcs_write(APIC_ACCESS_ADDR, vmcs12->apic_access_addr);
-
+	
 	//xsetbv(0, vcpu->guest_state.ctrl_regs.xcr0);
 	//xrstor(vcpu->guest_state.fp_regs, vcpu->guest_state.ctrl_regs.xcr0);
 	/* Use host XCRO features to zero out all host fpu regs. */
@@ -631,240 +784,161 @@ int sync_vmcs12(struct vmx_vcpu *vcpu, struct vmcs12 *vmcs12)
 
 int copy_vmcs12_to_shadow(struct vmx_vcpu *vcpu)
 {
+	int i;
+	u64 field, value;
 	struct vmcs12 *vmcs12 = vcpu->vmcs12;
 	u64 vmptr_phys;
 	vmptr_store(&vmptr_phys);
 	vmclear(vmptr_phys);
 	vmptr_load(VIRT2PHYS(vcpu->shadow_vmcs));
 
-	vmcs_write(GUEST_RIP, vmcs12->guest_rip);
-	vmcs_write(GUEST_RSP, vmcs12->guest_rsp);
-	vmcs_write(GUEST_RFLAGS, vmcs12->guest_rflags);
-	vmcs_write(GUEST_ES_SELECTOR, vmcs12->guest_es_selector);
-	vmcs_write(GUEST_CS_SELECTOR, vmcs12->guest_cs_selector);
-	vmcs_write(GUEST_SS_SELECTOR, vmcs12->guest_ss_selector);
-	vmcs_write(GUEST_DS_SELECTOR, vmcs12->guest_ds_selector);
-	vmcs_write(GUEST_FS_SELECTOR, vmcs12->guest_fs_selector);
-	vmcs_write(GUEST_GS_SELECTOR, vmcs12->guest_gs_selector);
-	vmcs_write(GUEST_LDTR_SELECTOR, vmcs12->guest_ldtr_selector);
-	vmcs_write(GUEST_TR_SELECTOR, vmcs12->guest_tr_selector);
-	vmcs_write(GUEST_ES_LIMIT, vmcs12->guest_es_limit);
-	vmcs_write(GUEST_CS_LIMIT, vmcs12->guest_cs_limit);
-	vmcs_write(GUEST_SS_LIMIT, vmcs12->guest_ss_limit);
-	vmcs_write(GUEST_DS_LIMIT, vmcs12->guest_ds_limit);
-	vmcs_write(GUEST_FS_LIMIT, vmcs12->guest_fs_limit);
-	vmcs_write(GUEST_GS_LIMIT, vmcs12->guest_gs_limit);
-	vmcs_write(GUEST_LDTR_LIMIT, vmcs12->guest_ldtr_limit);
-	vmcs_write(GUEST_TR_LIMIT, vmcs12->guest_tr_limit);
-	vmcs_write(GUEST_GDTR_LIMIT, vmcs12->guest_gdtr_limit);
-	vmcs_write(GUEST_IDTR_LIMIT, vmcs12->guest_idtr_limit);
-	vmcs_write(GUEST_ES_AR_BYTES, vmcs12->guest_es_ar_bytes);
-	vmcs_write(GUEST_CS_AR_BYTES, vmcs12->guest_cs_ar_bytes);
-	vmcs_write(GUEST_SS_AR_BYTES, vmcs12->guest_ss_ar_bytes);
-	vmcs_write(GUEST_DS_AR_BYTES, vmcs12->guest_ds_ar_bytes);
-	vmcs_write(GUEST_FS_AR_BYTES, vmcs12->guest_fs_ar_bytes);
-	vmcs_write(GUEST_GS_AR_BYTES, vmcs12->guest_gs_ar_bytes);
-	vmcs_write(GUEST_LDTR_AR_BYTES, vmcs12->guest_ldtr_ar_bytes);
-	vmcs_write(GUEST_TR_AR_BYTES, vmcs12->guest_tr_ar_bytes);
-	vmcs_write(GUEST_ES_BASE, vmcs12->guest_es_base);
-	vmcs_write(GUEST_CS_BASE, vmcs12->guest_cs_base);
-	vmcs_write(GUEST_SS_BASE, vmcs12->guest_ss_base);
-	vmcs_write(GUEST_DS_BASE, vmcs12->guest_ds_base);
-	vmcs_write(GUEST_FS_BASE, vmcs12->guest_fs_base);
-	vmcs_write(GUEST_GS_BASE, vmcs12->guest_gs_base);
-	vmcs_write(GUEST_LDTR_BASE, vmcs12->guest_ldtr_base);
-	vmcs_write(GUEST_TR_BASE, vmcs12->guest_tr_base);
-	vmcs_write(GUEST_GDTR_BASE, vmcs12->guest_gdtr_base);
-	vmcs_write(GUEST_IDTR_BASE, vmcs12->guest_idtr_base);
+	for (i = 0; i < ARRAY_SIZE(vmcs_16bit_guest_state_fields); i++) {
+		field = vmcs_16bit_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(GUEST_DR7, vmcs12->guest_dr7);
-	vmcs_write(GUEST_IA32_DEBUGCTL, vmcs12->guest_ia32_debugctl);
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_guest_state_fields); i++) {
+		field = vmcs_32bit_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(GUEST_INTERRUPTIBILITY_INFO, vmcs12->guest_interruptibility_info);
-	vmcs_write(GUEST_PENDING_DBG_EXCEPTIONS, vmcs12->guest_pending_dbg_exceptions);
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_guest_state_fields); i++) {
+		field = vmcs_64bit_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(GUEST_CR0, vmcs12->guest_cr0);
-	vmcs_write(GUEST_CR3, vmcs12->guest_cr3);
-	vmcs_write(GUEST_CR4, vmcs12->guest_cr4);
-	vmcs_write(CR0_READ_SHADOW, vmcs12->cr0_read_shadow);
-	vmcs_write(CR4_READ_SHADOW, vmcs12->cr4_read_shadow);
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_guest_state_fields); i++) {
+		field = vmcs_natural_width_guest_state_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(VM_EXIT_REASON, vmcs12->vm_exit_reason);
-	vmcs_write(EXIT_QUALIFICATION, vmcs12->exit_qualification);
-	vmcs_write(VM_EXIT_INTR_INFO, vmcs12->vm_exit_intr_info);
 
-	vmcs_write(VM_EXIT_INSTRUCTION_LEN, vmcs12->vm_exit_instruction_len);
-	vmcs_write(VM_EXIT_INTR_ERROR_CODE, vmcs12->vm_exit_intr_error_code);
-	vmcs_write(GUEST_PHYSICAL_ADDRESS, vmcs12->guest_physical_address);
-	vmcs_write(VMX_INSTRUCTION_INFO, vmcs12->vmx_instruction_info);
+	for (i = 0; i < ARRAY_SIZE(vmcs_16bit_ctrl_fields); i++) {
+		field = vmcs_16bit_ctrl_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(GUEST_SYSENTER_ESP, vmcs12->guest_sysenter_esp);
-	vmcs_write(GUEST_SYSENTER_EIP, vmcs12->guest_sysenter_eip);
-	vmcs_write(GUEST_SYSENTER_CS, vmcs12->guest_sysenter_cs);
-	vmcs_write(GUEST_IA32_DEBUGCTL, vmcs12->guest_ia32_debugctl);
-	vmcs_write(GUEST_IA32_PERF_GLOBAL_CTRL, vmcs12->guest_ia32_perf_global_ctrl);
-	vmcs_write(GUEST_IA32_EFER, vmcs12->guest_ia32_efer);
-	vmcs_write(GUEST_IA32_PAT, vmcs12->guest_ia32_pat);
-	
-	vmcs_write(GUEST_ACTIVITY_STATE, vmcs12->guest_activity_state);
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_ctrl_fields); i++) {
+		field = vmcs_32bit_ctrl_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(GUEST_PDPTR0, vmcs12->guest_pdptr0);
-	vmcs_write(GUEST_PDPTR1, vmcs12->guest_pdptr1);
-	vmcs_write(GUEST_PDPTR2, vmcs12->guest_pdptr2);
-	vmcs_write(GUEST_PDPTR3, vmcs12->guest_pdptr3);
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_ctrl_fields); i++) {
+		field = vmcs_64bit_ctrl_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(GUEST_INTERRUPTIBILITY_INFO, vmcs12->guest_interruptibility_info);
-	vmcs_write(VM_ENTRY_INTR_INFO_FIELD, vmcs12->vm_entry_intr_info_field);
-	vmcs_write(GUEST_PENDING_DBG_EXCEPTIONS, vmcs12->guest_pending_dbg_exceptions);
-	vmcs_write(GUEST_BNDCFGS, vmcs12->guest_bndcfgs);
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_ctrl_fields); i++) {
+		field = vmcs_natural_width_ctrl_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(APIC_ACCESS_ADDR, vmcs12->apic_access_addr);
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_readonly_fields); i++) {
+		field = vmcs_32bit_readonly_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(VM_EXIT_INSTRUCTION_LEN, vmcs12->vm_exit_instruction_len);
-	vmcs_write(VIRTUAL_PROCESSOR_ID, vmcs12->virtual_processor_id);
-	vmcs_write(IO_BITMAP_A, vmcs12->io_bitmap_a);
-	vmcs_write(IO_BITMAP_B, vmcs12->io_bitmap_b);
-	vmcs_write(VM_ENTRY_MSR_LOAD_ADDR, vmcs12->vm_entry_msr_load_addr);
-	vmcs_write(VM_EXIT_MSR_STORE_ADDR, vmcs12->vm_exit_msr_store_addr);
-	vmcs_write(VM_EXIT_MSR_LOAD_ADDR, vmcs12->vm_exit_msr_load_addr);
-	vmcs_write(EPT_POINTER, vmcs12->ept_pointer);
-	vmcs_write(POSTED_INTR_DESC_ADDR, vmcs12->posted_intr_desc_addr);
-	vmcs_write(VMCS_LINK_POINTER, vmcs12->vmcs_link_pointer);
-	vmcs_write(VMREAD_BITMAP, vmcs12->vmread_bitmap);
-	vmcs_write(VMWRITE_BITMAP, vmcs12->vmwrite_bitmap);
-	vmcs_write(VMX_PREEMPTION_TIMER_VALUE, vmcs12->vmx_preemption_timer_value);
-	vmcs_write(PIN_BASED_VM_EXEC_CONTROL, vmcs12->pin_based_vm_exec_control);
-	vmcs_write(CPU_BASED_VM_EXEC_CONTROL, vmcs12->cpu_based_vm_exec_control);
-	vmcs_write(SECONDARY_VM_EXEC_CONTROL, vmcs12->secondary_vm_exec_control);
-	vmcs_write(VM_ENTRY_CONTROLS, vmcs12->vm_entry_controls);
-	vmcs_write(VM_EXIT_CONTROLS, vmcs12->vm_exit_controls);
-	vmcs_write(CR3_TARGET_COUNT, vmcs12->cr3_target_count);
-	vmcs_write(CR0_GUEST_HOST_MASK, vmcs12->cr0_guest_host_mask);
-	vmcs_write(CR4_GUEST_HOST_MASK, vmcs12->cr4_guest_host_mask);
-	vmcs_write(EXCEPTION_BITMAP, vmcs12->exception_bitmap);
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_readonly_fields); i++) {
+		field = vmcs_64bit_readonly_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
-	vmcs_write(HOST_RIP, vmcs12->host_rip);
-	vmcs_write(HOST_RSP, vmcs12->host_rsp);
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_readonly_fields); i++) {
+		field = vmcs_natural_width_readonly_fields[i];
+		vmcs12_read_any(vcpu->vmcs12, field, &value);
+		vmcs_write(field, value);
+	}
 
 	vmptr_load(vmptr_phys);
 }
 
 int copy_shadow_to_vmcs12(struct vmx_vcpu *vcpu)
 {
+	int i;
+	u64 field, value;
 	struct vmcs12 *vmcs12 = vcpu->vmcs12;
 	u64 vmptr_phys;
 	vmptr_store(&vmptr_phys);
 	vmclear(vmptr_phys);
 	vmclear(VIRT2PHYS(vcpu->shadow_vmcs));
 	vmptr_load(VIRT2PHYS(vcpu->shadow_vmcs));
-	vmcs12->guest_rip = vmcs_read(GUEST_RIP);
-	vmcs12->guest_rsp = vmcs_read(GUEST_RSP);
-	vmcs12->guest_rflags = vmcs_read(GUEST_RFLAGS);
-	vmcs12->guest_es_selector = vmcs_read(GUEST_ES_SELECTOR);
-	vmcs12->guest_cs_selector = vmcs_read(GUEST_CS_SELECTOR);
-	vmcs12->guest_ss_selector = vmcs_read(GUEST_SS_SELECTOR);
-	vmcs12->guest_ds_selector = vmcs_read(GUEST_DS_SELECTOR);
-	vmcs12->guest_fs_selector = vmcs_read(GUEST_FS_SELECTOR);
-	vmcs12->guest_gs_selector = vmcs_read(GUEST_GS_SELECTOR);
-	vmcs12->guest_ldtr_selector = vmcs_read(GUEST_LDTR_SELECTOR);
-	vmcs12->guest_tr_selector = vmcs_read(GUEST_TR_SELECTOR);
-	vmcs12->guest_es_limit = vmcs_read(GUEST_ES_LIMIT);
-	vmcs12->guest_cs_limit = vmcs_read(GUEST_CS_LIMIT);
-	vmcs12->guest_ss_limit = vmcs_read(GUEST_SS_LIMIT);
-	vmcs12->guest_ds_limit = vmcs_read(GUEST_DS_LIMIT);
-	vmcs12->guest_fs_limit = vmcs_read(GUEST_FS_LIMIT);
-	vmcs12->guest_gs_limit = vmcs_read(GUEST_GS_LIMIT);
-	vmcs12->guest_ldtr_limit = vmcs_read(GUEST_LDTR_LIMIT);
-	vmcs12->guest_tr_limit = vmcs_read(GUEST_TR_LIMIT);
-	vmcs12->guest_gdtr_limit = vmcs_read(GUEST_GDTR_LIMIT);
-	vmcs12->guest_idtr_limit = vmcs_read(GUEST_IDTR_LIMIT);
-	vmcs12->guest_es_ar_bytes = vmcs_read(GUEST_ES_AR_BYTES);
-	vmcs12->guest_cs_ar_bytes = vmcs_read(GUEST_CS_AR_BYTES);
-	vmcs12->guest_ss_ar_bytes = vmcs_read(GUEST_SS_AR_BYTES);
-	vmcs12->guest_ds_ar_bytes = vmcs_read(GUEST_DS_AR_BYTES);
-	vmcs12->guest_fs_ar_bytes = vmcs_read(GUEST_FS_AR_BYTES);
-	vmcs12->guest_gs_ar_bytes = vmcs_read(GUEST_GS_AR_BYTES);
-	vmcs12->guest_ldtr_ar_bytes = vmcs_read(GUEST_LDTR_AR_BYTES);
-	vmcs12->guest_tr_ar_bytes = vmcs_read(GUEST_TR_AR_BYTES);
-	vmcs12->guest_es_base = vmcs_read(GUEST_ES_BASE);
-	vmcs12->guest_cs_base = vmcs_read(GUEST_CS_BASE);
-	vmcs12->guest_ss_base = vmcs_read(GUEST_SS_BASE);
-	vmcs12->guest_ds_base = vmcs_read(GUEST_DS_BASE);
-	vmcs12->guest_fs_base = vmcs_read(GUEST_FS_BASE);
-	vmcs12->guest_gs_base = vmcs_read(GUEST_GS_BASE);
-	vmcs12->guest_ldtr_base = vmcs_read(GUEST_LDTR_BASE);
-	vmcs12->guest_tr_base = vmcs_read(GUEST_TR_BASE);
-	vmcs12->guest_gdtr_base = vmcs_read(GUEST_GDTR_BASE);
-	vmcs12->guest_idtr_base = vmcs_read(GUEST_IDTR_BASE);
+	
+	for (i = 0; i < ARRAY_SIZE(vmcs_16bit_guest_state_fields); i++) {
+		field = vmcs_16bit_guest_state_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->guest_interruptibility_info =
-		vmcs_read(GUEST_INTERRUPTIBILITY_INFO);
-	vmcs12->guest_pending_dbg_exceptions =
-		vmcs_read(GUEST_PENDING_DBG_EXCEPTIONS);
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_guest_state_fields); i++) {
+		field = vmcs_32bit_guest_state_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->guest_dr7 = vmcs_read(GUEST_DR7);
-	vmcs12->guest_ia32_debugctl = vmcs_read(GUEST_IA32_DEBUGCTL);
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_guest_state_fields); i++) {
+		field = vmcs_64bit_guest_state_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->guest_cr0 = vmcs_read(GUEST_CR0);
-	vmcs12->guest_cr3 = vmcs_read(GUEST_CR3);
-	vmcs12->guest_cr4 = vmcs_read(GUEST_CR4);
-	vmcs12->cr0_read_shadow = vmcs_read(CR0_READ_SHADOW);
-	vmcs12->cr4_read_shadow = vmcs_read(CR4_READ_SHADOW);
-	vmcs12->vm_exit_reason = vmcs_read(VM_EXIT_REASON);
-	vmcs12->exit_qualification = vmcs_read(EXIT_QUALIFICATION);
-	vmcs12->vm_exit_intr_info = vmcs_read(VM_EXIT_INTR_INFO);
-	vmcs12->guest_ia32_efer = vmcs_read(GUEST_IA32_EFER);
-	vmcs12->vm_exit_instruction_len = vmcs_read(VM_EXIT_INSTRUCTION_LEN);
-	vmcs12->vm_exit_intr_error_code = vmcs_read(VM_EXIT_INTR_ERROR_CODE);
-	vmcs12->guest_physical_address = vmcs_read(GUEST_PHYSICAL_ADDRESS);
-	vmcs12->guest_linear_address = vmcs_read(GUEST_LINEAR_ADDRESS);
-	vmcs12->vmx_instruction_info = vmcs_read(VMX_INSTRUCTION_INFO);
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_guest_state_fields); i++) {
+		field = vmcs_natural_width_guest_state_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->guest_sysenter_esp = vmcs_read(GUEST_SYSENTER_ESP);
-	vmcs12->guest_sysenter_eip = vmcs_read(GUEST_SYSENTER_EIP);
-	vmcs12->guest_sysenter_cs = vmcs_read(GUEST_SYSENTER_CS);
-	vmcs12->guest_ia32_debugctl = vmcs_read(GUEST_IA32_DEBUGCTL);
-	vmcs12->guest_ia32_perf_global_ctrl = vmcs_read(GUEST_IA32_PERF_GLOBAL_CTRL);
-	vmcs12->guest_ia32_efer = vmcs_read(GUEST_IA32_EFER);
-	vmcs12->guest_ia32_pat = vmcs_read(GUEST_IA32_PAT);
 
-	vmcs12->guest_activity_state = vmcs_read(GUEST_ACTIVITY_STATE);
+	for (i = 0; i < ARRAY_SIZE(vmcs_16bit_ctrl_fields); i++) {
+		field = vmcs_16bit_ctrl_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->guest_pdptr0 = vmcs_read(GUEST_PDPTR0);
-	vmcs12->guest_pdptr1 = vmcs_read(GUEST_PDPTR1);
-	vmcs12->guest_pdptr2 = vmcs_read(GUEST_PDPTR2);
-	vmcs12->guest_pdptr3 = vmcs_read(GUEST_PDPTR3);
-	vmcs12->guest_interruptibility_info = vmcs_read(GUEST_INTERRUPTIBILITY_INFO);
-	vmcs12->vm_entry_intr_info_field = vmcs_read(VM_ENTRY_INTR_INFO_FIELD);
-	vmcs12->guest_pending_dbg_exceptions = vmcs_read(GUEST_PENDING_DBG_EXCEPTIONS);
-	vmcs12->guest_bndcfgs = vmcs_read(GUEST_BNDCFGS);
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_ctrl_fields); i++) {
+		field = vmcs_32bit_ctrl_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->virtual_processor_id = vmcs_read(VIRTUAL_PROCESSOR_ID);
-	vmcs12->io_bitmap_a = vmcs_read(IO_BITMAP_A);
-	vmcs12->io_bitmap_b = vmcs_read(IO_BITMAP_B);
-	vmcs12->msr_bitmap = vmcs_read(MSR_BITMAP);
-	vmcs12->vm_entry_msr_load_addr = vmcs_read(VM_ENTRY_MSR_LOAD_ADDR);
-	vmcs12->vm_exit_msr_store_addr = vmcs_read(VM_EXIT_MSR_STORE_ADDR);
-	vmcs12->vm_exit_msr_load_addr = vmcs_read(VM_EXIT_MSR_LOAD_ADDR);
-	vmcs12->virtual_apic_page_addr = vmcs_read(VIRTUAL_APIC_PAGE_ADDR);
-	vmcs12->ept_pointer = vmcs_read(EPT_POINTER);
-	vmcs12->posted_intr_desc_addr = vmcs_read(POSTED_INTR_DESC_ADDR);
-	vmcs12->vmcs_link_pointer = vmcs_read(VMCS_LINK_POINTER);
-	vmcs12->vmread_bitmap = vmcs_read(VMREAD_BITMAP);
-	vmcs12->vmwrite_bitmap = vmcs_read(VMWRITE_BITMAP);
-	vmcs12->vmx_preemption_timer_value = vmcs_read(VMX_PREEMPTION_TIMER_VALUE);
-	vmcs12->pin_based_vm_exec_control = vmcs_read(PIN_BASED_VM_EXEC_CONTROL);
-	vmcs12->cpu_based_vm_exec_control = vmcs_read(CPU_BASED_VM_EXEC_CONTROL);
-	vmcs12->secondary_vm_exec_control = vmcs_read(SECONDARY_VM_EXEC_CONTROL);
-	vmcs12->vm_entry_controls = vmcs_read(VM_ENTRY_CONTROLS);
-	vmcs12->vm_exit_controls = vmcs_read(VM_EXIT_CONTROLS);
-	vmcs12->cr3_target_count = vmcs_read(CR3_TARGET_COUNT);
-	vmcs12->cr0_guest_host_mask = vmcs_read(CR0_GUEST_HOST_MASK);
-	vmcs12->cr4_guest_host_mask = vmcs_read(CR4_GUEST_HOST_MASK);
-	vmcs12->exception_bitmap = vmcs_read(EXCEPTION_BITMAP);
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_ctrl_fields); i++) {
+		field = vmcs_64bit_ctrl_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
-	vmcs12->host_rip = vmcs_read(HOST_RIP);
-	vmcs12->host_rsp = vmcs_read(HOST_RSP);
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_ctrl_fields); i++) {
+		field = vmcs_natural_width_ctrl_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_32bit_readonly_fields); i++) {
+		field = vmcs_32bit_readonly_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_64bit_readonly_fields); i++) {
+		field = vmcs_64bit_readonly_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(vmcs_natural_width_readonly_fields); i++) {
+		field = vmcs_64bit_readonly_fields[i];
+		value = vmcs_read(field);
+		vmcs12_write_any(vcpu->vmcs12, field, value);
+	}
 
 	vmptr_load(vmptr_phys);
 }
