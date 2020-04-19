@@ -615,7 +615,7 @@ void arch_init()
 		start_kernel();
 		task_init();
 		//test_uarch();
-		vm_init_test();
+		//vm_init_test();
 		//x86_pci_hostbridge_init();
 		//instruction_test();
 	} else {

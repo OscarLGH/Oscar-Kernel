@@ -145,6 +145,8 @@ enum remapping_structure_types
 	DRHD = 0,/* DMA Remapping Hardware Unit Definition Reporting*/
 	RMRR,	 /* Reserved Memory Region Reporting Reporting */
 	ATSR,	 /* Root Port ATS Capability Reporting */
+	RHSA,	 /* Remapping Hardware Status Affinity */
+	ANDD	 /* ACPI Name-space Device Declaration */
 };
 
 struct device_scope_structure {
@@ -156,7 +158,8 @@ struct device_scope_structure {
 };
 
 struct reserved_memory_region_structure {
-	struct acpi_subtable_header sub_header;
+	u16 type;
+	u16 length;
 	u16 reserved;
 	u16 segment_number;
 	u64 reserved_memory_region_base;
@@ -165,7 +168,8 @@ struct reserved_memory_region_structure {
 };
 
 struct root_port_ast_structure {
-	struct acpi_subtable_header sub_header;
+	u16 type;
+	u16 length;
 	u8 flags;
 	u8 reserved;
 	u16 segment_number;
@@ -173,13 +177,23 @@ struct root_port_ast_structure {
 };
 
 struct drhd_structure {
-	struct acpi_subtable_header sub_header;
+	u16 type;
+	u16 length;
 	u8 flags;
 	u8 reserved;
 	u16 segment_number;
 	u64 register_base;
 	/* device_scope_structure */
 };
+
+struct remapping_hw_static_affinity_structure {
+	u16 type;
+	u16 length;
+	u16 reserved;
+	u64 register_base;
+	u32 proximity_domain;
+};
+
 
 struct acpi_dmar {
 	struct acpi_sdt_header header;
