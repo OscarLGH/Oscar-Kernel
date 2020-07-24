@@ -29,7 +29,7 @@ void start_kernel();
 
 int local_apic_eoi()
 {
-	lapic_reg_write32(APIC_REG_EOI, 1);
+	lapic_reg_write(APIC_REG_EOI, 0);
 }
 
 struct irq_chip irq_apic_chip = {
@@ -551,10 +551,12 @@ void x86_cpu_init()
 {
 	u64 rbp = 0;
 	struct cpu *cpu = get_cpu();
+	struct x86_cpu *x86_cpu;
 	cpu->arch_data = kmalloc(sizeof(struct x86_cpu), GFP_KERNEL);
+	x86_cpu = cpu->arch_data;
 	cpu->kernel_stack = kmalloc(0x200000, GFP_KERNEL) + 0x200000;
 	cpu->irq_stack = kmalloc(0x200000, GFP_KERNEL) + 0x200000;
-
+	x86_cpu->lapic_ops = kmalloc(sizeof(struct lapic), GFP_KERNEL);
 	enable_cpu_features();
 	map_kernel_memory();
 
@@ -562,7 +564,7 @@ void x86_cpu_init()
 	set_tss_desc();
 	set_intr_desc();
 	setup_irq();
-	lapic_enable();
+	lapic_enable(x86_cpu->lapic_ops);
 	cpu->status = CPU_STATUS_IDLE;
 	asm("sti");
 
@@ -627,9 +629,9 @@ void arch_init()
 		//set_memory_type();
 		//lapic_send_ipi(0xff, 0xfe, APIC_ICR_ASSERT);
 		//lapic_send_ipi(0, 0xfc, APIC_ICR_ASSERT);
+		//lapic_send_ipi(1, 0xfc, APIC_ICR_ASSERT);
 		//lapic_send_ipi(2, 0xfc, APIC_ICR_ASSERT);
-		//lapic_send_ipi(4, 0xfc, APIC_ICR_ASSERT);
-		//lapic_send_ipi(6, 0xfc, APIC_ICR_ASSERT);
+		//lapic_send_ipi(3, 0xfc, APIC_ICR_ASSERT);
 		//asm("ud2");
 		//int irq = alloc_irqs_cpu(0, 1);
 		//request_irq_smp(get_cpu(), irq, timer_handler, 0, NULL, NULL);
@@ -641,10 +643,10 @@ void arch_init()
 		//create_task(vm_init_test, 1, 0x10000, 1, -1);
 		//create_task(vm_init_test, 1, 0x10000, 1, -1);
 		//create_task(vm_init_test, 1, 0x10000, 1, -1);
-		//create_task(test_task, 3, 0x10000, 1, -1);
-		//create_task(test_task, 3, 0x10000, 1, -1);
-		//create_task(test_task, 3, 0x10000, 1, -1);
-		//create_task(test_task, 3, 0x10000, 1, -1);
+		create_task(test_task, 3, 0x10000, 1, -1);
+		create_task(test_task, 3, 0x10000, 1, -1);
+		create_task(test_task, 3, 0x10000, 1, -1);
+		create_task(test_task, 3, 0x10000, 1, -1);
 		//create_task(test_task, 3, 0x10000, 1, -1);
 	}
 

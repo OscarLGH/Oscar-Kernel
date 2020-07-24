@@ -1,6 +1,7 @@
 #include <mm.h>
 #include <task.h>
-#include <paging.h>
+#include <paging.h>
+
 #include <cr.h>
 #include <string.h>
 
@@ -101,11 +102,11 @@ int address_check(u64 addr, int cpl)
 	return 0;
 }
 
-int page_fault_mm(u64 addr, u64 err_code, int cpl)
+int page_fault_mm(u64 addr, u64 err_code, int cpl, u64 ip)
 {
 	int ret;
 	struct task_struct *task_ptr = get_current_task();
-	printk("handle page fault @0x%x error code 0x%x cpl = %d\n", addr, err_code, cpl);
+	printk("handle page fault @0x%x error code 0x%x cpl = %d ip = 0x%x\n", addr, err_code, cpl, ip);
 	/* Checking addr */
 	ret = address_check(addr, cpl);
 	if (ret) {

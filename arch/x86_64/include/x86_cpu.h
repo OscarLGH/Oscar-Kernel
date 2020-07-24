@@ -4,6 +4,7 @@
 #include <segment.h>
 #include <fpu.h>
 #include <list.h>
+#include <lapic.h>
 
 struct general_regs {
 	u64 rax;
@@ -34,7 +35,7 @@ struct x86_cpu {
 	struct segment_desc *gdt_base;
 	struct gate_desc *idt_base;
 	struct tss_desc *tss;
-
+	struct lapic *lapic_ops;
 	struct list_head list;
 	u64 spin_lock;
 };

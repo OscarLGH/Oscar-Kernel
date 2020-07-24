@@ -322,7 +322,7 @@ void do_page_fault_exception(struct exception_stack_frame *stack)
 	cpu->status = CPU_STATUS_EXCEPTION_CONTEXT;
 	int ret;
 
-	ret = page_fault_mm(read_cr2(), stack->excep_stack.error_code, stack->excep_stack.cs & 0x3);
+	ret = page_fault_mm(read_cr2(), stack->excep_stack.error_code, stack->excep_stack.cs & 0x3, stack->excep_stack.rip);
 	if ((stack->excep_stack.cs & 0x3) == 0) {
 		if (ret != 0)
 			goto err_exit;

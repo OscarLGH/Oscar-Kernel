@@ -1,6 +1,8 @@
 #ifndef _APIC_H
 #define _APIC_H
 
+#include <x86_cpu.h>
+#include <cpu.h>
 #include <types.h>
 #include <kernel.h>
 #include <msr.h>
@@ -153,17 +155,17 @@
 #define MSI_ADDR_IR_INDEX1(index)	((index & 0x8000) >> 13)
 #define MSI_ADDR_IR_INDEX2(index)	((index & 0x7fff) << 5)
 
-inline static u32 lapic_reg_read32(u32 offset)
-{
-	volatile u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
-	return *reg;
-}
+#define MSR_APIC_BASE 0x800
 
-inline static u32 lapic_reg_write32(u32 offset, u32 value)
-{
-	volatile u32 *reg = (u32 *)PHYS2VIRT(APIC_REG_BASE + offset);
-	*reg = value;
-}
+struct lapic {
+	u64 mode;
+	u64 reserved;
+	u64 (*reg_read)(u32 offset);
+	void (*reg_write)(u32 offset, u64 value);
+};
+
+u64 lapic_reg_read(u32 offset);
+void lapic_reg_write(u32 offset, u64 value);
 
 inline static bool is_bsp()
 {
@@ -175,26 +177,11 @@ inline static bool x2_apic_supported()
 {
 	u32 regs[4] = {0};
 	cpuid(0x00000001, 0x00000000, regs);
-	if (regs[2] & (BIT21) == 1)
+	if (regs[2] & (BIT21) == BIT21)
 		return true;
 	return false;
 }
 
-inline static void lapic_enable()
-{
-	/* Enable global APIC. */
-	u64 value = rdmsr(MSR_IA32_APICBASE);
-	value |= BIT11;
-	if (x2_apic_supported() == true)
-		value |= BIT10;
-	wrmsr(MSR_IA32_APICBASE, value);
-
-	/* Software enable APIC. */
-	/* some old version kvm (3.10.0) fail to emulate APIC_REG_SVR. */
-	value = lapic_reg_read32(APIC_REG_SVR);
-	value |= BIT8;
-	lapic_reg_write32(APIC_REG_SVR, value);
-}
 
 inline static void apic_base_set(u32 base)
 {
@@ -206,62 +193,14 @@ inline static void apic_base_set(u32 base)
 	wrmsr(MSR_IA32_APICBASE, value);
 }
 
-inline static void lapic_send_ipi(u8 apic_id, u8 vector, u32 attr)
-{
-	u32 dest = (apic_id << 24);
-	lapic_reg_write32(APIC_REG_ICR1, dest);
-	lapic_reg_write32(APIC_REG_ICR0, vector | attr);
-}
+void lapic_send_ipi(u8 apic_id, u8 vector, u32 attr);
 
 /* ap_startup_addr should below 1MB. */
-inline static void mp_init_single(u8 apic_id, u64 ap_startup_addr)
-{
-	lapic_send_ipi(apic_id, 0, APIC_ICR_ASSERT | APIC_ICR_INIT);
-	lapic_send_ipi(apic_id, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP);
-	lapic_send_ipi(apic_id, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP);
-}
+void mp_init_single(u8 apic_id, u64 ap_startup_addr);
 
-inline static void mp_init_all(u64 ap_startup_addr)
-{
-	lapic_send_ipi(0, 0, APIC_ICR_ASSERT | APIC_ICR_INIT | APIC_ICR_ALL_EX_SELF);
-	lapic_send_ipi(0, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF);
-	lapic_send_ipi(0, (ap_startup_addr >> 12), APIC_ICR_ASSERT | APIC_ICR_STARTUP | APIC_ICR_ALL_EX_SELF);
-}
+void mp_init_all(u64 ap_startup_addr);
 
-inline static int lapic_set_timer(u64 freq, u8 vector)
-{
-	u64 tsc_freq, crystal_freq;
-	u32 buffer1[4] = {0};
-	//u32 buffer2[4] = {0};
-	write_cr8(0);
-	cpuid(0x15, 0, buffer1);
-	//printk("cpuid 0x15:eax = %x ebx = %x ecx = %x\n", buffer1[0], buffer1[1], buffer1[2]);
-	//default_freq = buffer[1] / buffer[0];
-	//printk("default freq:%dHz\n", buffer[1] / buffer[0]);
-	//cpuid(0x16, 0, buffer2);
-	//printk("cpuid 0x16:eax = %x ebx = %x ecx = %x\n", buffer2[0], buffer2[1], buffer2[2]);
-	//printk("bus freq:%dMHz\n", buffer[2]);
+int lapic_set_timer(u64 freq, u8 vector);
 
-	/* some cpu doesn't report crystal freq by cpuid */
-	if (buffer1[2] == 0)
-		buffer1[2] = 24000000;
-	if (buffer1[0] == 0)
-		buffer1[0] = 1;
-
-	if (buffer1[0] == 0)
-		buffer1[0] = 1;
-
-	crystal_freq = buffer1[2];
-	tsc_freq = buffer1[2] * buffer1[1] / buffer1[0];
-	printk("tsc freq = %d\n", tsc_freq);
-	lapic_reg_write32(APIC_REG_TIMER_DCR, 0xb);
-	
-	lapic_reg_write32(APIC_REG_LVT_TIMER, 0x20000 | vector);
-	lapic_reg_write32(APIC_REG_TIMER_ICR, crystal_freq / freq);
-
-	return 0;
-}
-
-
-
+void lapic_enable(struct lapic *lapic);
 #endif
