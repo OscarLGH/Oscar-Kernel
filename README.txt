@@ -1,24 +1,28 @@
 Oscar-Kernel:
-This is a bare metal kernel that can run on x86_64 physical machine with UEFI support.
+This is a bare metal kernel that can run on x86_64 physical/virtual machine with UEFI support.
 
-Support features:
+Supported features:
 
 	branch "refactor":
-		running on x86_64 long-mode.
-		SMP support.
+		running on x86_64 long-mode with SMP enabled.
 		Process support with multi-core scheduling.
-		ACPI support.
+		ACPI.
 		Simple virtual machine on Intel CPUs:
-			Nested virtualization supported.
-			EPT enabled.
+			Nested virtualization.
+			Unrestricted guest.
+			EPT.
+			Posted interrupt.
 		PCIe drivers:
-			MSI/MSI-X support.
+			MSI/MSI-X interrupt.
 			simple NVIDIA GK104/GP104/GP102 driver
 				on board IOMMU support.
 				hardware accelerated framebuffer copy.
 			XHCI:
 				basic support for USB host controller.
-			IOMMU (TBD)
+			IOMMU:
+				intel vt-d:
+					DMA remapping.
+					Interrupt remapping (WIP).
 		USB drivers:
 			USB Keyboard (WIP)
 			USB mouse (WIP)
@@ -29,7 +33,7 @@ Support features:
 			buddy system (TBD)
 		VFS (TBD)
 
-	branch "master"
+	branch "master" (obsolete and no longer maintained)
 		running on x86 long-mode.
 		SMP support.
 		Process support with multi-core scheduling.
@@ -61,12 +65,13 @@ Guide:
 			kernel.bin
 		3.disable secure boot in BIOS configuration menu.
 		4.boot removable disk from BIOS
-		5.after choosing resolution,the kernel starts to run.
+		5.type to choose a resolution, after that, the kernel starts to run.
 
 	Run on PXE:
-		1.set boot directory to arch/x86_64/bin.
+		1.set boot directory as arch/x86_64/bin.
 		2.set bootup file as arch/x86_64/bin/EFI/Boot/bootx64.efi.
 		3.connect target computer to a same local network.
 		4.boot target computer/virtual machine.
 
-	
+NOTE:
+	Running in nested virtualization environment is not recommanded, e.g, VMWARE L0 + kvm L1 + L2 (Oscar-Kernel), due to some bugs for nested vt-x in vmware/kvm.
