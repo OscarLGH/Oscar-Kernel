@@ -19,6 +19,18 @@ typedef unsigned short		uint16_t;
 typedef short int			int16_t;
 typedef unsigned char		uint8_t;
 typedef char				int8_t;
+
+typedef u16 __le16;
+typedef u16 __be16;
+typedef u32 __le32;
+typedef u32 __be32;
+typedef u64 __le64;
+typedef u64 __be64;
+
+typedef u16 __sum16;
+typedef u32 __wsum;
+
+
 #define true				1
 #define false				0
 #define NULL (void*)0
@@ -149,6 +161,9 @@ struct list_head {
 #define  SIZE_512TB  0x0002000000000000ULL
 #define  SIZE_1PB    0x0004000000000000ULL
 #define  SIZE_2PB    0x0008000000000000ULL
+
+#define __iomem
+
 #define  SIZE_4PB    0x0010000000000000ULL
 #define  SIZE_8PB    0x0020000000000000ULL
 #define  SIZE_16PB   0x0040000000000000ULL
