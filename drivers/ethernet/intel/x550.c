@@ -18,12 +18,47 @@ s32 ixgbe_get_mac_addr_generic(struct ixgbe_hw *hw, u8 *mac_addr)
 	return 0;
 }
 
+void ixgbe_reset(struct ixgbe_hw *hw)
+{
+	
+}
+
+int ixgbe_intr(int irq, void *data)
+{
+	struct ixgbe_hw *hw = data;
+	u32 intr_cause;
+	u32 link_status;
+	intr_cause = IXGBE_READ_REG(hw, IXGBE_EICR);
+	printk("X550 INTR:%d, cause:%x\n", irq, intr_cause);
+
+	char *speed [] = {
+				"reserved",
+				"100 Mb/s",
+				"1 GbE",
+				"10 GbE",
+				NULL
+	};
+
+	if (intr_cause & IXGBE_EICR_LSC) {
+		link_status = IXGBE_READ_REG(hw, IXGBE_LINKS);
+		printk("link status: %x\n", link_status);
+		if (link_status & BIT30) {
+			printk("LINK UP. Speed:%s\n", speed[((link_status >> 28) & 0x3)]);
+		} else {
+			printk("LINK DOWN\n");
+		}
+	}
+	return 0;
+}
+
+
 
 int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 {
 	u16 pci_command_reg;
 	u32 *mmio_virt;
 	int i = 0;
+	int ret = 0;
 	u8 mac_addr[6] = {0};
 	struct pci_irq_desc *irq_desc;
 	printk("INTEL X550 Ethernet card found.\n");
@@ -33,6 +68,14 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	ixgbe->mmio_virt = ioremap(pci_get_bar_base(pdev, 0), pci_get_bar_size(pdev, 0));
 	pci_enable_device(pdev);
 	pci_set_master(pdev);
+
+	ret = pci_enable_msix(pdev, 0, 2);
+	if (ret < 0) {
+		ret = pci_enable_msi(pdev);
+	}
+	list_for_each_entry(irq_desc, &pdev->irq_list, list) {
+		request_irq_smp(get_cpu(), irq_desc->vector, ixgbe_intr, 0, "ixgbe", ixgbe);
+	}
 	volatile u32 *led = ixgbe->mmio_virt + 0x200 / 4;
 	*led |= BIT5 | BIT7 | BIT15 | BIT23 | BIT31;
 	ixgbe_get_mac_addr_generic(ixgbe, mac_addr);
@@ -42,6 +85,8 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 		printk("%02x ", mac_addr[i]);
 	}
 	printk("\n");
+
+	IXGBE_WRITE_REG(ixgbe, IXGBE_EIMS, 0xffffffff);
 	return 0;
 }
 

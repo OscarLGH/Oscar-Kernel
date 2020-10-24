@@ -324,8 +324,8 @@ static int msix_capability_init(struct pci_dev *dev, int nvec,
 	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_ENABLE, 0);
 
 	for (i = 0; i < nvec; i++) {
-		irq = alloc_irq_from_smp(&cpu);
-		pci_irq_register(dev, cpu, i);
+		start_irq = alloc_irqs(&cpu, 1, 1);
+		pci_irq_register(dev, cpu, start_irq);
 		arch_pci_build_msi_entry(&msi_data, start_irq, cpu);
 		msix_entry_setup(dev, i, msi_data.addr, msi_data.data, 0);
 	}

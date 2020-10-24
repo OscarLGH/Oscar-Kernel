@@ -100,6 +100,6 @@ void intel_iommu_init()
 }
 
 
-module_init(intel_iommu_init);
+//module_init(intel_iommu_init);
 
 
