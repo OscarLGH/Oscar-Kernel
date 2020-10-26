@@ -455,16 +455,6 @@ int usb_set_interface(struct usb_device *udev, int interface)
 	return 0;
 }
 
-#include <msr.h>
-void delay(u64 us)
-{
-	u64 time1 = rdtscp();
-	u64 time2;
-	do {
-		time2 = rdtscp();
-	} while (time2 - time1 < us * 3600);
-}
-
 int xhci_address_device(struct xhci *xhci, int slot_id, int root_hub_port_num, int port_speed)
 {
 	int ret;
@@ -1060,7 +1050,7 @@ int handle_port_status_change(struct xhci *xhci, struct port_status_change_event
 			}
 		}
 		xhci_opreg_wr32(xhci, XHCI_HC_PORT_REG + port * 0x10, XHCI_PORTSC_PRC | XHCI_PORTSC_CSC | XHCI_PORTSC_PP);
-		delay(1000);
+		udelay(1000);
 		slot = xhci_cmd_enable_slot(xhci);
 		//printk("available slot:%d\n", slot);
 		usb_device_init(xhci, slot, port + 1, (port_status >> 10) & 0xf);

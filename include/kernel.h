@@ -52,4 +52,7 @@ extern int printk(const char *fmt, ...);
 #define ASSERT(x) {if(!x)printk("Assert:%s:%s:%d\n", __FILE__, __FUNCTION__, __LINE__);}
 void panic(void);
 
+void udelay(u64 us);
+
+
 #endif

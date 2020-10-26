@@ -6,6 +6,14 @@
 #include <segment.h>
 #include <string.h>
 
+void udelay(u64 us)
+{
+	u64 time1 = rdtscp();
+	u64 time2;
+	do {
+		time2 = rdtscp();
+	} while (time2 - time1 < us * 3600);
+}
 
 void arch_cpu_halt()
 {
