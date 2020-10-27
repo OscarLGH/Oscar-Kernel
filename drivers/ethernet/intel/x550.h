@@ -10,11 +10,26 @@
 #include <cpu.h>
 #include "ixgbe_type.h"
 
+struct ixgbe_tx_queue {
+	union ixgbe_adv_tx_desc *tx_desc_ring;
+	u64 size;
+	u64 tail;
+	u64 head;
+};
+
+struct ixgbe_rx_queue {
+	union ixgbe_adv_rx_desc *rx_desc_ring;
+	u64 size;
+	u64 tail;
+	u64 head;
+};
+
+
 struct ixgbe_hw {
 	struct pci_dev *pdev;
 	volatile u32 *mmio_virt;
-	union ixgbe_adv_tx_desc *tx_desc_ring[128];
-	union ixgbe_adv_rx_desc *rx_desc_ring[128];
+	struct ixgbe_tx_queue *tx_desc_ring[128];
+	struct ixgbe_rx_queue *rx_desc_ring[128];
 };
 
 u32 ixgbe_read_reg(struct ixgbe_hw *hw, u32 reg);
