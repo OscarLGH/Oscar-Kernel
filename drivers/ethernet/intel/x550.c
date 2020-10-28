@@ -77,9 +77,11 @@ int ixgbe_intr(int irq, void *data)
 	u32 intr_cause;
 	u32 link_status;
 	int index;
+	int i;
+	char mac_string[18];
 
 	intr_cause = IXGBE_READ_REG(hw, IXGBE_EICR);
-	printk("X550 INTR:%d, cause:%x\n", irq, intr_cause);
+	//printk("X550 INTR:%d, cause:%x\n", irq, intr_cause);
 
 	char *speed [] = {
 				"reserved",
@@ -89,31 +91,73 @@ int ixgbe_intr(int irq, void *data)
 				NULL
 	};
 
+	sprintf(mac_string,
+		"%02x:%02x:%02x:%02x:%02x:%02x", 
+		hw->mac_addr[0],
+		hw->mac_addr[1],
+		hw->mac_addr[2],
+		hw->mac_addr[3],
+		hw->mac_addr[4],
+		hw->mac_addr[5]);
+
 	if (intr_cause & IXGBE_EICR_LSC) {
 		link_status = IXGBE_READ_REG(hw, IXGBE_LINKS);
-		printk("link status: %x\n", link_status);
+		//printk("link status: %x\n", link_status);
 		if (link_status & BIT30) {
-			printk("LINK UP. Speed:%s\n", speed[((link_status >> 28) & 0x3)]);
+			printk("[%s] LINK UP. Speed:%s\n", mac_string, speed[((link_status >> 28) & 0x3)]);
 		} else {
-			printk("LINK DOWN\n");
+			printk("[%s] LINK DOWN\n", mac_string);
 		}
 	}
 
 	if (intr_cause & 0xffff) {
+		
+		hw->statistic.tx_packets += IXGBE_READ_REG(hw, IXGBE_TXDGPC);
+		hw->statistic.tx_bytes += 
+			(IXGBE_READ_REG(hw, IXGBE_TXDGBCL) + ((u64)IXGBE_READ_REG(hw, IXGBE_TXDGBCH) << 32));
+		hw->statistic.rx_packets += IXGBE_READ_REG(hw, IXGBE_RXDGPC);
+		hw->statistic.rx_bytes += 
+			(IXGBE_READ_REG(hw, IXGBE_RXDGBCL) + ((u64)IXGBE_READ_REG(hw, IXGBE_RXDGBCH) << 32));
 		hw->tx_desc_ring[0]->head = IXGBE_READ_REG(hw, IXGBE_TDH(0));
 		hw->rx_desc_ring[0]->head = IXGBE_READ_REG(hw, IXGBE_RDH(0));
-		printk("RX count:%d TX count:%d\n", IXGBE_READ_REG(hw, IXGBE_GPRC), IXGBE_READ_REG(hw, IXGBE_GPTC));
-		printk("TXDGPC:%d RXDGPC:%d\n", IXGBE_READ_REG(hw, IXGBE_TXDGPC), IXGBE_READ_REG(hw, IXGBE_RXDGPC));
-		printk("TX HEAD:%d, RX HEAD:%d\n", IXGBE_READ_REG(hw, IXGBE_TDH(0)), IXGBE_READ_REG(hw, IXGBE_RDH(0)));
-		printk("RX DESC:%016x %016x\n",
- 			hw->rx_desc_ring[0]->rx_desc_ring[hw->rx_desc_ring[0]->head ? hw->rx_desc_ring[0]->head - 1 : 0].read.pkt_addr,
- 			hw->rx_desc_ring[0]->rx_desc_ring[hw->rx_desc_ring[0]->head ? hw->rx_desc_ring[0]->head - 1 : 0].read.hdr_addr
-		);
-		printk("TX DESC:%016x %08x %08x\n",
-			hw->tx_desc_ring[0]->tx_desc_ring[hw->tx_desc_ring[0]->tail ? hw->tx_desc_ring[0]->tail - 1 : 0].read.buffer_addr,
-			hw->tx_desc_ring[0]->tx_desc_ring[hw->tx_desc_ring[0]->tail ? hw->tx_desc_ring[0]->tail - 1 : 0].read.cmd_type_len,
-			hw->tx_desc_ring[0]->tx_desc_ring[hw->tx_desc_ring[0]->tail ? hw->tx_desc_ring[0]->tail - 1 : 0].read.olinfo_status
+		hw->tx_desc_ring[0]->tail = IXGBE_READ_REG(hw, IXGBE_TDT(0));
+		hw->rx_desc_ring[0]->tail = IXGBE_READ_REG(hw, IXGBE_RDT(0));
+		if (hw->rx_desc_ring[0]->head == IXGBE_READ_REG(hw, IXGBE_RDT(0))) {
+			//printk("rx ring empty.\n");
+			hw->rx_desc_ring[0]->tail = hw->rx_desc_ring[0]->head + hw->rx_desc_ring[0]->size / 16;
+			IXGBE_WRITE_REG(hw, IXGBE_RDT(0), hw->rx_desc_ring[0]->tail);
+		}
+
+		if (1) {
+			printk("[%s] RX packets:%d (%d bytes) TX packets:%d (%d bytes)\n",
+				mac_string,
+				hw->statistic.rx_packets,
+				hw->statistic.rx_bytes,
+				hw->statistic.tx_packets,
+				hw->statistic.tx_bytes
 			);
+		}
+		//printk("TX HEAD:%d, RX HEAD:%d\n", hw->tx_desc_ring[0]->head, hw->rx_desc_ring[0]->head);
+
+/*
+		if (hw->rx_desc_ring[0]->head) {
+			printk("RX DESC:%016x %016x\n",
+	 			hw->rx_desc_ring[0]->rx_desc_ring[hw->rx_desc_ring[0]->head - 1].read.pkt_addr,
+	 			hw->rx_desc_ring[0]->rx_desc_ring[hw->rx_desc_ring[0]->head - 1].read.hdr_addr
+			);
+			hex_dump(
+				(void *)PHYS2VIRT(hw->rx_desc_ring[0]->rx_desc_ring[hw->rx_desc_ring[0]->head - 1].read.pkt_addr), 
+				hw->rx_desc_ring[0]->rx_desc_ring[hw->rx_desc_ring[0]->head - 1].wb.upper.length
+				);
+		}
+		if (hw->tx_desc_ring[0]->tail) {
+			printk("TX DESC:%016x %08x %08x\n",
+				hw->tx_desc_ring[0]->tx_desc_ring[hw->tx_desc_ring[0]->tail - 1].read.buffer_addr,
+				hw->tx_desc_ring[0]->tx_desc_ring[hw->tx_desc_ring[0]->tail - 1].read.cmd_type_len,
+				hw->tx_desc_ring[0]->tx_desc_ring[hw->tx_desc_ring[0]->tail - 1].read.olinfo_status
+				);
+		}
+*/
 	}
 	return 0;
 }
@@ -185,10 +229,13 @@ int rx_init(struct ixgbe_hw *hw)
 void packet_transmit(struct ixgbe_hw *hw, void *buffer, int len)
 {
 	union ixgbe_adv_tx_desc *tx_desc = hw->tx_desc_ring[0]->tx_desc_ring;
+
+	while (hw->tx_desc_ring[0]->tail != IXGBE_READ_REG(hw, IXGBE_TDH(0)));
+
 	tx_desc[hw->tx_desc_ring[0]->tail].read.buffer_addr = VIRT2PHYS(buffer);
 	tx_desc[hw->tx_desc_ring[0]->tail].read.cmd_type_len = (0xb << 24) | (36 << 16) | len;
 	tx_desc[hw->tx_desc_ring[0]->tail].read.olinfo_status = (0 << 16);
-	hw->tx_desc_ring[0]->tail = (hw->tx_desc_ring[0]->tail + 1) % (hw->tx_desc_ring[0]->size);
+	hw->tx_desc_ring[0]->tail = (hw->tx_desc_ring[0]->tail + 1) % (hw->tx_desc_ring[0]->size / sizeof(*tx_desc));
 
 	IXGBE_WRITE_REG(hw, IXGBE_TDT(0), hw->tx_desc_ring[0]->tail);
 }
@@ -219,16 +266,18 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 		request_irq_smp(get_cpu(), irq_desc->vector, ixgbe_intr, 0, "ixgbe", ixgbe);
 	}
 
-	IXGBE_WRITE_REG(ixgbe, IXGBE_LEDCTL, BIT5 | BIT7 | BIT15 | BIT23 | BIT31);
-	ixgbe_get_mac_addr_generic(ixgbe, mac_addr);
+	ixgbe_get_mac_addr_generic(ixgbe, ixgbe->mac_addr);
+
 	printk("MAC address:");
-
-	for (i = 0; i < 6; i++) {
-		printk("%02x ", mac_addr[i]);
+	for (i = 0; i < 5; i++) {
+		printk("%02x:", ixgbe->mac_addr[i]);
 	}
-	printk("\n");
+	printk("%02x\n", ixgbe->mac_addr[i]);
 
-	printk("RX count:%d TX count:%d\n", IXGBE_READ_REG(ixgbe, IXGBE_GPRC), IXGBE_READ_REG(ixgbe, IXGBE_GPTC));
+	/* clear counters */
+	IXGBE_READ_REG(ixgbe, IXGBE_GPRC);
+	IXGBE_READ_REG(ixgbe, IXGBE_GPTC);
+
 	rx_init(ixgbe);
 	tx_init(ixgbe);
 
@@ -245,30 +294,24 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 		 0x00,0x00,0x00,0x00,0x00,0x00,0xc0,0xa8,0x00,0x02
 	};
 
-	u8 mac_frame0[] = {
-		0xa0,0x36,0x9f,0xb9,0x89,0xbf,
-		0xa0,0x36,0x9f,0xb9,0x89,0xbe,
-		0x08,0x00
+	struct mac_frame {
+		u8 dest_mac[6];
+		u8 src_mac[6];
+		u16 type;
+	} mac_frame = {
+		{0xff,0xff,0xff,0xff,0xff,0xff},
+		{0xa0,0x36,0x9f,0xb9,0x8a,0x3a},
+		0x0008
 	};
+	memcpy(&mac_frame.src_mac, ixgbe->mac_addr, 6);
 
-	u8 mac_frame1[] = {
-		0x98,0x4f,0xee,0x13,0xe2,0x28,
-		0xa0,0x36,0x9f,0xb9,0x8a,0x3a,
-		0x08,0x00
-	};
-
-	u8 mac_frame[] = {
-		0xff,0xff,0xff,0xff,0xff,0xff,
-		0xa0,0x36,0x9f,0xb9,0x8a,0x3a,
-		0x08,0x00
-	};
-	memcpy(test_buffer, mac_frame, sizeof(mac_frame));
+	memcpy(test_buffer, &mac_frame, sizeof(mac_frame));
 	memcpy(test_buffer + sizeof(mac_frame), arp_packet, sizeof(arp_packet));
-	packet_transmit(ixgbe, test_buffer, sizeof(mac_frame) + sizeof(arp_packet));
-	udelay(1000000);
-	packet_transmit(ixgbe, test_buffer, sizeof(mac_frame) + sizeof(arp_packet));
-	udelay(1000000);
-	packet_transmit(ixgbe, test_buffer, sizeof(mac_frame) + sizeof(arp_packet));
+
+	for (i = 0; i < 1; i++) {
+		packet_transmit(ixgbe, test_buffer, sizeof(mac_frame) + sizeof(arp_packet));
+	}
+
 	return 0;
 }
 

@@ -24,12 +24,21 @@ struct ixgbe_rx_queue {
 	u64 head;
 };
 
+struct ixgbe_statistic {
+	u64 tx_packets;
+	u64 tx_bytes;
+	u64 rx_packets;
+	u64 rx_bytes;
+};
+
 
 struct ixgbe_hw {
 	struct pci_dev *pdev;
 	volatile u32 *mmio_virt;
 	struct ixgbe_tx_queue *tx_desc_ring[128];
 	struct ixgbe_rx_queue *rx_desc_ring[128];
+	struct ixgbe_statistic statistic;
+	u8 mac_addr[6];
 };
 
 u32 ixgbe_read_reg(struct ixgbe_hw *hw, u32 reg);

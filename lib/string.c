@@ -359,6 +359,18 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 spin_lock_t lock = 0;
 int write_console(u32 chr);
 
+int sprintf(char *buf, const char *fmt, ... )
+{
+	long flags;
+	int ret;
+	va_list ap;
+	va_start(ap,fmt);
+	
+	ret = vsprintf(buf, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+
 int printk(const char *fmt, ...)
 {
 	long flags;
