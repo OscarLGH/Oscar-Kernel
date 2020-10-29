@@ -81,7 +81,7 @@ int ixgbe_intr(int irq, void *data)
 	char mac_string[18];
 
 	intr_cause = IXGBE_READ_REG(hw, IXGBE_EICR);
-	//printk("X550 INTR:%d, cause:%x\n", irq, intr_cause);
+	printk("X550 INTR:%d, cause:%x\n", irq, intr_cause);
 
 	char *speed [] = {
 				"reserved",
@@ -111,6 +111,10 @@ int ixgbe_intr(int irq, void *data)
 	}
 
 	if (intr_cause & 0xffff) {
+
+		if ((intr_cause & 0xffff) > 2) {
+			printk("X550 INTR:%d, cause:%x\n", irq, intr_cause);
+		}
 		
 		hw->statistic.tx_packets += IXGBE_READ_REG(hw, IXGBE_TXDGPC);
 		hw->statistic.tx_bytes += 
@@ -128,7 +132,9 @@ int ixgbe_intr(int irq, void *data)
 			IXGBE_WRITE_REG(hw, IXGBE_RDT(0), hw->rx_desc_ring[0]->tail);
 		}
 
-		if (1) {
+		if ((hw->statistic.rx_packets != 0 && hw->statistic.rx_packets % 10000 == 0) ||
+			(hw->statistic.tx_packets != 0 && hw->statistic.tx_packets % 10000 == 0)
+			) {
 			printk("[%s] RX packets:%d (%d bytes) TX packets:%d (%d bytes)\n",
 				mac_string,
 				hw->statistic.rx_packets,
@@ -228,16 +234,29 @@ int rx_init(struct ixgbe_hw *hw)
 
 void packet_transmit(struct ixgbe_hw *hw, void *buffer, int len)
 {
-	union ixgbe_adv_tx_desc *tx_desc = hw->tx_desc_ring[0]->tx_desc_ring;
+	int i;
+	int free_queue = -1;
+	union ixgbe_adv_tx_desc *tx_desc;
+/*
+	while (1) {
+		for (i = 0; i < 128; i++) {
+			if (hw->tx_desc_ring[i]->tail == IXGBE_READ_REG(hw, IXGBE_TDH(i))) {
+				free_queue = i;
+				goto done;
+			}
+				
+		}
+	}
+	*/
+	free_queue = 63;
+done:
+	tx_desc = hw->tx_desc_ring[free_queue]->tx_desc_ring;
+	tx_desc[hw->tx_desc_ring[free_queue]->tail].read.buffer_addr = VIRT2PHYS(buffer);
+	tx_desc[hw->tx_desc_ring[free_queue]->tail].read.cmd_type_len = (0xb << 24) | (36 << 16) | len;
+	tx_desc[hw->tx_desc_ring[free_queue]->tail].read.olinfo_status = (0 << 16);
+	hw->tx_desc_ring[free_queue]->tail = (hw->tx_desc_ring[free_queue]->tail + 1) % (hw->tx_desc_ring[free_queue]->size / sizeof(*tx_desc));
 
-	while (hw->tx_desc_ring[0]->tail != IXGBE_READ_REG(hw, IXGBE_TDH(0)));
-
-	tx_desc[hw->tx_desc_ring[0]->tail].read.buffer_addr = VIRT2PHYS(buffer);
-	tx_desc[hw->tx_desc_ring[0]->tail].read.cmd_type_len = (0xb << 24) | (36 << 16) | len;
-	tx_desc[hw->tx_desc_ring[0]->tail].read.olinfo_status = (0 << 16);
-	hw->tx_desc_ring[0]->tail = (hw->tx_desc_ring[0]->tail + 1) % (hw->tx_desc_ring[0]->size / sizeof(*tx_desc));
-
-	IXGBE_WRITE_REG(hw, IXGBE_TDT(0), hw->tx_desc_ring[0]->tail);
+	IXGBE_WRITE_REG(hw, IXGBE_TDT(free_queue), hw->tx_desc_ring[free_queue]->tail);
 }
 
 int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
@@ -247,6 +266,8 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	int i = 0;
 	int ret = 0;
 	u8 mac_addr[6] = {0};
+	u32 ivar;
+
 	struct pci_irq_desc *irq_desc;
 	printk("INTEL X550 Ethernet card found.\n");
 	struct ixgbe_hw *ixgbe = kmalloc(sizeof(*ixgbe), GFP_KERNEL);
@@ -258,7 +279,7 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	ixgbe_reset(ixgbe);
 	pci_set_master(pdev);
 
-	ret = pci_enable_msix(pdev, 0, 2);
+	ret = pci_enable_msix(pdev, 0, 32);
 	if (ret < 0) {
 		ret = pci_enable_msi(pdev);
 	}
@@ -281,10 +302,20 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	rx_init(ixgbe);
 	tx_init(ixgbe);
 
+	//IXGBE_WRITE_REG(ixgbe, IXGBE_EICS, 0x7fffffff);
+	IXGBE_WRITE_REG(ixgbe, IXGBE_EIMS, 0x7fffffff);
+	//IXGBE_WRITE_REG(ixgbe, IXGBE_EICS_EX(0), 0xffffffff);
+	//IXGBE_WRITE_REG(ixgbe, IXGBE_EICS_EX(1), 0xffffffff);
+	IXGBE_WRITE_REG(ixgbe, IXGBE_EIMS_EX(0), 0xffffffff);
+	IXGBE_WRITE_REG(ixgbe, IXGBE_EIMS_EX(1), 0xffffffff);
+
 	for (i = 0; i < 64; i++) {
-		IXGBE_WRITE_REG(ixgbe, IXGBE_IVAR(i), 0x83828180);
+		ivar = (i * 4) % 64;
+		ivar = 0x80808080 | (ivar | ((ivar + 1) << 8) | ((ivar + 2) << 16) | ((ivar + 3) << 24));
+		IXGBE_WRITE_REG(ixgbe, IXGBE_IVAR(i), ivar);
 	}
-	IXGBE_WRITE_REG(ixgbe, IXGBE_EIMS, 0xffffffff);
+
+	IXGBE_WRITE_REG(ixgbe, IXGBE_GPIE, IXGBE_GPIE_MSIX_MODE | IXGBE_GPIE_EIAME);
 
 	u8 *test_buffer = kmalloc(0x1000, GFP_KERNEL);
 	memset(test_buffer, 0xff, 0x1000);
@@ -308,8 +339,8 @@ int intel_x550_probe(struct pci_dev *pdev, struct pci_device_id *pent)
 	memcpy(test_buffer, &mac_frame, sizeof(mac_frame));
 	memcpy(test_buffer + sizeof(mac_frame), arp_packet, sizeof(arp_packet));
 
-	for (i = 0; i < 1; i++) {
-		packet_transmit(ixgbe, test_buffer, sizeof(mac_frame) + sizeof(arp_packet));
+	for (;;) {
+		packet_transmit(ixgbe, test_buffer, sizeof(mac_frame) + sizeof(arp_packet) + 1000);
 	}
 
 	return 0;
