@@ -20,9 +20,9 @@ int x86_pci_read_config_pio(struct pci_dev *pdev, int offset, void *value, int l
 	if (len == 4)
 		*(u32 *)value = in32(0xcfc);
 	else if (len == 2)
-		*(u16 *)value = in16(0xcfc);
+		*(u16 *)value = in16(0xcfc + (offset & 0x2));
 	else
-		*(u8 *)value = in8(0xcfc);
+		*(u8 *)value = in8(0xcfc + (offset & 0x3));
 
 	return 0;
 }
@@ -34,9 +34,9 @@ int x86_pci_write_config_pio(struct pci_dev *pdev, int offset, u32 value, int le
 	if (len == 4)
 		out32(0xcfc, value);
 	else if (len == 2)
-		out16(0xcfc + offset & 0x2, value);
+		out16(0xcfc + (offset & 0x2), value);
 	else
-		out8(0xcfc + offset & 0x3, value);
+		out8(0xcfc + (offset & 0x3), value);
 
 	return 0;
 }
