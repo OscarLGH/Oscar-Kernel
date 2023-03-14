@@ -6,7 +6,7 @@
 typedef unsigned long long spin_lock_t;
 static inline void spin_lock(spin_lock_t *lock)
 {
-	__asm__ __volatile__("1:lock bts $0, (%0)\n\t"
+	__asm__ __volatile__("1:lock btsq $0, (%0)\n\t"
 				"pause\n\t"
 				"jc 1b\n\t"
 				: : "rdi"(lock)
@@ -15,7 +15,7 @@ static inline void spin_lock(spin_lock_t *lock)
 
 static inline void spin_unlock(spin_lock_t *lock)
 {
-	__asm__ __volatile__("lock btr $0, (%0)\n\t"
+	__asm__ __volatile__("lock btrq $0, (%0)\n\t"
 				: : "rdi"(lock)
 		);
 }

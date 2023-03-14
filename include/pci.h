@@ -1120,7 +1120,7 @@ struct pci_host_bridge {
 	int (*pci_pm_func)(struct pci_dev *pdev);
 };
 
-struct pci_host_bridge *host_bridge;
+extern struct pci_host_bridge *host_bridge;
 
 static inline int pci_read_config_byte(struct pci_dev *pdev, int offset, void *value)
 {

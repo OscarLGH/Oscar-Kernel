@@ -6,6 +6,8 @@
 struct list_head pci_device_list;
 struct list_head pci_driver_list;
 
+struct pci_host_bridge *host_bridge;
+
 int pci_register_driver(struct pci_driver *driver)
 {
 	struct pci_dev *pdev;
